@@ -1,16 +1,783 @@
-```html
 <!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Plex Invite</title>
-  <style>
-    body { font-family: system-ui; max-width: 600px; margin: 5vh auto; padding: 16px; }
-    .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; }
-  </style>
-</head>
-<body>
-  <h1>Plex Access Invite</h1>
-  <p class="card">You must use your unique invite link. Admin will generate and send it to you.</p>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plex Donate Admin</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+      }
+      .container {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 32px;
+      }
+      h1 {
+        font-size: clamp(1.8rem, 2.2vw, 2.4rem);
+        margin: 0;
+      }
+      button {
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 10px 18px;
+        background: #6366f1;
+        color: white;
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(79, 70, 229, 0.2);
+      }
+      button.secondary {
+        background: #e2e8f0;
+        color: #1e293b;
+      }
+      button.secondary:hover {
+        box-shadow: 0 6px 12px rgba(148, 163, 184, 0.35);
+      }
+      button.danger {
+        background: #f87171;
+      }
+      button.danger:hover {
+        box-shadow: 0 6px 12px rgba(248, 113, 113, 0.35);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .panel {
+        background: rgba(255, 255, 255, 0.88);
+        backdrop-filter: blur(14px);
+        border-radius: 16px;
+        padding: 28px;
+        box-shadow: 0 25px 50px -12px rgba(30, 64, 175, 0.2);
+        margin-bottom: 24px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      input[type='password'] {
+        width: 100%;
+        border-radius: 8px;
+        border: 1px solid #c7d2fe;
+        padding: 10px 12px;
+        font-size: 1rem;
+        box-sizing: border-box;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+        vertical-align: top;
+      }
+      th {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #475569;
+      }
+      tbody tr:hover {
+        background-color: rgba(99, 102, 241, 0.08);
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.85rem;
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-weight: 600;
+      }
+      .status-pill[data-status='active'] {
+        background: rgba(34, 197, 94, 0.15);
+        color: #15803d;
+      }
+      .status-pill[data-status='pending'] {
+        background: rgba(59, 130, 246, 0.15);
+        color: #1d4ed8;
+      }
+      .status-pill[data-status='cancelled'],
+      .status-pill[data-status='canceled'],
+      .status-pill[data-status='suspended'] {
+        background: rgba(248, 113, 113, 0.18);
+        color: #b91c1c;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      #status-message {
+        margin-top: 12px;
+        color: #b91c1c;
+        font-weight: 500;
+      }
+      .hidden {
+        display: none;
+      }
+      .grid {
+        display: grid;
+        gap: 24px;
+      }
+      @media (min-width: 960px) {
+        .grid {
+          grid-template-columns: 2fr 1fr;
+        }
+      }
+      .events-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        max-height: 420px;
+        overflow-y: auto;
+      }
+      .events-list li {
+        padding: 10px 0;
+        border-bottom: 1px dashed rgba(148, 163, 184, 0.4);
+        font-size: 0.9rem;
+      }
+      .events-list time {
+        display: block;
+        font-size: 0.78rem;
+        color: #64748b;
+        margin-bottom: 4px;
+      }
+      .settings-form {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        display: grid;
+        gap: 12px;
+      }
+      .settings-form:first-of-type {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
+      }
+      .settings-form h3 {
+        margin: 0;
+      }
+      .settings-form label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 600;
+        margin-bottom: 0;
+      }
+      .settings-form input[type='text'],
+      .settings-form input[type='password'],
+      .settings-form input[type='url'],
+      .settings-form input[type='number'],
+      .settings-form input[type='email'] {
+        border-radius: 8px;
+        border: 1px solid #c7d2fe;
+        padding: 10px 12px;
+        font-size: 0.95rem;
+        box-sizing: border-box;
+      }
+      .settings-form label span.help {
+        font-weight: 500;
+        color: #64748b;
+        font-size: 0.8rem;
+      }
+      .field-grid {
+        display: grid;
+        gap: 12px;
+      }
+      @media (min-width: 720px) {
+        .field-grid {
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+      }
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+      }
+      .checkbox-row input[type='checkbox'] {
+        width: 18px;
+        height: 18px;
+      }
+      .form-status {
+        min-height: 18px;
+        font-size: 0.85rem;
+        color: #64748b;
+      }
+      .form-status[data-state='error'] {
+        color: #b91c1c;
+      }
+      .form-status[data-state='success'] {
+        color: #15803d;
+      }
+      .badge {
+        background: rgba(79, 70, 229, 0.12);
+        color: #4f46e5;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        margin-right: 6px;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>Plex Donate Control Center</h1>
+        <button id="logout-button" class="hidden" type="button">Log out</button>
+      </header>
+
+      <section id="login-panel" class="panel">
+        <h2>Admin Sign in</h2>
+        <p>Enter the admin password defined in your <code>.env</code> file.</p>
+        <form id="login-form">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button type="submit" style="margin-top: 16px;">Sign in</button>
+        </form>
+        <p id="status-message"></p>
+      </section>
+
+      <div id="dashboard" class="hidden">
+        <div class="grid">
+          <section class="panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+              <div>
+                <h2 style="margin:0 0 4px;">Active subscribers</h2>
+                <p style="margin:0;color:#475569;">Manage Wizarr invites and check the latest payments.</p>
+              </div>
+              <button id="refresh-button" type="button" class="secondary">Refresh</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table id="subscribers-table">
+                <thead>
+                  <tr>
+                    <th>Subscriber</th>
+                    <th>Status</th>
+                    <th>Last payment</th>
+                    <th>Invite</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2 style="margin-top:0;">Recent activity</h2>
+            <ul id="events-list" class="events-list"></ul>
+          </section>
+        </div>
+        <section class="panel" id="settings-panel">
+          <h2 style="margin-top:0;">Integration settings</h2>
+          <p style="margin:0 0 16px;color:#475569;">Keep service credentials in one place so you can avoid editing environment files.</p>
+
+          <form class="settings-form" data-group="paypal">
+            <h3>PayPal</h3>
+            <div class="field-grid">
+              <label>
+                Client ID
+                <input name="clientId" type="text" autocomplete="off" placeholder="A..." />
+              </label>
+              <label>
+                Client Secret
+                <input name="clientSecret" type="password" autocomplete="new-password" placeholder="E..." />
+              </label>
+              <label>
+                Webhook ID
+                <input name="webhookId" type="text" autocomplete="off" placeholder="0..." />
+              </label>
+              <label>
+                API base URL
+                <input name="apiBase" type="url" placeholder="https://api-m.sandbox.paypal.com" />
+                <span class="help">Use the sandbox URL for testing or the live URL for production.</span>
+              </label>
+            </div>
+            <p class="form-status" data-status-for="paypal"></p>
+            <div>
+              <button type="submit" class="secondary">Save PayPal settings</button>
+            </div>
+          </form>
+
+          <form class="settings-form" data-group="wizarr">
+            <h3>Wizarr</h3>
+            <div class="field-grid">
+              <label>
+                Base URL
+                <input name="baseUrl" type="url" placeholder="https://wizarr.example.com" />
+              </label>
+              <label>
+                API key
+                <input name="apiKey" type="password" autocomplete="new-password" />
+              </label>
+              <label>
+                Default invite days
+                <input name="defaultDurationDays" type="number" min="1" />
+                <span class="help">Used when generating invites without a custom duration.</span>
+              </label>
+            </div>
+            <p class="form-status" data-status-for="wizarr"></p>
+            <div>
+              <button type="submit" class="secondary">Save Wizarr settings</button>
+            </div>
+          </form>
+
+          <form class="settings-form" data-group="smtp">
+            <h3>Email (SMTP)</h3>
+            <div class="field-grid">
+              <label>
+                Host
+                <input name="host" type="text" placeholder="smtp.example.com" />
+              </label>
+              <label>
+                Port
+                <input name="port" type="number" min="1" />
+              </label>
+              <label class="checkbox-row">
+                <input name="secure" type="checkbox" />
+                Use TLS (secure)
+              </label>
+              <label>
+                Username
+                <input name="user" type="text" autocomplete="off" />
+              </label>
+              <label>
+                Password
+                <input name="pass" type="password" autocomplete="new-password" />
+              </label>
+              <label>
+                From address
+                <input name="from" type="email" placeholder="Plex Donate &lt;donations@example.com&gt;" />
+              </label>
+            </div>
+            <p class="form-status" data-status-for="smtp"></p>
+            <div>
+              <button type="submit" class="secondary">Save email settings</button>
+            </div>
+          </form>
+
+          <form class="settings-form" data-group="plex">
+            <h3>Plex (optional)</h3>
+            <div class="field-grid">
+              <label>
+                Server URL
+                <input name="baseUrl" type="url" placeholder="https://plex.example.com" />
+              </label>
+              <label>
+                Plex token
+                <input name="token" type="password" autocomplete="new-password" />
+              </label>
+            </div>
+            <p class="form-status" data-status-for="plex"></p>
+            <div>
+              <button type="submit" class="secondary">Save Plex settings</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <template id="subscriber-row">
+      <tr>
+        <td class="col-subscriber"></td>
+        <td><span class="status-pill"></span></td>
+        <td class="col-last-payment"></td>
+        <td class="col-invite"></td>
+        <td>
+          <div class="actions">
+            <button data-action="invite">Generate invite</button>
+            <button data-action="resend" class="secondary">Resend email</button>
+            <button data-action="revoke" class="danger">Revoke</button>
+          </div>
+        </td>
+      </tr>
+    </template>
+
+    <script>
+      const loginPanel = document.getElementById('login-panel');
+      const dashboard = document.getElementById('dashboard');
+      const logoutButton = document.getElementById('logout-button');
+      const statusMessage = document.getElementById('status-message');
+      const subscribersTable = document.querySelector('#subscribers-table tbody');
+      const eventsList = document.getElementById('events-list');
+      const refreshButton = document.getElementById('refresh-button');
+      const settingsPanel = document.getElementById('settings-panel');
+      const settingsForms = settingsPanel
+        ? Array.from(settingsPanel.querySelectorAll('.settings-form'))
+        : [];
+
+      let csrfToken = null;
+      let state = {
+        authenticated: false,
+        donors: [],
+        events: [],
+        settings: null,
+      };
+
+      async function api(path, options = {}) {
+        const opts = { ...options };
+        opts.credentials = 'include';
+        opts.headers = opts.headers ? { ...opts.headers } : {};
+        if (opts.body && typeof opts.body !== 'string') {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(opts.body);
+        }
+        if (csrfToken && opts.method && opts.method !== 'GET') {
+          opts.headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        const response = await fetch(path, opts);
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+          ? await response.json()
+          : {};
+
+        if (data && data.csrfToken) {
+          csrfToken = data.csrfToken;
+        }
+
+        if (response.status === 401) {
+          state.authenticated = false;
+          state.settings = null;
+          render();
+          throw new Error('Authentication required');
+        }
+
+        if (!response.ok) {
+          const error = data.error || 'Request failed';
+          throw new Error(error);
+        }
+
+        return data;
+      }
+
+      function render() {
+        if (state.authenticated) {
+          loginPanel.classList.add('hidden');
+          dashboard.classList.remove('hidden');
+          logoutButton.classList.remove('hidden');
+          statusMessage.textContent = '';
+          renderSubscribers();
+          renderEvents();
+          renderSettings();
+        } else {
+          loginPanel.classList.remove('hidden');
+          dashboard.classList.add('hidden');
+          logoutButton.classList.add('hidden');
+        }
+      }
+
+      function setFormStatus(form, message, stateAttr = '') {
+        if (!form) {
+          return;
+        }
+        const statusEl = form.querySelector('.form-status');
+        if (!statusEl) {
+          return;
+        }
+        statusEl.textContent = message;
+        if (stateAttr) {
+          statusEl.dataset.state = stateAttr;
+        } else {
+          delete statusEl.dataset.state;
+        }
+      }
+
+      function renderSettings() {
+        if (!settingsPanel || !state.settings) {
+          return;
+        }
+        settingsForms.forEach((form) => {
+          const group = form.dataset.group;
+          const values = group ? state.settings[group] : null;
+          form.querySelectorAll('[name]').forEach((input) => {
+            if (input.type === 'checkbox') {
+              input.checked = Boolean(values && values[input.name]);
+            } else {
+              const rawValue = values ? values[input.name] : '';
+              input.value = rawValue == null ? '' : String(rawValue);
+            }
+          });
+        });
+      }
+
+      async function loadSettings() {
+        if (!settingsPanel) {
+          return;
+        }
+        try {
+          const response = await api('/api/admin/settings');
+          state.settings = response.settings || {};
+          settingsForms.forEach((form) => setFormStatus(form, ''));
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      function renderSubscribers() {
+        subscribersTable.innerHTML = '';
+        if (state.donors.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5;
+          cell.textContent = 'No subscribers yet.';
+          cell.style.color = '#64748b';
+          row.appendChild(cell);
+          subscribersTable.appendChild(row);
+          return;
+        }
+
+        const template = document.getElementById('subscriber-row');
+        state.donors.forEach((donor) => {
+          const clone = template.content.cloneNode(true);
+          const row = clone.querySelector('tr');
+          row.dataset.id = donor.id;
+          const subscriberCell = clone.querySelector('.col-subscriber');
+          const statusPill = clone.querySelector('.status-pill');
+          const lastPaymentCell = clone.querySelector('.col-last-payment');
+          const inviteCell = clone.querySelector('.col-invite');
+
+          subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:#64748b;font-size:0.85rem;">${donor.email || '—'}<br/>Sub ID: ${donor.subscriptionId}</span>`;
+
+          const status = (donor.status || 'pending').toLowerCase();
+          statusPill.dataset.status = status;
+          statusPill.textContent = status.replace(/_/g, ' ');
+
+          if (donor.lastPaymentAt) {
+            const date = new Date(donor.lastPaymentAt);
+            lastPaymentCell.innerHTML = `${date.toLocaleString()}<br /><span class="badge">${formatAmount(donor)}</span>`;
+          } else {
+            lastPaymentCell.textContent = '—';
+          }
+
+          if (donor.invites.length > 0) {
+            const invite = donor.invites[0];
+            const parts = [];
+            if (invite.wizarrInviteUrl) {
+              parts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+            }
+            if (invite.emailSentAt) {
+              const date = new Date(invite.emailSentAt);
+              parts.push(`<span class="badge">Emailed ${date.toLocaleDateString()}</span>`);
+            }
+            if (invite.revokedAt) {
+              const date = new Date(invite.revokedAt);
+              parts.push(`<span class="badge" style="background:rgba(248,113,113,0.15);color:#b91c1c;">Revoked ${date.toLocaleDateString()}</span>`);
+            }
+            inviteCell.innerHTML = parts.join('<br />');
+          } else {
+            inviteCell.textContent = '—';
+          }
+
+          subscribersTable.appendChild(clone);
+        });
+      }
+
+      function formatAmount(donor) {
+        const payment = donor.payments && donor.payments[0];
+        if (!payment || !payment.amount) {
+          return 'No payment recorded';
+        }
+        return `${payment.amount} ${payment.currency || ''}`.trim();
+      }
+
+      function renderEvents() {
+        eventsList.innerHTML = '';
+        if (state.events.length === 0) {
+          const li = document.createElement('li');
+          li.textContent = 'No events yet.';
+          eventsList.appendChild(li);
+          return;
+        }
+        state.events.forEach((event) => {
+          const li = document.createElement('li');
+          const payload = (() => {
+            try {
+              return JSON.stringify(JSON.parse(event.payload), null, 2);
+            } catch (e) {
+              return event.payload;
+            }
+          })();
+          li.innerHTML = `<time>${new Date(event.createdAt).toLocaleString()}</time><strong>${event.eventType}</strong><pre style="white-space:pre-wrap;background:#f1f5f9;padding:8px;border-radius:8px;margin-top:6px;">${payload}</pre>`;
+          eventsList.appendChild(li);
+        });
+      }
+
+      async function loadDashboardData() {
+        try {
+          const donorsResponse = await api('/api/admin/subscribers');
+          state.donors = donorsResponse.donors || [];
+        } catch (err) {
+          console.error(err);
+        }
+        try {
+          const eventsResponse = await api('/api/admin/events');
+          state.events = eventsResponse.events || [];
+        } catch (err) {
+          console.error(err);
+        }
+        await loadSettings();
+        render();
+      }
+
+      async function checkSession() {
+        try {
+          const data = await api('/api/admin/session');
+          csrfToken = data.csrfToken;
+          state.authenticated = data.authenticated;
+          if (state.authenticated) {
+            await loadDashboardData();
+          } else {
+            state.settings = null;
+            render();
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      }
+
+      document.getElementById('login-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const password = document.getElementById('password').value.trim();
+        if (!password) {
+          statusMessage.textContent = 'Password is required';
+          return;
+        }
+        statusMessage.textContent = 'Signing in…';
+        try {
+          const response = await api('/api/admin/login', {
+            method: 'POST',
+            body: { password },
+          });
+          csrfToken = response.csrfToken;
+          state.authenticated = true;
+          document.getElementById('password').value = '';
+          await loadDashboardData();
+          statusMessage.textContent = '';
+        } catch (err) {
+          statusMessage.textContent = err.message;
+        }
+      });
+
+      logoutButton.addEventListener('click', async () => {
+        try {
+          await api('/api/admin/logout', { method: 'POST' });
+        } finally {
+          state.authenticated = false;
+          state.donors = [];
+          state.events = [];
+          state.settings = null;
+          render();
+        }
+      });
+
+      refreshButton.addEventListener('click', loadDashboardData);
+
+      settingsForms.forEach((form) => {
+        form.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const group = form.dataset.group;
+          if (!group) {
+            return;
+          }
+          const payload = {};
+          form.querySelectorAll('[name]').forEach((input) => {
+            if (input.type === 'checkbox') {
+              payload[input.name] = input.checked;
+            } else {
+              payload[input.name] = input.value;
+            }
+          });
+          const submitButton = form.querySelector("button[type='submit']");
+          try {
+            if (submitButton) {
+              submitButton.disabled = true;
+            }
+            setFormStatus(form, 'Saving…');
+            const response = await api(`/api/admin/settings/${group}`, {
+              method: 'PUT',
+              body: payload,
+            });
+            if (!state.settings) {
+              state.settings = {};
+            }
+            state.settings[group] = response.settings || {};
+            renderSettings();
+            setFormStatus(form, 'Saved!', 'success');
+            setTimeout(() => {
+              const statusEl = form.querySelector('.form-status');
+              if (statusEl && statusEl.dataset.state === 'success') {
+                statusEl.textContent = '';
+                delete statusEl.dataset.state;
+              }
+            }, 3000);
+          } catch (err) {
+            setFormStatus(form, err.message || 'Failed to save settings', 'error');
+          } finally {
+            if (submitButton) {
+              submitButton.disabled = false;
+            }
+          }
+        });
+      });
+
+      subscribersTable.addEventListener('click', async (event) => {
+        const button = event.target.closest('button[data-action]');
+        if (!button) return;
+        const row = event.target.closest('tr');
+        const donorId = row && row.dataset.id;
+        if (!donorId) return;
+        const action = button.dataset.action;
+        button.disabled = true;
+        try {
+          if (action === 'invite') {
+            await api(`/api/admin/subscribers/${donorId}/invite`, { method: 'POST' });
+          } else if (action === 'resend') {
+            await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
+          } else if (action === 'revoke') {
+            if (!confirm('Revoke the latest invite for this subscriber?')) {
+              return;
+            }
+            await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
+          }
+          await loadDashboardData();
+        } catch (err) {
+          alert(err.message);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      checkSession();
+    </script>
+  </body>
 </html>
