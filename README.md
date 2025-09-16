@@ -25,7 +25,7 @@ Automated system to handle:
 ## 📦 Setup
 
 ```bash
-git clone https://github.com/yourname/Plex-Donate.git
+git clone https://github.com/jjermany/Plex-Donate.git
 cd Plex-Donate
 npm install
 cp .env.example .env   # adjust only the core app settings
