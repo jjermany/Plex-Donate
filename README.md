@@ -43,8 +43,11 @@ Only the core application settings live in `.env` now:
 | `NODE_ENV` | Runtime environment label (defaults to `development`). |
 | `PORT` | Port the Express server listens on. |
 | `SESSION_SECRET` | Secret used to encrypt admin sessions. |
+| `SESSION_COOKIE_SECURE` | Set to `true` to mark the admin session cookie as secure (requires HTTPS). Defaults to `false`. |
 | `ADMIN_PASSWORD` | Password required to access the admin dashboard. |
 | `DATABASE_FILE` | Location of the SQLite database file. |
+
+When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections.
 
 ### Configure integrations
 

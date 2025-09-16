@@ -19,7 +19,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: config.isProduction,
+      secure: config.sessionCookieSecure,
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     },
   })
