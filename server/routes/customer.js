@@ -11,6 +11,7 @@ const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
 const logger = require('../utils/logger');
 const { verifyPassword } = require('../utils/passwords');
+const { getSubscriptionCheckoutUrl, getPaypalEnvironment } = require('../utils/paypal');
 
 const router = express.Router();
 
@@ -35,6 +36,11 @@ function isValidEmail(email) {
 
 function buildDashboardResponse({ donor, invite }) {
   const paypal = settingsStore.getPaypalSettings();
+  const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
+  const subscriptionUrl = getSubscriptionCheckoutUrl({
+    planId: paypal.planId,
+    apiBase: paypal.apiBase,
+  });
   const wizarr = settingsStore.getWizarrSettings();
   return {
     authenticated: Boolean(donor),
@@ -54,11 +60,21 @@ function buildDashboardResponse({ donor, invite }) {
       planId: paypal.planId || '',
       subscriptionPrice: paypal.subscriptionPrice || 0,
       currency: paypal.currency || '',
+      environment: paypalEnvironment,
+      subscriptionUrl,
     },
     wizarr: {
       baseUrl: wizarr.baseUrl || '',
     },
   };
+}
+
+function hasActiveSubscription(donor) {
+  if (!donor) {
+    return false;
+  }
+  const status = (donor.status || '').toLowerCase();
+  return status === 'active';
 }
 
 function getAuthenticatedDonor(req) {
@@ -215,11 +231,10 @@ router.post(
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
+    if (!hasActiveSubscription(donor)) {
       return res.status(403).json({
-        error: 'This subscription is not active. Contact the server admin for help.',
+        error:
+          'An active subscription is required to generate a new invite.',
       });
     }
 

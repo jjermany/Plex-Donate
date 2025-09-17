@@ -726,6 +726,30 @@
           <h2 style="margin-top:0;">Integration settings</h2>
           <p class="muted-text" style="margin:0 0 16px;">Keep service credentials in one place so you can avoid editing environment files.</p>
 
+          <form class="settings-form" data-group="app">
+            <h3>Application</h3>
+            <div class="field-grid">
+              <label>
+                Public base URL
+                <input
+                  name="publicBaseUrl"
+                  type="url"
+                  placeholder="https://plexdonate.example.com"
+                />
+                <span class="help"
+                  >Used to build invite page links that work outside your
+                  network.</span
+                >
+              </label>
+            </div>
+            <p class="form-status" data-status-for="app"></p>
+            <div class="form-actions">
+              <button type="submit" class="secondary">
+                Save application settings
+              </button>
+            </div>
+          </form>
+
           <form class="settings-form" data-group="paypal">
             <h3>PayPal</h3>
             <div class="field-grid">
@@ -999,6 +1023,17 @@
           .replace(/'/g, '&#39;');
       }
 
+      function getPublicBaseUrl() {
+        if (!state.settings || !state.settings.app) {
+          return '';
+        }
+        const raw = state.settings.app.publicBaseUrl;
+        if (!raw) {
+          return '';
+        }
+        return String(raw).trim().replace(/\/+$/, '');
+      }
+
       function buildShareUrl(link) {
         if (!link || typeof link !== 'object') {
           return '';
@@ -1007,7 +1042,8 @@
           return String(link.url);
         }
         if (link.token) {
-          const origin = window.location.origin.replace(/\/$/, '');
+          const configuredBase = getPublicBaseUrl();
+          const origin = configuredBase || window.location.origin.replace(/\/$/, '');
           return `${origin}/share/${link.token}`;
         }
         return '';
@@ -1965,7 +2001,9 @@
               options
             );
             const shareLink = response.shareLink || {};
-            const origin = window.location.origin.replace(/\/$/, '');
+            const configuredBase = getPublicBaseUrl();
+            const origin =
+              configuredBase || window.location.origin.replace(/\/$/, '');
             const shareUrl =
               shareLink.url ||
               (shareLink.token ? `${origin}/share/${shareLink.token}` : '');

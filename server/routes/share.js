@@ -20,6 +20,7 @@ const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
 const logger = require('../utils/logger');
 const { hashPassword, isPasswordStrong } = require('../utils/passwords');
+const { getSubscriptionCheckoutUrl, getPaypalEnvironment } = require('../utils/paypal');
 
 const router = express.Router();
 
@@ -44,6 +45,11 @@ function isValidEmail(email) {
 
 function buildShareResponse({ shareLink, donor, invite, prospect }) {
   const paypal = settingsStore.getPaypalSettings();
+  const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
+  const subscriptionUrl = getSubscriptionCheckoutUrl({
+    planId: paypal.planId,
+    apiBase: paypal.apiBase,
+  });
   return {
     donor: donor
       ? {
@@ -76,8 +82,18 @@ function buildShareResponse({ shareLink, donor, invite, prospect }) {
       planId: paypal.planId || '',
       subscriptionPrice: paypal.subscriptionPrice || 0,
       currency: paypal.currency || '',
+      environment: paypalEnvironment,
+      subscriptionUrl,
     },
   };
+}
+
+function hasActiveSubscription(donor) {
+  if (!donor) {
+    return false;
+  }
+  const status = (donor.status || '').toLowerCase();
+  return status === 'active';
 }
 
 function getProvidedSessionToken(req) {
@@ -197,11 +213,9 @@ router.post(
         ? req.body.name.trim()
         : '';
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
+    if (!hasActiveSubscription(donor)) {
       return res.status(403).json({
-        error: 'Subscription is not active. Contact the server admin for help.',
+        error: 'Start or resume your subscription to generate a new invite.',
       });
     }
 

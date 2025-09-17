@@ -176,4 +176,48 @@ test('share routes handle donor and prospect flows', async (t) => {
       await server.close();
     }
   });
+
+  await t.test('pending donor cannot generate invite from share link', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'pending@example.com',
+        name: 'Pending Donor',
+        subscriptionId: 'I-PENDING',
+        status: 'pending',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'pending-token',
+        sessionToken: 'pending-session',
+      });
+
+      const response = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'pending@example.com',
+            name: 'Pending Donor',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(response.status, 403);
+      assert.ok(
+        response.body &&
+          typeof response.body.error === 'string' &&
+          response.body.error.toLowerCase().includes('subscription'),
+        'response should include subscription error message'
+      );
+    } finally {
+      await server.close();
+    }
+  });
 });

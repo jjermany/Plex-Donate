@@ -228,6 +228,15 @@
         letter-spacing: 0.12em;
         color: rgba(148, 163, 184, 0.7);
       }
+      .subscription-actions {
+        margin-top: 18px;
+        display: grid;
+        gap: 10px;
+        justify-items: center;
+      }
+      .subscription-actions .cta-button {
+        margin-top: 0;
+      }
       .support-list {
         list-style: none;
         padding: 0;
@@ -447,6 +456,19 @@
               <div id="price-row" class="detail hidden"></div>
               <div id="share-last-used" class="detail muted hidden"></div>
             </div>
+            <div id="subscription-actions" class="subscription-actions hidden">
+              <a
+                id="subscription-button"
+                class="cta-button"
+                href="#"
+                target="_blank"
+                rel="noopener"
+                >Start PayPal subscription</a
+              >
+              <p id="subscription-hint" class="muted small">
+                Opens PayPal checkout in a new tab.
+              </p>
+            </div>
           </article>
 
           <article class="surface" id="support-card">
@@ -603,6 +625,8 @@
       const subscriptionIdEl = document.getElementById('subscription-id');
       const priceRow = document.getElementById('price-row');
       const shareLastUsedEl = document.getElementById('share-last-used');
+      const subscriptionActions = document.getElementById('subscription-actions');
+      const subscriptionButton = document.getElementById('subscription-button');
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
@@ -729,6 +753,16 @@
         const donor = data.donor || null;
         const prospect = data.prospect || null;
         const isProspect = !donor && Boolean(prospect);
+        const paypal = data.paypal || {};
+        const subscribeUrl = paypal.subscriptionUrl || '';
+        const normalizedStatus = (donor && donor.status
+          ? donor.status
+          : 'pending'
+        ).toLowerCase();
+        const isActive = normalizedStatus === 'active';
+        const showSubscriptionCta = Boolean(
+          subscribeUrl && (isProspect || !donor || !donor.subscriptionId || !isActive)
+        );
         state.isProspect = isProspect;
 
         if (donorNameEl) {
@@ -774,20 +808,21 @@
           }
         }
 
-        let blocked = false;
         if (statusPill) {
           if (isProspect) {
             statusPill.dataset.status = 'setup';
             statusPill.textContent = 'setup needed';
           } else {
-            const status = (donor && donor.status ? donor.status : 'pending').toLowerCase();
-            statusPill.dataset.status = status || 'pending';
-            statusPill.textContent = status ? status.replace(/_/g, ' ') : 'pending';
-            blocked = ['cancelled', 'suspended', 'expired'].includes(status);
+            statusPill.dataset.status = normalizedStatus || 'pending';
+            statusPill.textContent = normalizedStatus
+              ? normalizedStatus.replace(/_/g, ' ')
+              : 'pending';
           }
         }
 
-        const inviteLocked = blocked || isProspect;
+        const severeStatuses = new Set(['cancelled', 'suspended', 'expired']);
+        const hasSevereIssue = !isProspect && severeStatuses.has(normalizedStatus);
+        const inviteLocked = isProspect || !isActive;
 
         if (generateButton) {
           generateButton.dataset.blocked = inviteLocked ? 'true' : 'false';
@@ -800,38 +835,57 @@
           nameInput.disabled = inviteLocked;
         }
 
+        if (subscriptionActions) {
+          if (showSubscriptionCta) {
+            subscriptionActions.classList.remove('hidden');
+            if (subscriptionButton) {
+              subscriptionButton.href = subscribeUrl;
+            }
+          } else {
+            subscriptionActions.classList.add('hidden');
+            if (subscriptionButton) {
+              subscriptionButton.href = '#';
+            }
+          }
+        }
+
         if (inviteLocked) {
           if (isProspect) {
             actionStatus.textContent =
               'Finish setting up your account to unlock invite generation.';
             actionStatus.className = 'status-text info';
-          } else if (blocked) {
+          } else if (hasSevereIssue) {
             actionStatus.textContent =
               'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
             actionStatus.className = 'status-text error';
+          } else {
+            actionStatus.textContent = showSubscriptionCta
+              ? 'Start your PayPal subscription to unlock invite generation.'
+              : 'Invite generation unlocks once your subscription is active.';
+            actionStatus.className = 'status-text info';
           }
         }
 
         if (accountSubmit) {
-          accountSubmit.disabled = blocked;
+          accountSubmit.disabled = hasSevereIssue;
         }
         if (accountEmailInput) {
-          accountEmailInput.disabled = blocked;
+          accountEmailInput.disabled = hasSevereIssue;
         }
         if (accountNameInput) {
-          accountNameInput.disabled = blocked;
+          accountNameInput.disabled = hasSevereIssue;
         }
         if (accountPasswordInput) {
-          accountPasswordInput.disabled = blocked;
+          accountPasswordInput.disabled = hasSevereIssue;
         }
         if (accountConfirmInput) {
-          accountConfirmInput.disabled = blocked;
+          accountConfirmInput.disabled = hasSevereIssue;
         }
         if (accountSubscriptionInput) {
-          accountSubscriptionInput.disabled = blocked;
+          accountSubscriptionInput.disabled = hasSevereIssue;
         }
 
-        if (blocked && accountStatus) {
+        if (hasSevereIssue && accountStatus) {
           accountStatus.textContent =
             'This subscription needs attention before you can update your account.';
           accountStatus.classList.add('error');
@@ -900,18 +954,19 @@
             accountSubscriptionInput.value = '';
           }
         }
-        if (accountPasswordInput && !blocked) {
+        if (accountPasswordInput && !hasSevereIssue) {
           accountPasswordInput.value = '';
         }
-        if (accountConfirmInput && !blocked) {
+        if (accountConfirmInput && !hasSevereIssue) {
           accountConfirmInput.value = '';
         }
 
         renderInvite(invite);
 
-        if (blocked) {
-          inviteDescription.textContent =
-            'Once your donation is active we will unlock invite generation.';
+        if (!isActive) {
+          inviteDescription.textContent = showSubscriptionCta
+            ? 'Once your donation is active we will unlock invite generation.'
+            : 'Invite generation unlocks once your subscription is active.';
         }
 
         const identifier =

@@ -5,13 +5,16 @@ const {
   updateDonorStatus,
   getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
+  createInvite: createInviteRecord,
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
   recordPayment,
   logEvent,
+  markInviteEmailSent,
 } = require('../db');
 const plexService = require('../services/plex');
 const wizarrService = require('../services/wizarr');
+const emailService = require('../services/email');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -77,6 +80,13 @@ async function handleEvent(event) {
       logger.info('Unhandled PayPal event type', type);
       break;
   }
+}
+
+function normalizeEmail(value) {
+  if (!value) {
+    return '';
+  }
+  return String(value).trim().toLowerCase();
 }
 
 function extractSubscriber(resource) {
@@ -209,12 +219,115 @@ async function handlePaymentEvent(event) {
     paidAt,
   });
 
-  updateDonorStatus(subscriptionId, 'active', paidAt);
+  const updatedDonor = updateDonorStatus(subscriptionId, 'active', paidAt);
+  if (updatedDonor) {
+    donor = updatedDonor;
+  }
   logEvent('paypal.payment.recorded', {
     donorId: donor.id,
     amount,
     currency,
   });
+
+  try {
+    await ensureInviteForActiveDonor(donor, {
+      paymentId: resource.id,
+    });
+  } catch (err) {
+    logger.warn('Automatic invite workflow failed after payment', err.message);
+  }
+}
+
+async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
+  if (!donor || (donor.status || '').toLowerCase() !== 'active') {
+    return;
+  }
+
+  const email = (donor.email || '').trim();
+  if (!email) {
+    logger.info('Skipping automatic invite: donor email missing', {
+      donorId: donor.id,
+    });
+    return;
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const existingInvite = getLatestActiveInviteForDonor(donor.id);
+  const existingInviteUsable =
+    existingInvite &&
+    existingInvite.wizarrInviteUrl &&
+    !existingInvite.revokedAt;
+  const existingInviteMatches =
+    existingInviteUsable &&
+    normalizeEmail(existingInvite.recipientEmail) === normalizedEmail;
+
+  if (existingInviteUsable && existingInviteMatches) {
+    if (!existingInvite.emailSentAt) {
+      try {
+        await emailService.sendInviteEmail({
+          to: email,
+          inviteUrl: existingInvite.wizarrInviteUrl,
+          name: donor.name,
+          subscriptionId: donor.subscriptionId,
+        });
+        markInviteEmailSent(existingInvite.id);
+        logEvent('invite.auto.email_sent', {
+          donorId: donor.id,
+          inviteId: existingInvite.id,
+          source: 'payment-webhook',
+        });
+      } catch (err) {
+        logger.warn('Automatic invite email failed', err.message);
+      }
+    }
+    return;
+  }
+
+  try {
+    const noteParts = ['Auto-generated after successful payment'];
+    if (paymentId) {
+      noteParts.push(`#${paymentId}`);
+    }
+    const note = noteParts.join(' ');
+
+    const inviteData = await wizarrService.createInvite({
+      email,
+      note,
+    });
+
+    const inviteRecord = createInviteRecord({
+      donorId: donor.id,
+      code: inviteData.inviteCode,
+      url: inviteData.inviteUrl,
+      recipientEmail: email,
+      note,
+    });
+
+    logEvent('invite.auto.generated', {
+      donorId: donor.id,
+      inviteId: inviteRecord.id,
+      source: 'payment-webhook',
+    });
+
+    try {
+      await emailService.sendInviteEmail({
+        to: email,
+        inviteUrl: inviteRecord.wizarrInviteUrl,
+        name: donor.name,
+        subscriptionId: donor.subscriptionId,
+      });
+      markInviteEmailSent(inviteRecord.id);
+      logEvent('invite.auto.email_sent', {
+        donorId: donor.id,
+        inviteId: inviteRecord.id,
+        source: 'payment-webhook',
+      });
+    } catch (err) {
+      logger.warn('Automatic invite email failed', err.message);
+    }
+  } catch (err) {
+    logger.warn('Failed to create automatic invite after payment', err.message);
+  }
 }
 
 module.exports = router;

@@ -303,6 +303,16 @@
         flex-wrap: wrap;
         align-items: center;
       }
+      .subscription-cta {
+        margin-top: 18px;
+        display: grid;
+        gap: 8px;
+        justify-items: start;
+      }
+      .subscription-cta .button-primary {
+        text-decoration: none;
+        text-align: center;
+      }
       .section-title {
         font-size: 1.2rem;
         font-weight: 600;
@@ -399,6 +409,19 @@
                 <span class="label">Last payment</span>
                 <span id="member-last-payment"></span>
               </div>
+            </div>
+            <div id="subscription-cta" class="subscription-cta hidden">
+              <a
+                id="subscription-button"
+                class="button-primary"
+                href="#"
+                target="_blank"
+                rel="noopener"
+                >Start PayPal subscription</a
+              >
+              <p id="subscription-note" class="muted small">
+                Opens PayPal checkout in a new tab.
+              </p>
             </div>
           </article>
 
@@ -530,6 +553,8 @@
       const memberSubscriptionId = document.getElementById('member-subscription-id');
       const memberLastPaymentRow = document.getElementById('member-last-payment-row');
       const memberLastPayment = document.getElementById('member-last-payment');
+      const subscriptionCta = document.getElementById('subscription-cta');
+      const subscriptionButton = document.getElementById('subscription-button');
 
       const profileForm = document.getElementById('profile-form');
       const profileEmail = document.getElementById('profile-email');
@@ -654,10 +679,10 @@
           ? donor.email
           : 'Set your preferred streaming email under profile settings.';
 
+        const normalizedStatus = (donor.status || 'pending').toLowerCase();
         if (memberStatusEl) {
-          const status = (donor.status || 'pending').toLowerCase();
-          memberStatusEl.dataset.status = status;
-          memberStatusEl.textContent = status || 'pending';
+          memberStatusEl.dataset.status = normalizedStatus;
+          memberStatusEl.textContent = normalizedStatus || 'pending';
         }
 
         if (donor.subscriptionId) {
@@ -688,6 +713,24 @@
           memberPlanEl.innerHTML = '';
         }
 
+        const subscribeUrl =
+          data.paypal && data.paypal.subscriptionUrl
+            ? data.paypal.subscriptionUrl
+            : '';
+        const showSubscriptionCta = Boolean(
+          subscribeUrl && (!donor.subscriptionId || normalizedStatus !== 'active')
+        );
+
+        if (subscriptionButton && subscriptionCta) {
+          if (showSubscriptionCta) {
+            subscriptionButton.href = subscribeUrl;
+            subscriptionCta.classList.remove('hidden');
+          } else {
+            subscriptionButton.href = '#';
+            subscriptionCta.classList.add('hidden');
+          }
+        }
+
         profileEmail.value = donor.email || '';
         profileName.value = donor.name || '';
         inviteEmail.value = donor.email || '';
@@ -701,6 +744,23 @@
         }
 
         renderInvite(data.invite);
+
+        const inviteBlocked = normalizedStatus !== 'active';
+        if (inviteSubmit) {
+          inviteSubmit.disabled = inviteBlocked;
+        }
+        if (inviteEmail) {
+          inviteEmail.disabled = inviteBlocked;
+        }
+        if (inviteNote) {
+          inviteNote.disabled = inviteBlocked;
+        }
+
+        if (inviteBlocked) {
+          inviteDescription.textContent = showSubscriptionCta
+            ? 'Start your PayPal subscription to unlock invite generation.'
+            : 'Invite generation unlocks once your subscription is active.';
+        }
 
         const identifier = donor.name || donor.email || donor.subscriptionId || '';
         if (identifier) {
@@ -799,6 +859,9 @@
 
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (inviteSubmit.disabled) {
+          return;
+        }
         setStatusText(inviteStatus, 'Generating invite…', 'info');
         inviteSubmit.disabled = true;
         try {
