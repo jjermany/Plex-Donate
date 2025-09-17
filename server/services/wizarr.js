@@ -24,7 +24,7 @@ async function createInvite({ email, note, expiresInDays }, overrideSettings) {
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
-    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invite'],
+    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invites', '/api/v1/invite'],
     body: payload,
   });
 
@@ -55,6 +55,7 @@ async function revokeInvite(inviteCode) {
     pathCandidates: [
       `/api/invites/${encodeURIComponent(inviteCode)}`,
       `/api/invite/${encodeURIComponent(inviteCode)}`,
+      `/api/v1/invites/${encodeURIComponent(inviteCode)}`,
       `/api/v1/invite/${encodeURIComponent(inviteCode)}`,
     ],
   });
@@ -71,7 +72,7 @@ async function verifyConnection(overrideSettings) {
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
-    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invite'],
+    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invites', '/api/v1/invite'],
     body: { email: '', note: 'Connection test', expires_in_days: 1 },
   });
 
