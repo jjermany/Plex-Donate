@@ -311,6 +311,7 @@ const statements = {
   listPaymentsForDonor: db.prepare(
     'SELECT * FROM payments WHERE donor_id = ? ORDER BY paid_at DESC'
   ),
+  deleteDonorById: db.prepare('DELETE FROM donors WHERE id = ?'),
   getInviteLinkByDonorId: db.prepare(
     'SELECT * FROM invite_links WHERE donor_id = ?'
   ),
@@ -879,6 +880,15 @@ function updateDonorSubscriptionId(donorId, subscriptionId) {
   return mapDonor(statements.getDonorById.get(donorId));
 }
 
+function deleteDonorById(donorId) {
+  if (!donorId) {
+    return false;
+  }
+
+  const result = statements.deleteDonorById.run(donorId);
+  return result.changes > 0;
+}
+
 function getRecentEvents(limit = 50) {
   return statements.listEvents.all(limit).map((row) => ({
     id: row.id,
@@ -954,6 +964,7 @@ module.exports = {
   getDonorAuthByEmail,
   createDonor,
   updateDonorSubscriptionId,
+  deleteDonorById,
   createProspect,
   updateProspect,
   getProspectById,
