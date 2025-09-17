@@ -13,6 +13,30 @@ function getBaseUrl(wizarr) {
   return wizarr.baseUrl.replace(/\/$/, '');
 }
 
+function buildRequestUrl(baseUrlString, path) {
+  const sanitizedBase = (baseUrlString || '').replace(/\/+$/, '');
+  const baseUrl = new URL(`${sanitizedBase}/`);
+  const baseSegments = baseUrl.pathname.split('/').filter(Boolean);
+
+  const normalizedPath = (path || '').replace(/^\/+/, '');
+  const pathSegments = normalizedPath ? normalizedPath.split('/') : [];
+
+  let dropIndex = 0;
+  while (
+    dropIndex < baseSegments.length &&
+    dropIndex < pathSegments.length &&
+    pathSegments[dropIndex].toLowerCase() === baseSegments[dropIndex].toLowerCase()
+  ) {
+    dropIndex += 1;
+  }
+
+  const remainingSegments = pathSegments.slice(dropIndex);
+  const relativePath = remainingSegments.join('/');
+  const resolvedUrl = new URL(relativePath || '', baseUrl);
+
+  return resolvedUrl.toString();
+}
+
 async function createInvite({ email, note, expiresInDays }, overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
   const payload = {
@@ -106,11 +130,12 @@ async function requestWithFallback({
   body,
 }) {
   const attempts = [];
+  const baseUrl = getBaseUrl(wizarr);
   for (const path of pathCandidates) {
     if (!path) {
       continue;
     }
-    const url = `${getBaseUrl(wizarr)}${path}`;
+    const url = buildRequestUrl(baseUrl, path);
     const response = await fetch(url, {
       method,
       headers: {
