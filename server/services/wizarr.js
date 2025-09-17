@@ -101,16 +101,29 @@ function buildRequestUrl(baseUrlString, path) {
   const normalizedPath = (path || '').replace(/^\/+/, '');
   const pathSegments = normalizedPath ? normalizedPath.split('/') : [];
 
-  let dropIndex = 0;
-  while (
-    dropIndex < baseSegments.length &&
-    dropIndex < pathSegments.length &&
-    pathSegments[dropIndex].toLowerCase() === baseSegments[dropIndex].toLowerCase()
-  ) {
-    dropIndex += 1;
+  let overlap = 0;
+  const maxOverlap = Math.min(baseSegments.length, pathSegments.length);
+  for (let count = maxOverlap; count > 0; count -= 1) {
+    let matches = true;
+    for (let index = 0; index < count; index += 1) {
+      const baseSegment = baseSegments[baseSegments.length - count + index];
+      const pathSegment = pathSegments[index];
+      if (
+        !baseSegment ||
+        !pathSegment ||
+        baseSegment.toLowerCase() !== pathSegment.toLowerCase()
+      ) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      overlap = count;
+      break;
+    }
   }
 
-  const remainingSegments = pathSegments.slice(dropIndex);
+  const remainingSegments = pathSegments.slice(overlap);
   const relativePath = remainingSegments.join('/');
   const resolvedUrl = new URL(relativePath || '', baseUrl);
 
@@ -443,4 +456,5 @@ module.exports = {
   revokeInvite,
   getWizarrConfig,
   verifyConnection,
+  buildRequestUrl,
 };
