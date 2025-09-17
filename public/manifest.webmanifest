@@ -9,12 +9,12 @@
   "description": "Manage Plex donations and share invites with supporters.",
   "icons": [
     {
-      "src": "/icons/icon-192.png",
+      "src": "/icons/icon-round-android.png",
       "type": "image/png",
       "sizes": "192x192"
     },
     {
-      "src": "/icons/icon-512.png",
+      "src": "/icons/icon-square-ios.png",
       "type": "image/png",
       "sizes": "512x512"
     }

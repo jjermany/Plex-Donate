@@ -1,6 +1,6 @@
 const CACHE_NAME = 'plex-donate-cache-v1';
 const CORE_ASSETS = ['/', '/index.html', '/share.html', '/manifest.webmanifest'];
-const OPTIONAL_ASSETS = ['/icons/icon-192.png', '/icons/icon-512.png'];
+const OPTIONAL_ASSETS = ['/icons/icon-round-android.png', '/icons/icon-square-ios.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

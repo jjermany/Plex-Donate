@@ -4,7 +4,8 @@ Place progressive web app icon images in this directory.
 
 Required files referenced by the manifest:
 
-- `icon-192.png`
-- `icon-512.png`
+- `icon-round-android.png` (192×192)
+- `icon-square-ios.png` (512×512)
 
-Add square PNG assets (192×192 and 512×512) before building for production.
+Use platform-specific artwork that matches these aspect ratios so launchers display
+the correct shape on each device. Add the PNG assets before building for production.
