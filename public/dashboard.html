@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050818" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>Plex Donate Dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(
+            120% 120% at 50% -10%,
+            rgba(99, 102, 241, 0.35) 0%,
+            rgba(15, 23, 42, 0.92) 45%,
+            #050818 100%
+          ),
+          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
+        color: #e2e8f0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px 64px;
+        position: relative;
+      }
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(76, 29, 149, 0.18),
+          transparent 70%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+      a {
+        color: inherit;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(2.2rem, 4vw, 3rem);
+        line-height: 1.1;
+        background: linear-gradient(135deg, #c7d2fe 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      h2 {
+        font-size: clamp(1.4rem, 2vw, 1.8rem);
+        line-height: 1.3;
+      }
+      p {
+        margin: 0;
+        line-height: 1.6;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .panel {
+        width: min(780px, 100%);
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 20px;
+        padding: 28px;
+        text-align: center;
+        box-shadow: 0 25px 60px -25px rgba(30, 64, 175, 0.6);
+        position: relative;
+        z-index: 1;
+      }
+      .panel.error {
+        background: rgba(76, 29, 149, 0.18);
+        border-color: rgba(248, 113, 113, 0.4);
+        color: #fecdd3;
+      }
+      #app {
+        width: min(960px, 100%);
+        position: relative;
+        z-index: 1;
+      }
+      .canvas {
+        display: grid;
+        gap: 28px;
+      }
+      .surface {
+        background: rgba(15, 23, 42, 0.76);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 24px;
+        padding: clamp(24px, 4vw, 36px);
+        box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        backdrop-filter: blur(18px);
+      }
+      .hero {
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        gap: 16px;
+        text-align: center;
+      }
+      .hero::after {
+        content: '';
+        position: absolute;
+        inset: -40% 40% auto -30%;
+        height: 120%;
+        transform: rotate(18deg);
+        background: radial-gradient(
+          60% 60% at 50% 50%,
+          rgba(59, 130, 246, 0.3),
+          transparent 70%
+        );
+        z-index: 0;
+      }
+      .hero > * {
+        position: relative;
+        z-index: 1;
+      }
+      .eyebrow {
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        color: rgba(165, 180, 252, 0.9);
+      }
+      .muted {
+        color: rgba(203, 213, 225, 0.8);
+      }
+      .small {
+        font-size: 0.85rem;
+      }
+      .status-text {
+        font-size: 0.9rem;
+        margin-top: 12px;
+        color: rgba(165, 180, 252, 0.9);
+      }
+      .status-text.error {
+        color: #fca5a5;
+      }
+      .status-text.success {
+        color: #bbf7d0;
+      }
+      .status-text.info {
+        color: #c7d2fe;
+      }
+      form {
+        display: grid;
+        gap: 16px;
+        margin-top: 20px;
+        text-align: left;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-weight: 600;
+        color: #cbd5f5;
+      }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(129, 140, 248, 0.4);
+        background: rgba(15, 23, 42, 0.7);
+        color: inherit;
+        font-size: 1rem;
+      }
+      input:focus {
+        outline: 2px solid rgba(129, 140, 248, 0.8);
+        outline-offset: 2px;
+      }
+      button {
+        appearance: none;
+        border: none;
+        border-radius: 999px;
+        padding: 12px 22px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      .button-primary {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #ffffff;
+        box-shadow: 0 12px 30px -12px rgba(79, 70, 229, 0.65);
+      }
+      .button-secondary {
+        background: rgba(148, 163, 184, 0.2);
+        color: #e2e8f0;
+        border: 1px solid rgba(148, 163, 184, 0.4);
+      }
+      .header-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+      .grid {
+        display: grid;
+        gap: 24px;
+      }
+      @media (min-width: 900px) {
+        .grid-columns-2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .profile-summary {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        background: rgba(59, 130, 246, 0.24);
+        color: #bfdbfe;
+        text-transform: capitalize;
+      }
+      .status-pill[data-status='active'] {
+        background: rgba(34, 197, 94, 0.22);
+        color: #bbf7d0;
+      }
+      .status-pill[data-status='cancelled'],
+      .status-pill[data-status='suspended'],
+      .status-pill[data-status='expired'] {
+        background: rgba(248, 113, 113, 0.24);
+        color: #fecdd3;
+      }
+      .detail-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 20px;
+      }
+      .detail {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 0.95rem;
+      }
+      .detail .label {
+        color: rgba(148, 163, 184, 0.9);
+        font-weight: 600;
+      }
+      .invite-ready {
+        margin-top: 24px;
+        border-radius: 18px;
+        border: 1px solid rgba(129, 140, 248, 0.4);
+        padding: 18px;
+        background: rgba(79, 70, 229, 0.15);
+        text-align: left;
+        display: grid;
+        gap: 12px;
+      }
+      .invite-link {
+        word-break: break-all;
+        color: #c7d2fe;
+        text-decoration: underline;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.8rem;
+      }
+      .badge.success {
+        background: rgba(34, 197, 94, 0.28);
+        color: #bbf7d0;
+      }
+      .login-card {
+        display: grid;
+        gap: 16px;
+        text-align: left;
+      }
+      .cta-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .section-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+      }
+      ul {
+        margin: 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" class="panel">Loading your dashboard…</div>
+    <div id="error-panel" class="panel error hidden"></div>
+    <div id="app" class="hidden">
+      <main class="canvas">
+        <section class="surface hero">
+          <span class="eyebrow">Plex Donate</span>
+          <h1>Welcome back to your streaming hub</h1>
+          <p class="muted">
+            Sign in with your PayPal subscription ID and email to manage invites,
+            keep your contact details up to date, and jump back into your
+            libraries anytime.
+          </p>
+        </section>
+
+        <section id="login-panel" class="surface login-card">
+          <div>
+            <span class="section-title">Customer sign-in</span>
+            <p class="muted small">
+              You can find the subscription ID in your PayPal confirmation email
+              or billing agreement details.
+            </p>
+          </div>
+          <form id="login-form">
+            <label>
+              <span>PayPal subscription ID</span>
+              <input
+                id="login-subscription"
+                type="text"
+                placeholder="I-XXXXXXXXXXXX"
+                autocomplete="off"
+                required
+              />
+            </label>
+            <label>
+              <span>Email on file</span>
+              <input
+                id="login-email"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+                required
+              />
+            </label>
+            <div class="cta-actions">
+              <button id="login-button" type="submit" class="button-primary">
+                Sign in
+              </button>
+              <p id="login-status" class="status-text"></p>
+            </div>
+          </form>
+        </section>
+
+        <section id="dashboard-panel" class="grid hidden">
+          <article class="surface">
+            <div class="profile-summary">
+              <div>
+                <h2 class="section-title">Your membership</h2>
+                <p id="member-name" class="muted"></p>
+                <p id="member-email" class="muted"></p>
+              </div>
+              <div class="header-actions">
+                <span
+                  id="member-status"
+                  class="status-pill"
+                  data-status="pending"
+                  >pending</span
+                >
+                <button id="logout-button" class="button-secondary" type="button">
+                  Sign out
+                </button>
+              </div>
+            </div>
+            <div class="detail-list">
+              <div id="member-plan" class="detail hidden"></div>
+              <div id="member-subscription-row" class="detail hidden">
+                <span class="label">Subscription ID</span>
+                <span id="member-subscription-id"></span>
+              </div>
+              <div id="member-last-payment-row" class="detail hidden">
+                <span class="label">Last payment</span>
+                <span id="member-last-payment"></span>
+              </div>
+            </div>
+          </article>
+
+          <article class="surface">
+            <h2 class="section-title">Update your profile</h2>
+            <p class="muted">
+              Keep your preferred streaming email and display name current so we
+              can reach you when new invites are generated.
+            </p>
+            <form id="profile-form">
+              <label>
+                <span>Streaming email</span>
+                <input
+                  id="profile-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                  required
+                />
+              </label>
+              <label>
+                <span>Display name</span>
+                <input
+                  id="profile-name"
+                  type="text"
+                  placeholder="How should we greet you?"
+                  autocomplete="name"
+                />
+              </label>
+              <div class="cta-actions">
+                <button id="profile-save" type="submit" class="button-primary">
+                  Save changes
+                </button>
+                <p id="profile-status" class="status-text"></p>
+              </div>
+            </form>
+          </article>
+
+          <article class="surface">
+            <h2 class="section-title">Generate a fresh invite</h2>
+            <p class="muted" id="invite-description">
+              Need access on a new device or sharing with another profile? Create
+              a new Wizarr invite instantly.
+            </p>
+            <form id="invite-form">
+              <label>
+                <span>Email for this invite</span>
+                <input
+                  id="invite-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                  required
+                />
+              </label>
+              <label>
+                <span>Optional note</span>
+                <input
+                  id="invite-note"
+                  type="text"
+                  placeholder="Used for tracking invites"
+                />
+              </label>
+              <div class="cta-actions">
+                <button id="invite-submit" type="submit" class="button-primary">
+                  Generate invite
+                </button>
+                <p id="invite-status" class="status-text"></p>
+              </div>
+            </form>
+            <div id="invite-ready" class="invite-ready hidden">
+              <span class="badge success">Invite ready</span>
+              <a id="invite-link" class="invite-link" href="#" target="_blank" rel="noopener"></a>
+              <p id="invite-email-display" class="muted small"></p>
+              <p id="invite-created" class="muted small"></p>
+            </div>
+          </article>
+
+          <article class="surface">
+            <h2 class="section-title">Streaming libraries</h2>
+            <p class="muted">
+              Jump into your Plex and Wizarr libraries once your invite is
+              active. Save the links below for quick access.
+            </p>
+            <ul>
+              <li>
+                <a id="wizarr-link" href="#" target="_blank" rel="noopener"
+                  >Open Wizarr</a
+                >
+              </li>
+              <li>
+                <a href="https://app.plex.tv/" target="_blank" rel="noopener"
+                  >Launch Plex</a
+                >
+              </li>
+              <li class="muted small">
+                Need a personal invite link? Contact the server admin for a
+                share URL.
+              </li>
+            </ul>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const state = {
+        data: null,
+      };
+
+      const loadingPanel = document.getElementById('loading');
+      const errorPanel = document.getElementById('error-panel');
+      const app = document.getElementById('app');
+      const loginPanel = document.getElementById('login-panel');
+      const dashboardPanel = document.getElementById('dashboard-panel');
+
+      const loginForm = document.getElementById('login-form');
+      const loginButton = document.getElementById('login-button');
+      const loginStatus = document.getElementById('login-status');
+      const loginSubscription = document.getElementById('login-subscription');
+      const loginEmail = document.getElementById('login-email');
+
+      const logoutButton = document.getElementById('logout-button');
+      const memberNameEl = document.getElementById('member-name');
+      const memberEmailEl = document.getElementById('member-email');
+      const memberStatusEl = document.getElementById('member-status');
+      const memberPlanEl = document.getElementById('member-plan');
+      const memberSubscriptionRow = document.getElementById('member-subscription-row');
+      const memberSubscriptionId = document.getElementById('member-subscription-id');
+      const memberLastPaymentRow = document.getElementById('member-last-payment-row');
+      const memberLastPayment = document.getElementById('member-last-payment');
+
+      const profileForm = document.getElementById('profile-form');
+      const profileEmail = document.getElementById('profile-email');
+      const profileName = document.getElementById('profile-name');
+      const profileStatus = document.getElementById('profile-status');
+      const profileSave = document.getElementById('profile-save');
+
+      const inviteForm = document.getElementById('invite-form');
+      const inviteEmail = document.getElementById('invite-email');
+      const inviteNote = document.getElementById('invite-note');
+      const inviteStatus = document.getElementById('invite-status');
+      const inviteSubmit = document.getElementById('invite-submit');
+      const inviteReady = document.getElementById('invite-ready');
+      const inviteLinkEl = document.getElementById('invite-link');
+      const inviteEmailDisplay = document.getElementById('invite-email-display');
+      const inviteCreated = document.getElementById('invite-created');
+      const inviteDescription = document.getElementById('invite-description');
+
+      const wizarrLink = document.getElementById('wizarr-link');
+
+      function showLoading() {
+        loadingPanel.classList.remove('hidden');
+        errorPanel.classList.add('hidden');
+        app.classList.add('hidden');
+      }
+
+      function showError(message) {
+        loadingPanel.classList.add('hidden');
+        errorPanel.textContent = message || 'Something went wrong.';
+        errorPanel.classList.remove('hidden');
+        app.classList.add('hidden');
+      }
+
+      function showApp() {
+        loadingPanel.classList.add('hidden');
+        errorPanel.classList.add('hidden');
+        app.classList.remove('hidden');
+      }
+
+      function formatPrice(amount, currency) {
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return '';
+        }
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currency || 'USD',
+            minimumFractionDigits: 2,
+          }).format(amount);
+        } catch (err) {
+          return `${amount.toFixed(2)} ${currency || ''}`.trim();
+        }
+      }
+
+      function formatDate(value) {
+        if (!value) {
+          return '';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+        return date.toLocaleString();
+      }
+
+      function setStatusText(el, message, statusClass) {
+        if (!el) return;
+        el.textContent = message || '';
+        el.className = 'status-text';
+        if (statusClass) {
+          el.classList.add(statusClass);
+        }
+      }
+
+      function renderInvite(invite) {
+        if (!invite || !invite.wizarrInviteUrl) {
+          inviteReady.classList.add('hidden');
+          inviteLinkEl.removeAttribute('href');
+          inviteLinkEl.textContent = '';
+          inviteEmailDisplay.textContent = '';
+          inviteCreated.textContent = '';
+          inviteDescription.textContent =
+            'Need access on a new device or sharing with another profile? Create a new Wizarr invite instantly.';
+          inviteSubmit.textContent = 'Generate invite';
+          return;
+        }
+
+        inviteReady.classList.remove('hidden');
+        inviteLinkEl.href = invite.wizarrInviteUrl;
+        inviteLinkEl.textContent = invite.wizarrInviteUrl;
+        inviteEmailDisplay.textContent = invite.recipientEmail
+          ? `Delivering to ${invite.recipientEmail}`
+          : '';
+        inviteCreated.textContent = invite.createdAt
+          ? `Created ${formatDate(invite.createdAt)}`
+          : '';
+        inviteDescription.textContent =
+          'Invite ready! If you need a new one just generate another below.';
+        inviteSubmit.textContent = 'Generate another invite';
+      }
+
+      function renderDashboard(data) {
+        state.data = data;
+        showApp();
+
+        if (!data || !data.authenticated) {
+          loginPanel.classList.remove('hidden');
+          dashboardPanel.classList.add('hidden');
+          loginForm.reset();
+          setStatusText(loginStatus, '');
+          return;
+        }
+
+        loginPanel.classList.add('hidden');
+        dashboardPanel.classList.remove('hidden');
+
+        const donor = data.donor || {};
+        memberNameEl.textContent = donor.name
+          ? `Hi ${donor.name}!`
+          : 'Add a display name below so we know how to greet you.';
+        memberEmailEl.textContent = donor.email
+          ? donor.email
+          : 'Set your preferred streaming email under profile settings.';
+
+        if (memberStatusEl) {
+          const status = (donor.status || 'pending').toLowerCase();
+          memberStatusEl.dataset.status = status;
+          memberStatusEl.textContent = status || 'pending';
+        }
+
+        if (donor.subscriptionId) {
+          memberSubscriptionRow.classList.remove('hidden');
+          memberSubscriptionId.textContent = donor.subscriptionId;
+        } else {
+          memberSubscriptionRow.classList.add('hidden');
+          memberSubscriptionId.textContent = '';
+        }
+
+        if (donor.lastPaymentAt) {
+          memberLastPaymentRow.classList.remove('hidden');
+          memberLastPayment.textContent = formatDate(donor.lastPaymentAt);
+        } else {
+          memberLastPaymentRow.classList.add('hidden');
+          memberLastPayment.textContent = '';
+        }
+
+        const price = formatPrice(
+          Number(data.paypal && data.paypal.subscriptionPrice),
+          data.paypal && data.paypal.currency
+        );
+        if (price) {
+          memberPlanEl.classList.remove('hidden');
+          memberPlanEl.innerHTML = `<span class="label">Monthly support</span><span>${price}</span>`;
+        } else {
+          memberPlanEl.classList.add('hidden');
+          memberPlanEl.innerHTML = '';
+        }
+
+        profileEmail.value = donor.email || '';
+        profileName.value = donor.name || '';
+        inviteEmail.value = donor.email || '';
+
+        if (data.wizarr && data.wizarr.baseUrl) {
+          wizarrLink.href = data.wizarr.baseUrl;
+          wizarrLink.textContent = 'Open Wizarr';
+        } else {
+          wizarrLink.removeAttribute('href');
+          wizarrLink.textContent = 'Wizarr link coming soon';
+        }
+
+        renderInvite(data.invite);
+
+        const identifier = donor.name || donor.email || donor.subscriptionId || '';
+        if (identifier) {
+          document.title = `Plex Dashboard • ${identifier}`;
+        }
+      }
+
+      async function fetchSession() {
+        showLoading();
+        try {
+          const response = await fetch('/api/customer/session');
+          const payload = await response.json();
+          renderDashboard(payload);
+        } catch (err) {
+          showError(err.message);
+        }
+      }
+
+      loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatusText(loginStatus, 'Signing in…', 'info');
+        loginButton.disabled = true;
+        try {
+          const response = await fetch('/api/customer/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscriptionId: loginSubscription.value.trim(),
+              email: loginEmail.value.trim(),
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to sign in');
+          }
+          setStatusText(loginStatus, 'Signed in successfully!', 'success');
+          renderDashboard(payload);
+        } catch (err) {
+          setStatusText(loginStatus, err.message, 'error');
+        } finally {
+          loginButton.disabled = false;
+        }
+      });
+
+      logoutButton.addEventListener('click', async () => {
+        logoutButton.disabled = true;
+        try {
+          await fetch('/api/customer/logout', { method: 'POST' });
+          renderDashboard({ authenticated: false });
+        } catch (err) {
+          // ignore logout errors and show login anyway
+          renderDashboard({ authenticated: false });
+        } finally {
+          logoutButton.disabled = false;
+        }
+      });
+
+      profileForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatusText(profileStatus, 'Saving…', 'info');
+        profileSave.disabled = true;
+        try {
+          const response = await fetch('/api/customer/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: profileEmail.value.trim(),
+              name: profileName.value.trim(),
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to update profile');
+          }
+          setStatusText(profileStatus, 'Profile updated', 'success');
+          renderDashboard(payload);
+        } catch (err) {
+          setStatusText(profileStatus, err.message, 'error');
+        } finally {
+          profileSave.disabled = false;
+        }
+      });
+
+      inviteForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatusText(inviteStatus, 'Generating invite…', 'info');
+        inviteSubmit.disabled = true;
+        try {
+          const response = await fetch('/api/customer/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: inviteEmail.value.trim(),
+              note: inviteNote.value.trim(),
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to generate invite');
+          }
+          setStatusText(
+            inviteStatus,
+            'Invite ready! Use the link below to finish connecting.',
+            'success'
+          );
+          inviteNote.value = '';
+          renderDashboard(payload);
+        } catch (err) {
+          setStatusText(inviteStatus, err.message, 'error');
+        } finally {
+          inviteSubmit.disabled = false;
+        }
+      });
+
+      fetchSession();
+    </script>
+  </body>
+</html>
