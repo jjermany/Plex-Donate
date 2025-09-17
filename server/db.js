@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS donors (
   paypal_subscription_id TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
+  password_hash TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -117,14 +118,33 @@ function ensureInviteRecipientColumn() {
   }
 }
 
+function ensureDonorPasswordColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  const hasPasswordHash = columns.some((column) => column.name === 'password_hash');
+  if (!hasPasswordHash) {
+    db.exec('ALTER TABLE donors ADD COLUMN password_hash TEXT');
+  }
+}
+
 ensureInviteRecipientColumn();
 ensureInviteLinkSessionTokens();
+ensureDonorPasswordColumn();
+
+function normalizeEmail(email) {
+  if (!email) {
+    return '';
+  }
+  return String(email).trim().toLowerCase();
+}
 
 const statements = {
   getDonorBySubscriptionId: db.prepare(
     'SELECT * FROM donors WHERE paypal_subscription_id = ?'
   ),
   getDonorById: db.prepare('SELECT * FROM donors WHERE id = ?'),
+  getDonorByEmail: db.prepare(
+    'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
+  ),
   insertDonor: db.prepare(
     `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at)
      VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt)`
@@ -231,6 +251,12 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  updateDonorPassword: db.prepare(
+    `UPDATE donors
+     SET password_hash = @passwordHash,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
 };
 
 function mapDonor(row) {
@@ -242,6 +268,7 @@ function mapDonor(row) {
     subscriptionId: row.paypal_subscription_id,
     status: row.status,
     lastPaymentAt: row.last_payment_at,
+    hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -308,11 +335,13 @@ function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
     throw new Error('Subscription ID is required to upsert donor');
   }
 
+  const normalizedEmail = normalizeEmail(email);
+
   const existing = statements.getDonorBySubscriptionId.get(subscriptionId);
   if (existing) {
     const updated = {
       id: existing.id,
-      email: email || existing.email,
+      email: normalizedEmail || existing.email,
       name: name || existing.name,
       status: status || existing.status,
       lastPaymentAt: lastPaymentAt || existing.last_payment_at,
@@ -322,7 +351,7 @@ function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
   }
 
   const newDonor = {
-    email: email || '',
+    email: normalizedEmail || '',
     name: name || '',
     subscriptionId,
     status: status || 'pending',
@@ -350,6 +379,20 @@ function getDonorBySubscriptionId(subscriptionId) {
 
 function getDonorById(id) {
   return mapDonor(statements.getDonorById.get(id));
+}
+
+function getDonorAuthByEmail(email) {
+  if (!email) {
+    return null;
+  }
+  const row = statements.getDonorByEmail.get(email);
+  if (!row) {
+    return null;
+  }
+  return {
+    donor: mapDonor(row),
+    passwordHash: row.password_hash || '',
+  };
 }
 
 function listDonorsWithDetails() {
@@ -473,8 +516,25 @@ function updateDonorContact(donorId, { email, name }) {
 
   statements.updateDonorContact.run({
     id: donorId,
-    email: email == null || email === '' ? null : email,
-    name: name == null || name === '' ? null : name,
+    email:
+      email == null || email === ''
+        ? null
+        : normalizeEmail(typeof email === 'string' ? email : String(email)),
+    name:
+      name == null || name === '' ? null : String(name).trim(),
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function updateDonorPassword(donorId, passwordHash) {
+  if (!donorId) {
+    throw new Error('donorId is required to update password');
+  }
+
+  statements.updateDonorPassword.run({
+    id: donorId,
+    passwordHash: passwordHash || null,
   });
 
   return mapDonor(statements.getDonorById.get(donorId));
@@ -551,6 +611,7 @@ module.exports = {
   updateDonorStatus,
   getDonorBySubscriptionId,
   getDonorById,
+  getDonorAuthByEmail,
   listDonorsWithDetails,
   createInvite,
   markInviteEmailSent,
@@ -564,6 +625,7 @@ module.exports = {
   recordPayment,
   logEvent,
   updateDonorContact,
+  updateDonorPassword,
   getRecentEvents,
   getAllSettings,
   getSetting,

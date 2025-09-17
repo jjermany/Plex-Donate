@@ -466,6 +466,59 @@
           </article>
         </section>
 
+        <section class="surface" id="account-panel">
+          <h2>Create your account</h2>
+          <p id="account-description" class="muted">
+            Set up your login details so you can revisit the dashboard anytime.
+          </p>
+          <form id="account-form" class="grid">
+            <label>
+              <span>Email for your account</span>
+              <input
+                id="account-email"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+            </label>
+            <label>
+              <span>Display name</span>
+              <input
+                id="account-name"
+                type="text"
+                placeholder="How should we greet you?"
+                autocomplete="name"
+              />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                id="account-password"
+                type="password"
+                placeholder="At least 8 characters"
+                autocomplete="new-password"
+                required
+              />
+            </label>
+            <label>
+              <span>Confirm password</span>
+              <input
+                id="account-confirm"
+                type="password"
+                placeholder="Repeat your password"
+                autocomplete="new-password"
+              />
+            </label>
+            <div class="form-actions">
+              <button id="account-submit" type="submit">Save account</button>
+              <p id="account-status" class="status-text"></p>
+            </div>
+          </form>
+        </section>
+
         <section class="surface" id="invite-panel">
           <h2>Claim your Plex access</h2>
           <p class="muted" id="invite-description">
@@ -534,6 +587,14 @@
       const subscriptionIdEl = document.getElementById('subscription-id');
       const priceRow = document.getElementById('price-row');
       const shareLastUsedEl = document.getElementById('share-last-used');
+      const accountDescription = document.getElementById('account-description');
+      const accountForm = document.getElementById('account-form');
+      const accountEmailInput = document.getElementById('account-email');
+      const accountNameInput = document.getElementById('account-name');
+      const accountPasswordInput = document.getElementById('account-password');
+      const accountConfirmInput = document.getElementById('account-confirm');
+      const accountSubmit = document.getElementById('account-submit');
+      const accountStatus = document.getElementById('account-status');
       const inviteDescription = document.getElementById('invite-description');
       const inviteForm = document.getElementById('invite-form');
       const emailInput = document.getElementById('recipient-email');
@@ -626,10 +687,30 @@
         content.classList.remove('hidden');
         actionStatus.textContent = '';
         actionStatus.className = 'status-text';
+        if (accountStatus) {
+          accountStatus.textContent = '';
+          accountStatus.className = 'status-text';
+        }
 
         const donor = data.donor || {};
         donorNameEl.textContent = donor.name ? `Hi ${donor.name}!` : 'Hi there!';
         donorEmailEl.textContent = donor.email || 'Add your preferred streaming email below.';
+
+        if (accountDescription) {
+          if (donor.hasPassword) {
+            accountDescription.textContent =
+              'Update your login details or set a new password for the dashboard.';
+            if (accountSubmit) {
+              accountSubmit.textContent = 'Update account';
+            }
+          } else {
+            accountDescription.textContent =
+              'Create your login so you can access the dashboard anytime.';
+            if (accountSubmit) {
+              accountSubmit.textContent = 'Create account';
+            }
+          }
+        }
 
         let blocked = false;
         if (statusPill) {
@@ -646,6 +727,28 @@
               'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
             actionStatus.classList.add('error');
           }
+        }
+
+        if (accountSubmit) {
+          accountSubmit.disabled = blocked;
+        }
+        if (accountEmailInput) {
+          accountEmailInput.disabled = blocked;
+        }
+        if (accountNameInput) {
+          accountNameInput.disabled = blocked;
+        }
+        if (accountPasswordInput) {
+          accountPasswordInput.disabled = blocked;
+        }
+        if (accountConfirmInput) {
+          accountConfirmInput.disabled = blocked;
+        }
+
+        if (blocked && accountStatus) {
+          accountStatus.textContent =
+            'This subscription needs attention before you can update your account.';
+          accountStatus.classList.add('error');
         }
 
         if (donor.subscriptionId) {
@@ -683,6 +786,19 @@
           nameInput.value = donor.name || '';
         }
 
+        if (accountEmailInput && document.activeElement !== accountEmailInput) {
+          accountEmailInput.value = donor.email || '';
+        }
+        if (accountNameInput && document.activeElement !== accountNameInput) {
+          accountNameInput.value = donor.name || '';
+        }
+        if (accountPasswordInput && !blocked) {
+          accountPasswordInput.value = '';
+        }
+        if (accountConfirmInput && !blocked) {
+          accountConfirmInput.value = '';
+        }
+
         renderInvite(invite);
 
         if (blocked) {
@@ -708,6 +824,86 @@
         } catch (err) {
           showError(err.message);
         }
+      }
+
+      if (accountForm) {
+        accountForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!state.token) {
+            return;
+          }
+
+          const email = (accountEmailInput.value || '').trim();
+          const name = (accountNameInput.value || '').trim();
+          const password = accountPasswordInput.value || '';
+          const confirm = accountConfirmInput.value || '';
+
+          if (!email) {
+            accountStatus.textContent =
+              'Please enter the email you want to use for your login.';
+            accountStatus.className = 'status-text error';
+            return;
+          }
+
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+            accountStatus.textContent = 'That does not look like a valid email address yet.';
+            accountStatus.className = 'status-text error';
+            return;
+          }
+
+          if (!password || password.trim().length < 8) {
+            accountStatus.textContent = 'Choose a password with at least 8 characters.';
+            accountStatus.className = 'status-text error';
+            return;
+          }
+
+          if (confirm && password !== confirm) {
+            accountStatus.textContent = 'Passwords do not match. Please try again.';
+            accountStatus.className = 'status-text error';
+            return;
+          }
+
+          const headers = { 'Content-Type': 'application/json' };
+          if (state.sessionToken) {
+            headers['X-Share-Session'] = state.sessionToken;
+            headers['Authorization'] = `Bearer ${state.sessionToken}`;
+          }
+
+          accountSubmit.disabled = true;
+          accountStatus.textContent = 'Saving your account…';
+          accountStatus.className = 'status-text info';
+
+          try {
+            const response = await fetch(
+              `/api/share/${encodeURIComponent(state.token)}/account`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  email,
+                  name,
+                  password,
+                  confirmPassword: confirm,
+                  sessionToken: state.sessionToken,
+                }),
+              }
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to save account');
+            }
+            render(payload);
+            accountStatus.textContent = 'Account saved! Use these details to sign in later.';
+            accountStatus.className = 'status-text success';
+          } catch (err) {
+            accountStatus.textContent = err.message;
+            accountStatus.className = 'status-text error';
+          } finally {
+            accountSubmit.disabled = false;
+            accountPasswordInput.value = '';
+            accountConfirmInput.value = '';
+          }
+        });
       }
 
       inviteForm.addEventListener('submit', async (event) => {

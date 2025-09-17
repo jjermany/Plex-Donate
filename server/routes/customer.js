@@ -1,15 +1,16 @@
 const express = require('express');
 const {
-  getDonorBySubscriptionId,
   getDonorById,
   getLatestActiveInviteForDonor,
   createInvite: createInviteRecord,
   logEvent,
   updateDonorContact,
+  getDonorAuthByEmail,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
 const logger = require('../utils/logger');
+const { verifyPassword } = require('../utils/passwords');
 
 const router = express.Router();
 
@@ -45,6 +46,7 @@ function buildDashboardResponse({ donor, invite }) {
           status: donor.status,
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
+          hasPassword: Boolean(donor.hasPassword),
         }
       : null,
     invite: invite || null,
@@ -95,13 +97,13 @@ router.get(
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
-    const { subscriptionId, email } = req.body || {};
-    const trimmedId = (subscriptionId || '').trim();
+    const { email, password } = req.body || {};
     const normalizedEmail = normalizeEmail(email);
+    const providedPassword = typeof password === 'string' ? password : '';
 
-    if (!trimmedId || !normalizedEmail) {
+    if (!normalizedEmail || !providedPassword) {
       return res.status(400).json({
-        error: 'Subscription ID and email are required to sign in.',
+        error: 'Email and password are required to sign in.',
       });
     }
 
@@ -111,24 +113,33 @@ router.post(
       });
     }
 
-    let donor = getDonorBySubscriptionId(trimmedId);
-    if (!donor) {
-      return res.status(401).json({ error: 'Unable to find matching subscription.' });
+    const authRecord = getDonorAuthByEmail(normalizedEmail);
+    if (!authRecord || !authRecord.donor) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const donorEmail = normalizeEmail(donor.email);
-    if (donorEmail && donorEmail !== normalizedEmail) {
+    if (!authRecord.passwordHash) {
       return res.status(401).json({
-        error: 'Email does not match the subscription on file.',
+        error:
+          'This account is not yet set up. Follow your invite link to create a password.',
       });
     }
 
-    if (!donorEmail) {
-      donor = updateDonorContact(donor.id, { email: normalizedEmail });
+    let passwordMatches = false;
+    try {
+      passwordMatches = await verifyPassword(providedPassword, authRecord.passwordHash);
+    } catch (err) {
+      logger.warn('Password verification failed', err.message);
+      passwordMatches = false;
     }
 
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const donor = authRecord.donor;
     req.session.customerId = donor.id;
-    logger.info(`Customer signed in for subscription ${trimmedId}`);
+    logger.info('Customer signed in with email/password', { donorId: donor.id });
 
     const invite = getLatestActiveInviteForDonor(donor.id);
     return res.json(buildDashboardResponse({ donor, invite }));
