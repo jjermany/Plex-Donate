@@ -16,6 +16,7 @@ const {
   updateProspect,
   getProspectById,
   getShareLinkByProspectId,
+  deleteDonorById,
   logEvent,
   getRecentEvents,
 } = require('../db');
@@ -540,6 +541,31 @@ router.post(
     }
 
     logEvent('invite.revoked', { donorId: donor.id, inviteId: invite.id });
+
+    res.json({ success: true, csrfToken: res.locals.csrfToken });
+  })
+);
+
+router.delete(
+  '/subscribers/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    const removed = deleteDonorById(donor.id);
+    if (!removed) {
+      return res.status(500).json({ error: 'Failed to remove subscriber' });
+    }
+
+    logEvent('subscriber.removed', {
+      donorId: donor.id,
+      email: donor.email,
+    });
 
     res.json({ success: true, csrfToken: res.locals.csrfToken });
   })

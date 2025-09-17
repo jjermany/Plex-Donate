@@ -911,6 +911,7 @@
             <button data-action="share-generate" class="secondary">Generate invite page link</button>
             <button data-action="resend" class="secondary">Resend email</button>
             <button data-action="revoke" class="danger">Revoke</button>
+            <button data-action="remove" class="danger secondary">Remove</button>
           </div>
         </td>
       </tr>
@@ -1626,9 +1627,10 @@
             lastPaymentCell.textContent = '—';
           }
 
+          const invites = Array.isArray(donor.invites) ? donor.invites : [];
           const inviteParts = [];
-          if (donor.invites.length > 0) {
-            const invite = donor.invites[0];
+          if (invites.length > 0) {
+            const invite = invites[0];
             if (invite.wizarrInviteUrl) {
               inviteParts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
             }
@@ -1660,6 +1662,57 @@
                 `<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`
               );
             }
+          }
+
+          const activeInvite = invites.find((invite) => !invite.revokedAt);
+          const inviteButton = clone.querySelector('button[data-action="invite"]');
+          const shareButton = clone.querySelector('button[data-action="share"]');
+          const shareGenerateButton = clone.querySelector(
+            'button[data-action="share-generate"]'
+          );
+          const resendButton = clone.querySelector('button[data-action="resend"]');
+          const revokeButton = clone.querySelector('button[data-action="revoke"]');
+          const removeButton = clone.querySelector('button[data-action="remove"]');
+
+          const hasShareUrl = Boolean(shareUrl);
+
+          if (inviteButton) {
+            const hasEmail = Boolean(donor.email);
+            inviteButton.disabled = !hasEmail;
+            inviteButton.title = hasEmail
+              ? 'Generate a new Wizarr invite'
+              : 'Add an email address to generate an invite';
+          }
+
+          if (shareButton) {
+            shareButton.disabled = !hasShareUrl;
+            shareButton.title = hasShareUrl
+              ? 'Copy the existing invite page link'
+              : 'Generate an invite page link first';
+          }
+
+          if (shareGenerateButton) {
+            shareGenerateButton.title = 'Generate a new invite page link';
+          }
+
+          if (resendButton) {
+            const canResend = Boolean(activeInvite && activeInvite.wizarrInviteUrl);
+            resendButton.disabled = !canResend;
+            resendButton.title = canResend
+              ? 'Resend the most recent invite email'
+              : 'No active invite available to resend';
+          }
+
+          if (revokeButton) {
+            const canRevoke = Boolean(activeInvite);
+            revokeButton.disabled = !canRevoke;
+            revokeButton.title = canRevoke
+              ? 'Revoke the most recent active invite'
+              : 'No active invite available to revoke';
+          }
+
+          if (removeButton) {
+            removeButton.title = 'Remove this subscriber and all related records';
           }
 
           if (inviteParts.length > 0) {
@@ -2041,6 +2094,14 @@
               return;
             }
             await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
+          } else if (action === 'remove') {
+            const confirmation = confirm(
+              'Remove this subscriber and delete all related invites, payments, and share links?'
+            );
+            if (!confirmation) {
+              return;
+            }
+            await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
           }
           await loadDashboardData();
         } catch (err) {
