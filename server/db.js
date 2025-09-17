@@ -91,14 +91,6 @@ CREATE TABLE IF NOT EXISTS invite_links (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
   FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS invite_links_donor_unique
-  ON invite_links(donor_id)
-  WHERE donor_id IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS invite_links_prospect_unique
-  ON invite_links(prospect_id)
-  WHERE prospect_id IS NOT NULL;
 `);
 
 function generateShareSessionToken() {
@@ -170,7 +162,15 @@ function createInviteLinkIndexes() {
     CREATE UNIQUE INDEX IF NOT EXISTS invite_links_donor_unique
       ON invite_links(donor_id)
       WHERE donor_id IS NOT NULL;
+  `);
 
+  const columns = db.prepare("PRAGMA table_info('invite_links')").all();
+  const hasProspectId = columns.some((column) => column.name === 'prospect_id');
+  if (!hasProspectId) {
+    return;
+  }
+
+  db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS invite_links_prospect_unique
       ON invite_links(prospect_id)
       WHERE prospect_id IS NOT NULL;
@@ -232,35 +232,42 @@ function ensureDonorSubscriptionOptional() {
     return;
   }
 
-  db.exec(`
-    ALTER TABLE donors RENAME TO donors_legacy;
+  db.exec('PRAGMA foreign_keys = OFF;');
+  try {
+    db.exec(`
+      DROP TABLE IF EXISTS donors_new;
 
-    CREATE TABLE donors (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT NOT NULL,
-      name TEXT,
-      paypal_subscription_id TEXT UNIQUE,
-      status TEXT NOT NULL DEFAULT 'pending',
-      last_payment_at TEXT,
-      password_hash TEXT,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    );
+      CREATE TABLE donors_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL,
+        name TEXT,
+        paypal_subscription_id TEXT UNIQUE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        last_payment_at TEXT,
+        password_hash TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
 
-    INSERT INTO donors (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at)
-      SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at
-      FROM donors_legacy;
+      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at)
+        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at
+        FROM donors;
 
-    DROP TABLE donors_legacy;
-  `);
+      DROP TABLE donors;
+
+      ALTER TABLE donors_new RENAME TO donors;
+    `);
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON;');
+  }
 }
 
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
-ensureInviteLinksSupportsProspects();
-ensureInviteLinkSessionTokens();
 ensureDonorPasswordColumn();
 ensureDonorSubscriptionOptional();
+ensureInviteLinksSupportsProspects();
+ensureInviteLinkSessionTokens();
 
 function normalizeEmail(email) {
   if (!email) {
