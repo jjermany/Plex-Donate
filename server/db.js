@@ -22,12 +22,24 @@ CREATE TABLE IF NOT EXISTS donors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
   name TEXT,
-  paypal_subscription_id TEXT NOT NULL UNIQUE,
+  paypal_subscription_id TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
   password_hash TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS prospects (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT,
+  name TEXT,
+  note TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  converted_at TEXT,
+  converted_donor_id INTEGER,
+  FOREIGN KEY (converted_donor_id) REFERENCES donors(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS invites (
@@ -70,12 +82,14 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS invite_links (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  donor_id INTEGER NOT NULL UNIQUE,
+  donor_id INTEGER,
+  prospect_id INTEGER,
   token TEXT NOT NULL UNIQUE,
   session_token TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_used_at TEXT,
-  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
+  FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
 );
 `);
 
@@ -126,9 +140,119 @@ function ensureDonorPasswordColumn() {
   }
 }
 
+function ensureProspectsTableColumns() {
+  const columns = db.prepare("PRAGMA table_info('prospects')").all();
+  if (columns.length === 0) {
+    return;
+  }
+  const hasConvertedAt = columns.some((column) => column.name === 'converted_at');
+  if (!hasConvertedAt) {
+    db.exec('ALTER TABLE prospects ADD COLUMN converted_at TEXT');
+  }
+  const hasConvertedDonorId = columns.some(
+    (column) => column.name === 'converted_donor_id'
+  );
+  if (!hasConvertedDonorId) {
+    db.exec('ALTER TABLE prospects ADD COLUMN converted_donor_id INTEGER');
+  }
+}
+
+function createInviteLinkIndexes() {
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS invite_links_donor_unique
+      ON invite_links(donor_id)
+      WHERE donor_id IS NOT NULL;
+
+    CREATE UNIQUE INDEX IF NOT EXISTS invite_links_prospect_unique
+      ON invite_links(prospect_id)
+      WHERE prospect_id IS NOT NULL;
+  `);
+}
+
+function ensureInviteLinksSupportsProspects() {
+  const columns = db.prepare("PRAGMA table_info('invite_links')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasProspectId = columns.some((column) => column.name === 'prospect_id');
+  const donorColumn = columns.find((column) => column.name === 'donor_id');
+  const donorNotNull = donorColumn && donorColumn.notnull === 1;
+  const hasSessionToken = columns.some((column) => column.name === 'session_token');
+
+  if (hasProspectId && !donorNotNull) {
+    createInviteLinkIndexes();
+    return;
+  }
+
+  const sessionTokenSelect = hasSessionToken ? 'session_token' : "''";
+
+  db.exec(`
+    ALTER TABLE invite_links RENAME TO invite_links_legacy;
+
+    CREATE TABLE invite_links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      donor_id INTEGER,
+      prospect_id INTEGER,
+      token TEXT NOT NULL UNIQUE,
+      session_token TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_used_at TEXT,
+      FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
+      FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
+    );
+
+    INSERT INTO invite_links (id, donor_id, token, session_token, created_at, last_used_at)
+      SELECT id, donor_id, token, ${sessionTokenSelect}, created_at, last_used_at
+      FROM invite_links_legacy;
+
+    DROP TABLE invite_links_legacy;
+  `);
+
+  createInviteLinkIndexes();
+}
+
+function ensureDonorSubscriptionOptional() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  if (columns.length === 0) {
+    return;
+  }
+  const subscriptionColumn = columns.find(
+    (column) => column.name === 'paypal_subscription_id'
+  );
+  if (subscriptionColumn && subscriptionColumn.notnull === 0) {
+    return;
+  }
+
+  db.exec(`
+    ALTER TABLE donors RENAME TO donors_legacy;
+
+    CREATE TABLE donors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL,
+      name TEXT,
+      paypal_subscription_id TEXT UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_payment_at TEXT,
+      password_hash TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    INSERT INTO donors (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at)
+      SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at
+      FROM donors_legacy;
+
+    DROP TABLE donors_legacy;
+  `);
+}
+
 ensureInviteRecipientColumn();
+ensureProspectsTableColumns();
+ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureDonorPasswordColumn();
+ensureDonorSubscriptionOptional();
 
 function normalizeEmail(email) {
   if (!email) {
@@ -146,8 +270,8 @@ const statements = {
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at)
-     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt)`
+    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, password_hash)
+     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @passwordHash)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -175,18 +299,33 @@ const statements = {
   getInviteLinkByDonorId: db.prepare(
     'SELECT * FROM invite_links WHERE donor_id = ?'
   ),
+  getInviteLinkByProspectId: db.prepare(
+    'SELECT * FROM invite_links WHERE prospect_id = ?'
+  ),
   getInviteLinkByToken: db.prepare(
     'SELECT * FROM invite_links WHERE token = ?'
   ),
   getInviteLinkById: db.prepare('SELECT * FROM invite_links WHERE id = ?'),
-  upsertInviteLink: db.prepare(
-    `INSERT INTO invite_links (donor_id, token, session_token)
-     VALUES (@donorId, @token, @sessionToken)
-     ON CONFLICT(donor_id) DO UPDATE SET
-       token = excluded.token,
-       session_token = excluded.session_token,
-       created_at = CURRENT_TIMESTAMP,
-       last_used_at = NULL`
+  insertInviteLink: db.prepare(
+    `INSERT INTO invite_links (donor_id, prospect_id, token, session_token)
+     VALUES (@donorId, @prospectId, @token, @sessionToken)`
+  ),
+  replaceInviteLink: db.prepare(
+    `UPDATE invite_links
+     SET donor_id = @donorId,
+         prospect_id = @prospectId,
+         token = @token,
+         session_token = @sessionToken,
+         created_at = CURRENT_TIMESTAMP,
+         last_used_at = NULL
+     WHERE id = @id`
+  ),
+  assignInviteLinkOwner: db.prepare(
+    `UPDATE invite_links
+     SET donor_id = @donorId,
+         prospect_id = @prospectId,
+         last_used_at = CASE WHEN @clearLastUsed THEN NULL ELSE last_used_at END
+     WHERE id = @id`
   ),
   setInviteLinkSessionToken: db.prepare(
     `UPDATE invite_links
@@ -257,6 +396,32 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  insertProspect: db.prepare(
+    `INSERT INTO prospects (email, name, note)
+     VALUES (@email, @name, @note)`
+  ),
+  updateProspect: db.prepare(
+    `UPDATE prospects
+     SET email = COALESCE(@email, email),
+         name = COALESCE(@name, name),
+         note = COALESCE(@note, note),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  getProspectById: db.prepare('SELECT * FROM prospects WHERE id = ?'),
+  markProspectConverted: db.prepare(
+    `UPDATE prospects
+     SET converted_at = CURRENT_TIMESTAMP,
+         converted_donor_id = @donorId,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  updateDonorSubscriptionById: db.prepare(
+    `UPDATE donors
+     SET paypal_subscription_id = @subscriptionId,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
 };
 
 function mapDonor(row) {
@@ -295,10 +460,25 @@ function mapInviteLink(row) {
   return {
     id: row.id,
     donorId: row.donor_id,
+    prospectId: row.prospect_id,
     token: row.token,
     sessionToken: row.session_token,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
+  };
+}
+
+function mapProspect(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    convertedAt: row.converted_at,
+    convertedDonorId: row.converted_donor_id,
   };
 }
 
@@ -356,6 +536,7 @@ function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
     subscriptionId,
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
+    passwordHash: null,
   };
   const info = statements.insertDonor.run(newDonor);
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
@@ -381,11 +562,26 @@ function getDonorById(id) {
   return mapDonor(statements.getDonorById.get(id));
 }
 
+function getDonorByEmailAddress(email) {
+  if (!email) {
+    return null;
+  }
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+  return mapDonor(statements.getDonorByEmail.get(normalizedEmail));
+}
+
 function getDonorAuthByEmail(email) {
   if (!email) {
     return null;
   }
-  const row = statements.getDonorByEmail.get(email);
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+  const row = statements.getDonorByEmail.get(normalizedEmail);
   if (!row) {
     return null;
   }
@@ -452,20 +648,43 @@ function getLatestActiveInviteForDonor(donorId) {
   return mapInvite(statements.getLatestActiveInviteForDonor.get(donorId));
 }
 
-function createOrUpdateShareLink({ donorId, token, sessionToken }) {
-  if (!donorId) {
-    throw new Error('donorId is required to create share link');
+function createOrUpdateShareLink({
+  donorId = null,
+  prospectId = null,
+  token,
+  sessionToken,
+}) {
+  if (!donorId && !prospectId) {
+    throw new Error('A donorId or prospectId is required to create share link');
+  }
+  if (donorId && prospectId) {
+    throw new Error('Provide either donorId or prospectId when creating share link');
   }
   if (!token) {
     throw new Error('token is required to create share link');
   }
-  statements.upsertInviteLink.run({
-    donorId,
+
+  const existingRow = donorId
+    ? statements.getInviteLinkByDonorId.get(donorId)
+    : statements.getInviteLinkByProspectId.get(prospectId);
+
+  const payload = {
+    donorId: donorId || null,
+    prospectId: prospectId || null,
     token,
     sessionToken: sessionToken || generateShareSessionToken(),
-  });
+  };
+
+  if (existingRow) {
+    statements.replaceInviteLink.run({ id: existingRow.id, ...payload });
+    return ensureShareLinkHasSessionToken(
+      mapInviteLink(statements.getInviteLinkById.get(existingRow.id))
+    );
+  }
+
+  const info = statements.insertInviteLink.run(payload);
   return ensureShareLinkHasSessionToken(
-    mapInviteLink(statements.getInviteLinkByDonorId.get(donorId))
+    mapInviteLink(statements.getInviteLinkById.get(info.lastInsertRowid))
   );
 }
 
@@ -475,9 +694,35 @@ function getShareLinkByDonorId(donorId) {
   );
 }
 
+function getShareLinkByProspectId(prospectId) {
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkByProspectId.get(prospectId))
+  );
+}
+
 function getShareLinkByToken(token) {
   return ensureShareLinkHasSessionToken(
     mapInviteLink(statements.getInviteLinkByToken.get(token))
+  );
+}
+
+function assignShareLinkToDonor(shareLinkId, donorId, { clearLastUsed = false } = {}) {
+  if (!shareLinkId) {
+    throw new Error('shareLinkId is required to assign ownership');
+  }
+  if (!donorId) {
+    throw new Error('donorId is required to assign ownership');
+  }
+
+  statements.assignInviteLinkOwner.run({
+    id: shareLinkId,
+    donorId,
+    prospectId: null,
+    clearLastUsed: clearLastUsed ? 1 : 0,
+  });
+
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkById.get(shareLinkId))
   );
 }
 
@@ -535,6 +780,85 @@ function updateDonorPassword(donorId, passwordHash) {
   statements.updateDonorPassword.run({
     id: donorId,
     passwordHash: passwordHash || null,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function createProspect({ email, name, note } = {}) {
+  const normalizedEmail = normalizeEmail(email);
+  const info = statements.insertProspect.run({
+    email: normalizedEmail || null,
+    name: name ? String(name).trim() : null,
+    note: note ? String(note).trim() : null,
+  });
+  return mapProspect(statements.getProspectById.get(info.lastInsertRowid));
+}
+
+function updateProspect(prospectId, { email, name, note } = {}) {
+  if (!prospectId) {
+    throw new Error('prospectId is required to update prospect');
+  }
+
+  statements.updateProspect.run({
+    id: prospectId,
+    email:
+      email == null || email === ''
+        ? null
+        : normalizeEmail(typeof email === 'string' ? email : String(email)),
+    name: name == null || name === '' ? null : String(name).trim(),
+    note: note == null || note === '' ? null : String(note).trim(),
+  });
+
+  return mapProspect(statements.getProspectById.get(prospectId));
+}
+
+function getProspectById(prospectId) {
+  return mapProspect(statements.getProspectById.get(prospectId));
+}
+
+function markProspectConverted(prospectId, donorId) {
+  if (!prospectId) {
+    return null;
+  }
+  statements.markProspectConverted.run({ id: prospectId, donorId: donorId || null });
+  return mapProspect(statements.getProspectById.get(prospectId));
+}
+
+function createDonor({
+  email,
+  name,
+  subscriptionId,
+  status = 'pending',
+  lastPaymentAt = null,
+  passwordHash = null,
+} = {}) {
+  const normalizedEmail = normalizeEmail(email);
+  const info = statements.insertDonor.run({
+    email: normalizedEmail || '',
+    name: name ? String(name).trim() : '',
+    subscriptionId:
+      subscriptionId == null || subscriptionId === ''
+        ? null
+        : String(subscriptionId).trim(),
+    status: status || 'pending',
+    lastPaymentAt: lastPaymentAt || null,
+    passwordHash: passwordHash || null,
+  });
+  return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
+}
+
+function updateDonorSubscriptionId(donorId, subscriptionId) {
+  if (!donorId) {
+    throw new Error('donorId is required to update subscription');
+  }
+
+  statements.updateDonorSubscriptionById.run({
+    id: donorId,
+    subscriptionId:
+      subscriptionId == null || subscriptionId === ''
+        ? null
+        : String(subscriptionId).trim(),
   });
 
   return mapDonor(statements.getDonorById.get(donorId));
@@ -611,7 +935,14 @@ module.exports = {
   updateDonorStatus,
   getDonorBySubscriptionId,
   getDonorById,
+  getDonorByEmailAddress,
   getDonorAuthByEmail,
+  createDonor,
+  updateDonorSubscriptionId,
+  createProspect,
+  updateProspect,
+  getProspectById,
+  markProspectConverted,
   listDonorsWithDetails,
   createInvite,
   markInviteEmailSent,
@@ -620,7 +951,9 @@ module.exports = {
   getLatestActiveInviteForDonor,
   createOrUpdateShareLink,
   getShareLinkByDonorId,
+  getShareLinkByProspectId,
   getShareLinkByToken,
+  assignShareLinkToDonor,
   markShareLinkUsed,
   recordPayment,
   logEvent,

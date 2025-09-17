@@ -2,12 +2,19 @@ const express = require('express');
 const {
   getShareLinkByToken,
   getDonorById,
+  getDonorByEmailAddress,
+  getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
   createInvite: createInviteRecord,
   markShareLinkUsed,
   logEvent,
   updateDonorContact,
   updateDonorPassword,
+  createDonor,
+  updateDonorSubscriptionId,
+  getProspectById,
+  assignShareLinkToDonor,
+  markProspectConverted,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -35,7 +42,7 @@ function isValidEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 }
 
-function buildShareResponse({ shareLink, donor, invite }) {
+function buildShareResponse({ shareLink, donor, invite, prospect }) {
   const paypal = settingsStore.getPaypalSettings();
   return {
     donor: donor
@@ -47,6 +54,13 @@ function buildShareResponse({ shareLink, donor, invite }) {
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
           hasPassword: Boolean(donor.hasPassword),
+        }
+      : null,
+    prospect: prospect
+      ? {
+          id: prospect.id,
+          email: prospect.email || '',
+          name: prospect.name || '',
         }
       : null,
     invite: invite || null,
@@ -93,23 +107,38 @@ router.get(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const donor = getDonorById(shareLink.donorId);
-    if (!donor) {
+    let donor = null;
+    if (shareLink.donorId) {
+      donor = getDonorById(shareLink.donorId);
+    }
+
+    let prospect = null;
+    if (!donor && shareLink.prospectId) {
+      prospect = getProspectById(shareLink.prospectId);
+    }
+
+    if (!donor && !prospect) {
       return res.status(404).json({ error: 'Share link is no longer valid' });
     }
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
-      return res.status(403).json({
-        error: 'Subscription is not active. Contact the server admin for help.',
-      });
+    if (donor) {
+      const status = (donor.status || '').toLowerCase();
+      const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
+      if (blockedStatuses.has(status)) {
+        return res.status(403).json({
+          error: 'Subscription is not active. Contact the server admin for help.',
+        });
+      }
+
+      const invite = getLatestActiveInviteForDonor(donor.id);
+
+      return res.json(
+        buildShareResponse({ shareLink, donor, invite, prospect: null })
+      );
     }
 
-    const invite = getLatestActiveInviteForDonor(donor.id);
-
     return res.json(
-      buildShareResponse({ shareLink, donor, invite })
+      buildShareResponse({ shareLink, donor: null, invite: null, prospect })
     );
   })
 );
@@ -122,8 +151,17 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const donor = getDonorById(shareLink.donorId);
-    if (!donor) {
+    let donor = null;
+    if (shareLink.donorId) {
+      donor = getDonorById(shareLink.donorId);
+    }
+
+    let prospect = null;
+    if (!donor && shareLink.prospectId) {
+      prospect = getProspectById(shareLink.prospectId);
+    }
+
+    if (!donor && !prospect) {
       return res.status(404).json({ error: 'Share link is no longer valid' });
     }
 
@@ -131,6 +169,12 @@ router.post(
 
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
       return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    if (!donor) {
+      return res.status(400).json({
+        error: 'Set up your account first so we can connect your invite.',
+      });
     }
 
     const requestedEmail =
@@ -248,6 +292,7 @@ router.post(
         shareLink: updatedLink,
         donor: activeDonor,
         invite: inviteRecord,
+        prospect: null,
       })
     );
   })
@@ -261,8 +306,17 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const donor = getDonorById(shareLink.donorId);
-    if (!donor) {
+    let donor = null;
+    if (shareLink.donorId) {
+      donor = getDonorById(shareLink.donorId);
+    }
+
+    let prospect = null;
+    if (!donor && shareLink.prospectId) {
+      prospect = getProspectById(shareLink.prospectId);
+    }
+
+    if (!donor && !prospect) {
       return res.status(404).json({ error: 'Share link is no longer valid' });
     }
 
@@ -272,16 +326,27 @@ router.post(
     }
 
     const emailInput =
-      req.body && typeof req.body.email === 'string' ? req.body.email : donor.email || '';
+      req.body && typeof req.body.email === 'string'
+        ? req.body.email
+        : donor?.email || prospect?.email || '';
     const normalizedEmail = normalizeEmail(emailInput);
     const providedName =
-      req.body && typeof req.body.name === 'string' ? req.body.name.trim() : donor.name || '';
+      req.body && typeof req.body.name === 'string'
+        ? req.body.name.trim()
+        : donor?.name || prospect?.name || '';
     const password =
       req.body && typeof req.body.password === 'string' ? req.body.password : '';
     const confirmPassword =
       req.body && typeof req.body.confirmPassword === 'string'
         ? req.body.confirmPassword
         : '';
+    const subscriptionInputRaw =
+      req.body && typeof req.body.subscriptionId === 'string'
+        ? req.body.subscriptionId
+        : req.body && typeof req.body.paypalSubscriptionId === 'string'
+        ? req.body.paypalSubscriptionId
+        : '';
+    const subscriptionInput = subscriptionInputRaw ? subscriptionInputRaw.trim() : '';
 
     if (!normalizedEmail) {
       return res.status(400).json({ error: 'Email is required to set up your account.' });
@@ -305,30 +370,6 @@ router.post(
       return res.status(400).json({ error: 'Passwords do not match. Please try again.' });
     }
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
-      return res.status(403).json({
-        error: 'Subscription is not active. Contact the server admin for help.',
-      });
-    }
-
-    let activeDonor = donor;
-    const updates = {};
-    if (
-      normalizedEmail &&
-      normalizedEmail !== normalizeEmail(donor.email)
-    ) {
-      updates.email = normalizedEmail;
-    }
-    if (providedName && providedName !== (donor.name || '').trim()) {
-      updates.name = providedName;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      activeDonor = updateDonorContact(donor.id, updates);
-    }
-
     let hashedPassword;
     try {
       hashedPassword = await hashPassword(password);
@@ -337,14 +378,106 @@ router.post(
       return res.status(500).json({ error: 'Failed to save password. Try again.' });
     }
 
-    activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
+    if (donor) {
+      const status = (donor.status || '').toLowerCase();
+      const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
+      if (blockedStatuses.has(status)) {
+        return res.status(403).json({
+          error: 'Subscription is not active. Contact the server admin for help.',
+        });
+      }
 
-    const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
+      let activeDonor = donor;
+      const updates = {};
+      if (normalizedEmail && normalizedEmail !== normalizeEmail(donor.email)) {
+        updates.email = normalizedEmail;
+      }
+      if (providedName && providedName !== (donor.name || '').trim()) {
+        updates.name = providedName;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        activeDonor = updateDonorContact(donor.id, updates);
+      }
+
+      if (
+        subscriptionInput &&
+        subscriptionInput !== (activeDonor.subscriptionId || '').trim()
+      ) {
+        activeDonor = updateDonorSubscriptionId(activeDonor.id, subscriptionInput);
+      }
+
+      activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
+
+      const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
+      const invite = getLatestActiveInviteForDonor(activeDonor.id);
+
+      logEvent('share.account.password_set', {
+        donorId: activeDonor.id,
+        shareLinkId: updatedLink.id,
+      });
+
+      return res.json(
+        buildShareResponse({
+          shareLink: updatedLink,
+          donor: activeDonor,
+          invite,
+          prospect: null,
+        })
+      );
+    }
+
+    // Prospect promotion flow
+    let activeDonor = null;
+    if (subscriptionInput) {
+      activeDonor = getDonorBySubscriptionId(subscriptionInput);
+    }
+    if (!activeDonor) {
+      activeDonor = getDonorByEmailAddress(normalizedEmail);
+    }
+
+    if (activeDonor) {
+      const updates = {};
+      if (normalizedEmail && normalizedEmail !== normalizeEmail(activeDonor.email)) {
+        updates.email = normalizedEmail;
+      }
+      if (providedName && providedName !== (activeDonor.name || '').trim()) {
+        updates.name = providedName;
+      }
+      if (Object.keys(updates).length > 0) {
+        activeDonor = updateDonorContact(activeDonor.id, updates);
+      }
+      if (
+        subscriptionInput &&
+        subscriptionInput !== (activeDonor.subscriptionId || '').trim()
+      ) {
+        activeDonor = updateDonorSubscriptionId(activeDonor.id, subscriptionInput);
+      }
+      activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
+    } else {
+      activeDonor = createDonor({
+        email: normalizedEmail,
+        name: providedName,
+        subscriptionId: subscriptionInput || null,
+        passwordHash: hashedPassword,
+        status: 'pending',
+      });
+    }
+
+    const reassignedLink = assignShareLinkToDonor(shareLink.id, activeDonor.id, {
+      clearLastUsed: true,
+    });
+    const updatedLink = markShareLinkUsed(reassignedLink.id) || reassignedLink;
     const invite = getLatestActiveInviteForDonor(activeDonor.id);
 
-    logEvent('share.account.password_set', {
+    if (prospect) {
+      markProspectConverted(prospect.id, activeDonor.id);
+    }
+
+    logEvent('share.account.prospect_promoted', {
       donorId: activeDonor.id,
       shareLinkId: updatedLink.id,
+      prospectId: prospect ? prospect.id : null,
     });
 
     return res.json(
@@ -352,6 +485,7 @@ router.post(
         shareLink: updatedLink,
         donor: activeDonor,
         invite,
+        prospect: null,
       })
     );
   })
