@@ -1,7 +1,10 @@
 const fetch = require('node-fetch');
 const { getPlexSettings } = require('../state/settings');
 
-function getPlexConfig() {
+function getPlexConfig(overrideSettings) {
+  if (overrideSettings && typeof overrideSettings === 'object') {
+    return overrideSettings;
+  }
   return getPlexSettings();
 }
 
@@ -10,8 +13,14 @@ function isConfigured() {
   return Boolean(plex.baseUrl && plex.token);
 }
 
-function buildUrl(pathname) {
-  const plex = getPlexConfig();
+function buildUrl(pathname, overrideSettings) {
+  const plex = getPlexConfig(overrideSettings);
+  if (!plex.baseUrl) {
+    throw new Error('Plex base URL is not configured');
+  }
+  if (!plex.token) {
+    throw new Error('Plex token is not configured');
+  }
   const base = plex.baseUrl.replace(/\/$/, '');
   const separator = pathname.includes('?') ? '&' : '?';
   return `${base}${pathname}${separator}X-Plex-Token=${encodeURIComponent(
@@ -73,8 +82,40 @@ async function revokeUserByEmail(email) {
   return { success: true, user: target };
 }
 
+async function verifyConnection(overrideSettings) {
+  const plex = getPlexConfig(overrideSettings);
+  if (!plex.baseUrl || !plex.token) {
+    throw new Error('Plex base URL and token are required for testing');
+  }
+
+  const response = await fetch(buildUrl('/api/v2/home/users', plex), {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token');
+  }
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to verify Plex connection: ${text}`);
+  }
+
+  const data = await response.json().catch(() => ({}));
+  return {
+    message: 'Plex connection verified successfully.',
+    details: {
+      userCount: Array.isArray(data.users) ? data.users.length : undefined,
+    },
+  };
+}
+
 module.exports = {
+  getPlexConfig,
   isConfigured,
   listUsers,
   revokeUserByEmail,
+  verifyConnection,
 };

@@ -1,8 +1,8 @@
 const nodemailer = require('nodemailer');
 const { getSmtpSettings } = require('../state/settings');
 
-function getSmtpConfig() {
-  const settings = getSmtpSettings();
+function getSmtpConfig(overrideSettings) {
+  const settings = overrideSettings || getSmtpSettings();
   if (!settings.host) {
     throw new Error('SMTP configuration is missing');
   }
@@ -12,9 +12,8 @@ function getSmtpConfig() {
   return settings;
 }
 
-async function sendInviteEmail({ to, inviteUrl, name, subscriptionId }) {
-  const smtp = getSmtpConfig();
-  const mailer = nodemailer.createTransport({
+function createTransport(smtp) {
+  return nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: Boolean(smtp.secure),
@@ -26,6 +25,14 @@ async function sendInviteEmail({ to, inviteUrl, name, subscriptionId }) {
           }
         : undefined,
   });
+}
+
+async function sendInviteEmail(
+  { to, inviteUrl, name, subscriptionId },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
   const subject = 'Your Plex access invite';
 
   const text = `Hi ${name || 'there'},\n\nThank you for supporting our Plex server!\n\nYou can join using your personal Wizarr invite link: ${inviteUrl}\n\nSubscription ID: ${subscriptionId}\n\nIf you did not request this invite or need help, reply to this email.\n\n— Plex Donate`;
@@ -50,6 +57,17 @@ async function sendInviteEmail({ to, inviteUrl, name, subscriptionId }) {
   });
 }
 
+async function verifyConnection(overrideSettings) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  await mailer.verify();
+  return {
+    message: 'SMTP connection verified successfully.',
+  };
+}
+
 module.exports = {
   sendInviteEmail,
+  getSmtpConfig,
+  verifyConnection,
 };

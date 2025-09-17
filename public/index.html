@@ -237,6 +237,17 @@
       .form-status[data-state='success'] {
         color: #15803d;
       }
+      .form-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      @media (min-width: 560px) {
+        .form-actions {
+          flex-direction: row;
+        }
+      }
       .badge {
         background: rgba(79, 70, 229, 0.12);
         color: #4f46e5;
@@ -321,10 +332,25 @@
                 <input name="apiBase" type="url" placeholder="https://api-m.sandbox.paypal.com" />
                 <span class="help">Use the sandbox URL for testing or the live URL for production.</span>
               </label>
+              <label>
+                Plan ID
+                <input name="planId" type="text" autocomplete="off" placeholder="P-123456789" />
+                <span class="help">Used to generate the PayPal subscription link that donors visit.</span>
+              </label>
+              <label>
+                Monthly price
+                <input name="subscriptionPrice" type="number" min="0" step="0.01" placeholder="5.00" />
+                <span class="help">Shown on share pages so donors know the recurring amount.</span>
+              </label>
+              <label>
+                Currency
+                <input name="currency" type="text" autocomplete="off" placeholder="USD" />
+              </label>
             </div>
             <p class="form-status" data-status-for="paypal"></p>
-            <div>
+            <div class="form-actions">
               <button type="submit" class="secondary">Save PayPal settings</button>
+              <button type="button" data-action="test">Test PayPal settings</button>
             </div>
           </form>
 
@@ -346,8 +372,9 @@
               </label>
             </div>
             <p class="form-status" data-status-for="wizarr"></p>
-            <div>
+            <div class="form-actions">
               <button type="submit" class="secondary">Save Wizarr settings</button>
+              <button type="button" data-action="test">Test Wizarr connection</button>
             </div>
           </form>
 
@@ -380,8 +407,9 @@
               </label>
             </div>
             <p class="form-status" data-status-for="smtp"></p>
-            <div>
+            <div class="form-actions">
               <button type="submit" class="secondary">Save email settings</button>
+              <button type="button" data-action="test">Test email delivery</button>
             </div>
           </form>
 
@@ -398,8 +426,9 @@
               </label>
             </div>
             <p class="form-status" data-status-for="plex"></p>
-            <div>
+            <div class="form-actions">
               <button type="submit" class="secondary">Save Plex settings</button>
+              <button type="button" data-action="test">Test Plex connection</button>
             </div>
           </form>
         </section>
@@ -415,6 +444,7 @@
         <td>
           <div class="actions">
             <button data-action="invite">Generate invite</button>
+            <button data-action="share" class="secondary">Copy share link</button>
             <button data-action="resend" class="secondary">Resend email</button>
             <button data-action="revoke" class="danger">Revoke</button>
           </div>
@@ -442,6 +472,17 @@
         events: [],
         settings: null,
       };
+
+      const statusClearTimers = new WeakMap();
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
 
       async function api(path, options = {}) {
         const opts = { ...options };
@@ -510,6 +551,44 @@
         } else {
           delete statusEl.dataset.state;
         }
+        if (stateAttr !== 'success') {
+          const existing = statusClearTimers.get(form);
+          if (existing) {
+            clearTimeout(existing);
+            statusClearTimers.delete(form);
+          }
+        }
+      }
+
+      function scheduleStatusClear(form, delay = 3000) {
+        if (!form) {
+          return;
+        }
+        const existing = statusClearTimers.get(form);
+        if (existing) {
+          clearTimeout(existing);
+        }
+        const timer = setTimeout(() => {
+          const statusEl = form.querySelector('.form-status');
+          if (statusEl && statusEl.dataset.state === 'success') {
+            statusEl.textContent = '';
+            delete statusEl.dataset.state;
+          }
+          statusClearTimers.delete(form);
+        }, delay);
+        statusClearTimers.set(form, timer);
+      }
+
+      function getFormPayload(form) {
+        const payload = {};
+        form.querySelectorAll('[name]').forEach((input) => {
+          if (input.type === 'checkbox') {
+            payload[input.name] = input.checked;
+          } else {
+            payload[input.name] = input.value;
+          }
+        });
+        return payload;
       }
 
       function renderSettings() {
@@ -579,21 +658,45 @@
             lastPaymentCell.textContent = '—';
           }
 
+          const inviteParts = [];
           if (donor.invites.length > 0) {
             const invite = donor.invites[0];
-            const parts = [];
             if (invite.wizarrInviteUrl) {
-              parts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+              inviteParts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+            }
+            if (invite.recipientEmail) {
+              inviteParts.push(
+                `<span class="badge" style="background:rgba(99,102,241,0.16);color:#4338ca;">For ${escapeHtml(
+                  invite.recipientEmail
+                )}</span>`
+              );
             }
             if (invite.emailSentAt) {
               const date = new Date(invite.emailSentAt);
-              parts.push(`<span class="badge">Emailed ${date.toLocaleDateString()}</span>`);
+              inviteParts.push(`<span class="badge">Emailed ${date.toLocaleDateString()}</span>`);
             }
             if (invite.revokedAt) {
               const date = new Date(invite.revokedAt);
-              parts.push(`<span class="badge" style="background:rgba(248,113,113,0.15);color:#b91c1c;">Revoked ${date.toLocaleDateString()}</span>`);
+              inviteParts.push(`<span class="badge" style="background:rgba(248,113,113,0.15);color:#b91c1c;">Revoked ${date.toLocaleDateString()}</span>`);
             }
-            inviteCell.innerHTML = parts.join('<br />');
+          }
+
+          if (donor.shareLink && donor.shareLink.token) {
+            const origin = window.location.origin.replace(/\/$/, '');
+            const shareUrl = `${origin}/share/${donor.shareLink.token}`;
+            inviteParts.push(
+              `<a href="${shareUrl}" target="_blank" rel="noopener">Share page</a>`
+            );
+            if (donor.shareLink.lastUsedAt) {
+              const usedDate = new Date(donor.shareLink.lastUsedAt);
+              inviteParts.push(
+                `<span class="badge" style="background:rgba(34,197,94,0.12);color:#15803d;">Visited ${usedDate.toLocaleDateString()}</span>`
+              );
+            }
+          }
+
+          if (inviteParts.length > 0) {
+            inviteCell.innerHTML = inviteParts.join('<br />');
           } else {
             inviteCell.textContent = '—';
           }
@@ -709,14 +812,7 @@
           if (!group) {
             return;
           }
-          const payload = {};
-          form.querySelectorAll('[name]').forEach((input) => {
-            if (input.type === 'checkbox') {
-              payload[input.name] = input.checked;
-            } else {
-              payload[input.name] = input.value;
-            }
-          });
+          const payload = getFormPayload(form);
           const submitButton = form.querySelector("button[type='submit']");
           try {
             if (submitButton) {
@@ -733,19 +829,50 @@
             state.settings[group] = response.settings || {};
             renderSettings();
             setFormStatus(form, 'Saved!', 'success');
-            setTimeout(() => {
-              const statusEl = form.querySelector('.form-status');
-              if (statusEl && statusEl.dataset.state === 'success') {
-                statusEl.textContent = '';
-                delete statusEl.dataset.state;
-              }
-            }, 3000);
+            scheduleStatusClear(form);
           } catch (err) {
             setFormStatus(form, err.message || 'Failed to save settings', 'error');
           } finally {
             if (submitButton) {
               submitButton.disabled = false;
             }
+          }
+        });
+
+        form.addEventListener('click', async (event) => {
+          const button = event.target.closest("button[data-action='test']");
+          if (!button) {
+            return;
+          }
+          event.preventDefault();
+          const group = form.dataset.group;
+          if (!group) {
+            return;
+          }
+          const payload = getFormPayload(form);
+          const previousDisabledState = button.disabled;
+          try {
+            button.disabled = true;
+            setFormStatus(form, 'Testing…');
+            const response = await api(`/api/admin/settings/${group}/test`, {
+              method: 'POST',
+              body: payload,
+            });
+            const result = response.result || {};
+            const message =
+              result.message ||
+              response.message ||
+              'Settings test completed successfully.';
+            setFormStatus(form, message, 'success');
+            scheduleStatusClear(form);
+          } catch (err) {
+            setFormStatus(
+              form,
+              err.message || 'Failed to verify settings',
+              'error'
+            );
+          } finally {
+            button.disabled = previousDisabledState;
           }
         });
       });
@@ -761,6 +888,45 @@
         try {
           if (action === 'invite') {
             await api(`/api/admin/subscribers/${donorId}/invite`, { method: 'POST' });
+          } else if (action === 'share') {
+            const regenerate = event.shiftKey;
+            const options = { method: 'POST' };
+            if (regenerate) {
+              options.body = { regenerate: true };
+            }
+            const response = await api(
+              `/api/admin/subscribers/${donorId}/share-link`,
+              options
+            );
+            const shareLink = response.shareLink || {};
+            const origin = window.location.origin.replace(/\/$/, '');
+            const shareUrl =
+              shareLink.url ||
+              (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
+            if (!shareUrl) {
+              throw new Error('Unable to determine share link URL');
+            }
+            let copied = false;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              try {
+                await navigator.clipboard.writeText(shareUrl);
+                copied = true;
+              } catch (err) {
+                console.warn('Clipboard copy failed', err);
+              }
+            }
+            if (copied) {
+              alert(
+                regenerate
+                  ? 'Share link regenerated and copied to clipboard.'
+                  : 'Share link copied to clipboard.'
+              );
+            } else {
+              window.prompt(
+                'Share this link with the subscriber:',
+                shareUrl
+              );
+            }
           } else if (action === 'resend') {
             await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
           } else if (action === 'revoke') {

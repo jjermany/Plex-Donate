@@ -13,6 +13,7 @@ Automated system to handle:
 - Wizarr invite generation, storage, email delivery, and optional auto-revocation on cancellation.
 - Optional Plex integration to remove canceled donors automatically.
 - Activity log for webhook events and admin actions.
+- Shareable donor dashboard so supporters can confirm donations, pick their invite email, and self-serve Plex access.
 
 ## 📋 Requirements
 - Node.js 18+ (20+ recommended)
@@ -42,7 +43,7 @@ Only the core application settings live in `.env` now:
 | --- | --- |
 | `NODE_ENV` | Runtime environment label (defaults to `development`). |
 | `PORT` | Port the Express server listens on. |
-| `SESSION_SECRET` | Secret used to encrypt admin sessions. |
+| `SESSION_SECRET` | (Optional) Override the generated admin session secret for the dashboard. |
 | `SESSION_COOKIE_SECURE` | Set to `true` to mark the admin session cookie as secure (requires HTTPS). Defaults to `false`. |
 | `ADMIN_PASSWORD` | Password required to access the admin dashboard. |
 | `DATABASE_FILE` | Location of the SQLite database file. |
@@ -52,6 +53,10 @@ When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that 
 ### Configure integrations
 
 Use the **Integration settings** panel in the admin dashboard to store PayPal, Wizarr, SMTP, and optional Plex credentials. Values are written to the database so they survive restarts without exposing secrets in environment files.
+
+Each integration also provides a **Test** button directly beneath the save action so you can validate credentials before rolling them out to donors.
+
+PayPal settings now include fields for the subscription plan ID, recurring price, and currency. The plan ID powers the "Open PayPal subscription" button on shareable invite pages, and the price is shown as a reminder to donors before they generate their Plex invite.
 
 ### Running
 

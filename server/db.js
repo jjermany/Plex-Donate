@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const { nanoid } = require('nanoid');
 const config = require('./config');
 
 fs.mkdirSync(path.dirname(config.databaseFile), { recursive: true });
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS invites (
   donor_id INTEGER NOT NULL,
   wizarr_invite_code TEXT,
   wizarr_invite_url TEXT,
+  recipient_email TEXT,
   note TEXT,
   email_sent_at TEXT,
   revoked_at TEXT,
@@ -56,7 +58,59 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS invite_links (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  donor_id INTEGER NOT NULL UNIQUE,
+  token TEXT NOT NULL UNIQUE,
+  session_token TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_used_at TEXT,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+);
 `);
+
+function generateShareSessionToken() {
+  return nanoid(48);
+}
+
+function ensureInviteLinkSessionTokens() {
+  const columns = db.prepare("PRAGMA table_info('invite_links')").all();
+  const hasSessionToken = columns.some((column) => column.name === 'session_token');
+  if (!hasSessionToken) {
+    db.exec('ALTER TABLE invite_links ADD COLUMN session_token TEXT');
+  }
+
+  const missingTokens = db
+    .prepare(
+      "SELECT id FROM invite_links WHERE session_token IS NULL OR TRIM(session_token) = ''"
+    )
+    .all();
+
+  if (missingTokens.length === 0) {
+    return;
+  }
+
+  const updateToken = db.prepare('UPDATE invite_links SET session_token = ? WHERE id = ?');
+  const assignTokens = db.transaction((rows) => {
+    rows.forEach((row) => {
+      updateToken.run(generateShareSessionToken(), row.id);
+    });
+  });
+
+  assignTokens(missingTokens);
+}
+
+function ensureInviteRecipientColumn() {
+  const columns = db.prepare("PRAGMA table_info('invites')").all();
+  const hasRecipientEmail = columns.some((column) => column.name === 'recipient_email');
+  if (!hasRecipientEmail) {
+    db.exec('ALTER TABLE invites ADD COLUMN recipient_email TEXT');
+  }
+}
+
+ensureInviteRecipientColumn();
+ensureInviteLinkSessionTokens();
 
 const statements = {
   getDonorBySubscriptionId: db.prepare(
@@ -90,9 +144,35 @@ const statements = {
   listPaymentsForDonor: db.prepare(
     'SELECT * FROM payments WHERE donor_id = ? ORDER BY paid_at DESC'
   ),
+  getInviteLinkByDonorId: db.prepare(
+    'SELECT * FROM invite_links WHERE donor_id = ?'
+  ),
+  getInviteLinkByToken: db.prepare(
+    'SELECT * FROM invite_links WHERE token = ?'
+  ),
+  getInviteLinkById: db.prepare('SELECT * FROM invite_links WHERE id = ?'),
+  upsertInviteLink: db.prepare(
+    `INSERT INTO invite_links (donor_id, token, session_token)
+     VALUES (@donorId, @token, @sessionToken)
+     ON CONFLICT(donor_id) DO UPDATE SET
+       token = excluded.token,
+       session_token = excluded.session_token,
+       created_at = CURRENT_TIMESTAMP,
+       last_used_at = NULL`
+  ),
+  setInviteLinkSessionToken: db.prepare(
+    `UPDATE invite_links
+     SET session_token = @sessionToken
+     WHERE id = @id`
+  ),
+  touchInviteLink: db.prepare(
+    `UPDATE invite_links
+     SET last_used_at = CURRENT_TIMESTAMP
+     WHERE id = ?`
+  ),
   insertInvite: db.prepare(
-    `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, email_sent_at)
-     VALUES (@donorId, @code, @url, @note, @emailSentAt)`
+    `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, recipient_email, email_sent_at)
+     VALUES (@donorId, @code, @url, @note, @recipientEmail, @emailSentAt)`
   ),
   updateInviteEmailSent: db.prepare(
     `UPDATE invites
@@ -136,6 +216,13 @@ const statements = {
        value = excluded.value,
        updated_at = CURRENT_TIMESTAMP`
   ),
+  updateDonorContact: db.prepare(
+    `UPDATE donors
+     SET email = COALESCE(@email, email),
+         name = COALESCE(@name, name),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
 };
 
 function mapDonor(row) {
@@ -159,12 +246,40 @@ function mapInvite(row) {
     donorId: row.donor_id,
     wizarrInviteCode: row.wizarr_invite_code,
     wizarrInviteUrl: row.wizarr_invite_url,
+    recipientEmail: row.recipient_email,
     note: row.note,
     emailSentAt: row.email_sent_at,
     revokedAt: row.revoked_at,
     plexRevokedAt: row.plex_revoked_at,
     createdAt: row.created_at,
   };
+}
+
+function mapInviteLink(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    token: row.token,
+    sessionToken: row.session_token,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
+function ensureShareLinkHasSessionToken(shareLink) {
+  if (!shareLink) {
+    return null;
+  }
+  if (shareLink.sessionToken) {
+    return shareLink;
+  }
+  const sessionToken = generateShareSessionToken();
+  statements.setInviteLinkSessionToken.run({
+    id: shareLink.id,
+    sessionToken,
+  });
+  return { ...shareLink, sessionToken };
 }
 
 function mapPayment(row) {
@@ -239,10 +354,20 @@ function listDonorsWithDetails() {
     payments: statements
       .listPaymentsForDonor.all(donor.id)
       .map(mapPayment),
+    shareLink: ensureShareLinkHasSessionToken(
+      mapInviteLink(statements.getInviteLinkByDonorId.get(donor.id))
+    ),
   }));
 }
 
-function createInvite({ donorId, code, url, note = '', emailSentAt = null }) {
+function createInvite({
+  donorId,
+  code,
+  url,
+  note = '',
+  recipientEmail = null,
+  emailSentAt = null,
+}) {
   if (!donorId) {
     throw new Error('donorId is required to create invite');
   }
@@ -251,6 +376,7 @@ function createInvite({ donorId, code, url, note = '', emailSentAt = null }) {
     code: code || null,
     url: url || null,
     note,
+    recipientEmail,
     emailSentAt,
   });
   return mapInvite(statements.getInviteById.get(info.lastInsertRowid));
@@ -275,6 +401,43 @@ function getLatestActiveInviteForDonor(donorId) {
   return mapInvite(statements.getLatestActiveInviteForDonor.get(donorId));
 }
 
+function createOrUpdateShareLink({ donorId, token, sessionToken }) {
+  if (!donorId) {
+    throw new Error('donorId is required to create share link');
+  }
+  if (!token) {
+    throw new Error('token is required to create share link');
+  }
+  statements.upsertInviteLink.run({
+    donorId,
+    token,
+    sessionToken: sessionToken || generateShareSessionToken(),
+  });
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkByDonorId.get(donorId))
+  );
+}
+
+function getShareLinkByDonorId(donorId) {
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkByDonorId.get(donorId))
+  );
+}
+
+function getShareLinkByToken(token) {
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkByToken.get(token))
+  );
+}
+
+function markShareLinkUsed(linkId) {
+  if (!linkId) {
+    return null;
+  }
+  statements.touchInviteLink.run(linkId);
+  return mapInviteLink(statements.getInviteLinkById.get(linkId));
+}
+
 function recordPayment({ donorId, paypalPaymentId, amount, currency, paidAt }) {
   if (!donorId) {
     throw new Error('donorId is required to record payment');
@@ -293,6 +456,20 @@ function logEvent(eventType, payload) {
     eventType,
     payload: JSON.stringify(payload || {}),
   });
+}
+
+function updateDonorContact(donorId, { email, name }) {
+  if (!donorId) {
+    throw new Error('donorId is required to update contact details');
+  }
+
+  statements.updateDonorContact.run({
+    id: donorId,
+    email: email == null || email === '' ? null : email,
+    name: name == null || name === '' ? null : name,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
 }
 
 function getRecentEvents(limit = 50) {
@@ -372,8 +549,13 @@ module.exports = {
   revokeInvite,
   markPlexRevoked,
   getLatestActiveInviteForDonor,
+  createOrUpdateShareLink,
+  getShareLinkByDonorId,
+  getShareLinkByToken,
+  markShareLinkUsed,
   recordPayment,
   logEvent,
+  updateDonorContact,
   getRecentEvents,
   getAllSettings,
   getSetting,

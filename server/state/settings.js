@@ -6,6 +6,9 @@ const DEFAULT_SETTINGS = {
     clientSecret: '',
     webhookId: '',
     apiBase: 'https://api-m.sandbox.paypal.com',
+    planId: '',
+    subscriptionPrice: 0,
+    currency: 'USD',
   },
   wizarr: {
     baseUrl: '',
@@ -134,6 +137,11 @@ function updateGroup(name, updates) {
   return normalized;
 }
 
+function previewGroup(name, overrides) {
+  const current = getGroup(name);
+  return normalizeGroup(name, overrides, current);
+}
+
 function getPaypalSettings() {
   return getGroup('paypal');
 }
@@ -155,6 +163,7 @@ module.exports = {
   getSettings,
   getGroup,
   updateGroup,
+  previewGroup,
   getPaypalSettings,
   getWizarrSettings,
   getSmtpSettings,

@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -27,7 +28,8 @@ const parseBoolean = (value, defaultValue = false) => {
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: Number.parseInt(process.env.PORT || '3000', 10),
-  sessionSecret: process.env.SESSION_SECRET || 'change-me',
+  sessionSecret:
+    process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex'),
   adminPassword: process.env.ADMIN_PASSWORD || '',
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.env.DATABASE_FILE)
