@@ -200,6 +200,10 @@
         background: rgba(59, 130, 246, 0.24);
         color: #cfe1ff;
       }
+      .status-pill[data-status='setup'] {
+        background: rgba(14, 165, 233, 0.2);
+        color: #bae6fd;
+      }
       .status-pill[data-status='cancelled'],
       .status-pill[data-status='canceled'],
       .status-pill[data-status='suspended'],
@@ -406,12 +410,12 @@
     <div id="content" class="hidden">
       <main class="canvas">
         <header class="surface hero">
-          <span class="eyebrow">Welcome to your streaming lounge</span>
-          <h1>All your streaming platforms. One invite.</h1>
+          <span class="eyebrow">Start here</span>
+          <h1>Set up your membership or refresh your invite.</h1>
           <p class="lead">
-            One stop shop for the best streaming platforms combined into one,
-            managed by yours truly. Every bit of support keeps the mission moving
-            forward.
+            New supporters can create their login below and we’ll walk you
+            through the rest. Already part of the community? Save your details
+            and generate a fresh Wizarr invite in just a few clicks.
           </p>
           <div class="hero-badges">
             <span class="chip">Plex · Wizarr ready</span>
@@ -446,20 +450,21 @@
           </article>
 
           <article class="surface" id="support-card">
-            <h2>Support the mission</h2>
+            <h2>Here's how it works</h2>
             <p class="muted">
-              Your contribution fuels our combined streaming library and keeps the
-              lights glowing.
+              Whether you're brand new or returning for another invite, follow
+              these quick steps.
             </p>
             <ul class="support-list">
-              <li>One stop shop for every streaming world you love.</li>
-              <li>Personally curated and managed by yours truly.</li>
-              <li>Supporting keeps servers humming and new content flowing.</li>
+              <li>Create or update your account with the email you want to use for streaming.</li>
+              <li>Share your PayPal subscription ID when you have it and we'll link everything up.</li>
+              <li>Generate a Wizarr invite anytime to unlock Plex and the rest of our library.</li>
             </ul>
             <div class="cta">
               <h3>Already subscribed?</h3>
               <p class="muted">
-                Visit the customer dashboard to manage your subscription and generate new invites whenever you need them.
+                The customer dashboard keeps your billing details, invite
+                history, and Plex status in one place.
               </p>
               <a class="cta-button" href="/dashboard">Open customer dashboard</a>
             </div>
@@ -467,9 +472,9 @@
         </section>
 
         <section class="surface" id="account-panel">
-          <h2>Create your account</h2>
+          <h2>Step 1 · Create your account</h2>
           <p id="account-description" class="muted">
-            Set up your login details so you can revisit the dashboard anytime.
+            We'll tailor the next steps once we know who you are.
           </p>
           <form id="account-form" class="grid">
             <label>
@@ -491,6 +496,16 @@
                 type="text"
                 placeholder="How should we greet you?"
                 autocomplete="name"
+              />
+            </label>
+            <label id="account-subscription-row" class="hidden">
+              <span>PayPal subscription ID (optional)</span>
+              <input
+                id="account-subscription"
+                type="text"
+                placeholder="Starts with I-..."
+                autocomplete="off"
+                inputmode="text"
               />
             </label>
             <label>
@@ -520,10 +535,10 @@
         </section>
 
         <section class="surface" id="invite-panel">
-          <h2>Claim your Plex access</h2>
+          <h2>Step 2 · Claim your Plex access</h2>
           <p class="muted" id="invite-description">
             Choose the email you want to use for streaming access and we will
-            generate a fresh Wizarr invite instantly.
+            generate a fresh Wizarr invite as soon as your membership is ready.
           </p>
           <form id="invite-form">
             <label>
@@ -575,6 +590,7 @@
         token: window.location.pathname.split('/').pop(),
         data: null,
         sessionToken: '',
+        isProspect: false,
       };
 
       const loadingPanel = document.getElementById('loading');
@@ -593,6 +609,12 @@
       const accountNameInput = document.getElementById('account-name');
       const accountPasswordInput = document.getElementById('account-password');
       const accountConfirmInput = document.getElementById('account-confirm');
+      const accountSubscriptionRow = document.getElementById(
+        'account-subscription-row'
+      );
+      const accountSubscriptionInput = document.getElementById(
+        'account-subscription'
+      );
       const accountSubmit = document.getElementById('account-submit');
       const accountStatus = document.getElementById('account-status');
       const inviteDescription = document.getElementById('invite-description');
@@ -648,6 +670,18 @@
       }
 
       function renderInvite(invite) {
+        if (state.isProspect) {
+          inviteReady.classList.add('hidden');
+          inviteLinkEl.removeAttribute('href');
+          inviteLinkEl.textContent = '';
+          inviteEmailEl.textContent = '';
+          inviteCreatedEl.textContent = '';
+          inviteDescription.textContent =
+            'Finish the quick account setup above to unlock invite generation.';
+          generateButton.textContent = 'Generate my invite';
+          return;
+        }
+
         if (!invite || !invite.wizarrInviteUrl) {
           inviteReady.classList.add('hidden');
           inviteLinkEl.removeAttribute('href');
@@ -692,12 +726,40 @@
           accountStatus.className = 'status-text';
         }
 
-        const donor = data.donor || {};
-        donorNameEl.textContent = donor.name ? `Hi ${donor.name}!` : 'Hi there!';
-        donorEmailEl.textContent = donor.email || 'Add your preferred streaming email below.';
+        const donor = data.donor || null;
+        const prospect = data.prospect || null;
+        const isProspect = !donor && Boolean(prospect);
+        state.isProspect = isProspect;
+
+        if (donorNameEl) {
+          if (isProspect) {
+            donorNameEl.textContent = prospect && prospect.name
+              ? `Hi ${prospect.name}!`
+              : 'Welcome future streamer!';
+          } else {
+            donorNameEl.textContent = donor && donor.name ? `Hi ${donor.name}!` : 'Hi there!';
+          }
+        }
+
+        if (donorEmailEl) {
+          if (isProspect) {
+            donorEmailEl.textContent = prospect && prospect.email
+              ? `We can use ${prospect.email} or pick another email below.`
+              : 'Tell us which email to use for your membership.';
+          } else {
+            donorEmailEl.textContent =
+              (donor && donor.email) || 'Add your preferred streaming email below.';
+          }
+        }
 
         if (accountDescription) {
-          if (donor.hasPassword) {
+          if (isProspect) {
+            accountDescription.textContent =
+              'Step one: create your login so we can prepare your subscription.';
+            if (accountSubmit) {
+              accountSubmit.textContent = 'Create account';
+            }
+          } else if (donor && donor.hasPassword) {
             accountDescription.textContent =
               'Update your login details or set a new password for the dashboard.';
             if (accountSubmit) {
@@ -714,18 +776,39 @@
 
         let blocked = false;
         if (statusPill) {
-          const status = (donor.status || 'pending').toLowerCase();
-          statusPill.dataset.status = status || 'pending';
-          statusPill.textContent = status ? status.replace(/_/g, ' ') : 'pending';
-          blocked = ['cancelled', 'suspended', 'expired'].includes(status);
-          generateButton.dataset.blocked = blocked ? 'true' : 'false';
-          generateButton.disabled = blocked;
-          emailInput.disabled = blocked;
-          nameInput.disabled = blocked;
-          if (blocked) {
+          if (isProspect) {
+            statusPill.dataset.status = 'setup';
+            statusPill.textContent = 'setup needed';
+          } else {
+            const status = (donor && donor.status ? donor.status : 'pending').toLowerCase();
+            statusPill.dataset.status = status || 'pending';
+            statusPill.textContent = status ? status.replace(/_/g, ' ') : 'pending';
+            blocked = ['cancelled', 'suspended', 'expired'].includes(status);
+          }
+        }
+
+        const inviteLocked = blocked || isProspect;
+
+        if (generateButton) {
+          generateButton.dataset.blocked = inviteLocked ? 'true' : 'false';
+          generateButton.disabled = inviteLocked;
+        }
+        if (emailInput) {
+          emailInput.disabled = inviteLocked;
+        }
+        if (nameInput) {
+          nameInput.disabled = inviteLocked;
+        }
+
+        if (inviteLocked) {
+          if (isProspect) {
+            actionStatus.textContent =
+              'Finish setting up your account to unlock invite generation.';
+            actionStatus.className = 'status-text info';
+          } else if (blocked) {
             actionStatus.textContent =
               'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
-            actionStatus.classList.add('error');
+            actionStatus.className = 'status-text error';
           }
         }
 
@@ -744,6 +827,9 @@
         if (accountConfirmInput) {
           accountConfirmInput.disabled = blocked;
         }
+        if (accountSubscriptionInput) {
+          accountSubscriptionInput.disabled = blocked;
+        }
 
         if (blocked && accountStatus) {
           accountStatus.textContent =
@@ -751,7 +837,13 @@
           accountStatus.classList.add('error');
         }
 
-        if (donor.subscriptionId) {
+        if (accountSubscriptionRow) {
+          const showSubscriptionInput =
+            isProspect || (donor && !donor.subscriptionId);
+          accountSubscriptionRow.classList.toggle('hidden', !showSubscriptionInput);
+        }
+
+        if (donor && donor.subscriptionId) {
           subscriptionIdEl.textContent = donor.subscriptionId;
           subscriptionIdRow.classList.remove('hidden');
         } else {
@@ -778,19 +870,35 @@
 
         const invite = data.invite || null;
         const emailPrefill =
-          (invite && invite.recipientEmail) || donor.email || emailInput.value;
+          (invite && invite.recipientEmail) ||
+          (donor && donor.email) ||
+          (prospect && prospect.email) ||
+          emailInput.value;
         if (document.activeElement !== emailInput) {
           emailInput.value = emailPrefill;
         }
         if (document.activeElement !== nameInput) {
-          nameInput.value = donor.name || '';
+          nameInput.value =
+            (donor && donor.name) || (prospect && prospect.name) || '';
         }
 
         if (accountEmailInput && document.activeElement !== accountEmailInput) {
-          accountEmailInput.value = donor.email || '';
+          accountEmailInput.value =
+            (donor && donor.email) || (prospect && prospect.email) || '';
         }
         if (accountNameInput && document.activeElement !== accountNameInput) {
-          accountNameInput.value = donor.name || '';
+          accountNameInput.value =
+            (donor && donor.name) || (prospect && prospect.name) || '';
+        }
+        if (
+          accountSubscriptionInput &&
+          document.activeElement !== accountSubscriptionInput
+        ) {
+          if (donor && donor.subscriptionId) {
+            accountSubscriptionInput.value = donor.subscriptionId;
+          } else {
+            accountSubscriptionInput.value = '';
+          }
         }
         if (accountPasswordInput && !blocked) {
           accountPasswordInput.value = '';
@@ -806,7 +914,10 @@
             'Once your donation is active we will unlock invite generation.';
         }
 
-        const identifier = donor.name || donor.email || '';
+        const identifier =
+          (donor && (donor.name || donor.email)) ||
+          (prospect && (prospect.name || prospect.email)) ||
+          '';
         if (identifier) {
           document.title = `Plex Invite • ${identifier}`;
         }
@@ -833,10 +944,17 @@
             return;
           }
 
+          const wasProspect = Boolean(
+            state.data && !state.data.donor && state.data.prospect
+          );
+
           const email = (accountEmailInput.value || '').trim();
           const name = (accountNameInput.value || '').trim();
           const password = accountPasswordInput.value || '';
           const confirm = accountConfirmInput.value || '';
+          const subscriptionId = accountSubscriptionInput
+            ? (accountSubscriptionInput.value || '').trim()
+            : '';
 
           if (!email) {
             accountStatus.textContent =
@@ -879,22 +997,29 @@
               {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({
-                  email,
-                  name,
-                  password,
-                  confirmPassword: confirm,
-                  sessionToken: state.sessionToken,
-                }),
-              }
-            );
-            const payload = await response.json();
-            if (!response.ok) {
-              throw new Error(payload.error || 'Failed to save account');
-            }
-            render(payload);
-            accountStatus.textContent = 'Account saved! Use these details to sign in later.';
-            accountStatus.className = 'status-text success';
+            body: JSON.stringify({
+              email,
+              name,
+              password,
+              confirmPassword: confirm,
+              sessionToken: state.sessionToken,
+              subscriptionId,
+            }),
+          }
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || 'Failed to save account');
+        }
+        render(payload);
+        if (wasProspect && payload && payload.donor) {
+          accountStatus.textContent =
+            'Account saved! You can now request your first invite.';
+        } else {
+          accountStatus.textContent =
+            'Account saved! Use these details to sign in later.';
+        }
+        accountStatus.className = 'status-text success';
           } catch (err) {
             accountStatus.textContent = err.message;
             accountStatus.className = 'status-text error';
