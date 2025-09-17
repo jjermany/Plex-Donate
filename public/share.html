@@ -456,16 +456,12 @@
               <li>Personally curated and managed by yours truly.</li>
               <li>Supporting keeps servers humming and new content flowing.</li>
             </ul>
-            <div id="paypal-cta" class="cta hidden">
-              <h3>Need to activate your donation?</h3>
+            <div class="cta">
+              <h3>Already subscribed?</h3>
               <p class="muted">
-                Launch PayPal in a new tab, complete the subscription, then pop
-                back here to claim your invite.
+                Visit the customer dashboard to manage your subscription and generate new invites whenever you need them.
               </p>
-              <button id="paypal-button" class="cta-button" type="button">
-                Start PayPal subscription
-              </button>
-              <p class="status-text" id="paypal-status"></p>
+              <a class="cta-button" href="/dashboard">Open customer dashboard</a>
             </div>
           </article>
         </section>
@@ -537,9 +533,6 @@
       const subscriptionIdRow = document.getElementById('subscription-id-row');
       const subscriptionIdEl = document.getElementById('subscription-id');
       const priceRow = document.getElementById('price-row');
-      const paypalCta = document.getElementById('paypal-cta');
-      const paypalButton = document.getElementById('paypal-button');
-      const paypalStatus = document.getElementById('paypal-status');
       const shareLastUsedEl = document.getElementById('share-last-used');
       const inviteDescription = document.getElementById('invite-description');
       const inviteForm = document.getElementById('invite-form');
@@ -680,23 +673,6 @@
           priceRow.classList.add('hidden');
         }
 
-        if (paypal.planId) {
-          paypalCta.classList.remove('hidden');
-          if (paypalButton) {
-            paypalButton.disabled = false;
-          }
-          if (paypalStatus) {
-            paypalStatus.textContent = '';
-            paypalStatus.className = 'status-text';
-          }
-        } else {
-          paypalCta.classList.add('hidden');
-          if (paypalStatus) {
-            paypalStatus.textContent = '';
-            paypalStatus.className = 'status-text';
-          }
-        }
-
         const invite = data.invite || null;
         const emailPrefill =
           (invite && invite.recipientEmail) || donor.email || emailInput.value;
@@ -732,82 +708,6 @@
         } catch (err) {
           showError(err.message);
         }
-      }
-
-      if (paypalButton) {
-        paypalButton.addEventListener('click', async () => {
-          if (!state.token) {
-            return;
-          }
-
-          const headers = { 'Content-Type': 'application/json' };
-          if (state.sessionToken) {
-            headers['X-Share-Session'] = state.sessionToken;
-            headers['Authorization'] = `Bearer ${state.sessionToken}`;
-          }
-
-          paypalButton.disabled = true;
-          if (paypalStatus) {
-            paypalStatus.textContent = 'Contacting PayPal…';
-            paypalStatus.className = 'status-text info';
-          }
-
-          try {
-            const response = await fetch(
-              `/api/share/${encodeURIComponent(state.token)}/subscription`,
-              {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  sessionToken: state.sessionToken,
-                }),
-              }
-            );
-
-            let payload = {};
-            try {
-              payload = await response.json();
-            } catch (err) {
-              if (!response.ok) {
-                throw new Error('Failed to start PayPal subscription');
-              }
-            }
-
-            if (!response.ok) {
-              const messageParts = [];
-              if (payload.error) messageParts.push(payload.error);
-              if (payload.details) messageParts.push(payload.details);
-              const message =
-                messageParts.join(': ') ||
-                'Failed to start PayPal subscription';
-              throw new Error(message);
-            }
-
-            const subscription = payload.subscription || {};
-            const approvalUrl =
-              subscription.approvalUrl || payload.approvalUrl || '';
-            if (!approvalUrl) {
-              throw new Error('PayPal approval link was not returned.');
-            }
-
-            if (paypalStatus) {
-              paypalStatus.textContent = 'Redirecting to PayPal…';
-              paypalStatus.className = 'status-text success';
-            }
-
-            const newWindow = window.open(approvalUrl, '_blank', 'noopener');
-            if (!newWindow) {
-              window.location.href = approvalUrl;
-            }
-          } catch (err) {
-            if (paypalStatus) {
-              paypalStatus.textContent = err.message;
-              paypalStatus.className = 'status-text error';
-            }
-          } finally {
-            paypalButton.disabled = false;
-          }
-        });
       }
 
       inviteForm.addEventListener('submit', async (event) => {

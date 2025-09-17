@@ -7,6 +7,7 @@ const config = require('./config');
 const adminRouter = require('./routes/admin');
 const webhookRouter = require('./routes/webhook');
 const shareRouter = require('./routes/share');
+const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
 const SqliteSessionStore = require('./session-store');
 const { db } = require('./db');
@@ -48,9 +49,14 @@ app.get('/api/health', (req, res) => {
 app.use('/api/paypal/webhook', webhookRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/share', shareRouter);
+app.use('/api/customer', customerRouter);
 
 app.get('/share/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/share.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/dashboard.html'));
 });
 
 app.use(express.static(path.join(__dirname, '../public')));

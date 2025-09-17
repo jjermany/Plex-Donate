@@ -14,6 +14,7 @@ Automated system to handle:
 - Optional Plex integration to remove canceled donors automatically.
 - Activity log for webhook events and admin actions.
 - Shareable donor dashboard so supporters can confirm donations, pick their invite email, and self-serve Plex access.
+- Dedicated customer dashboard at `/dashboard` where subscribers can log in with their PayPal subscription ID to manage invites and update contact details.
 
 ## 📋 Requirements
 - Node.js 18+ (20+ recommended)
@@ -71,3 +72,7 @@ The admin dashboard is served from `http://localhost:3000/` and exposes JSON API
 ### Shareable donor pages
 
 Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
+
+### Customer dashboard
+
+Set your PayPal return/landing URL to `https://<your-domain>/dashboard`. Subscribers sign in with their PayPal subscription ID and email to view account status, update their preferred streaming address, and generate fresh Wizarr invites on demand.
