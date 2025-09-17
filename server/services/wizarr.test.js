@@ -25,12 +25,12 @@ test('buildRequestUrl removes overlapping suffix segments', (t) => {
   const { buildRequestUrl } = require(wizarrModulePath);
 
   assert.equal(
-    buildRequestUrl('https://host/wizarr/api', 'api/invites'),
-    'https://host/wizarr/api/invites'
+    buildRequestUrl('https://host/wizarr/api', 'api/invitations'),
+    'https://host/wizarr/api/invitations'
   );
   assert.equal(
-    buildRequestUrl('https://host/wizarr/api', '/api/invites/create'),
-    'https://host/wizarr/api/invites/create'
+    buildRequestUrl('https://host/wizarr/api', '/api/invitations/create'),
+    'https://host/wizarr/api/invitations/create'
   );
   assert.equal(
     buildRequestUrl('https://host/wizarr/api/v1', 'api/v1/invite'),
@@ -87,9 +87,36 @@ test('createInvite normalizes overlapping api segments in request URL', async (t
   );
 
   assert.equal(fetchMock.calls.length, 1);
-  assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/invites');
+  assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/v1/invitations');
   assert.equal(result.inviteCode, 'abc123');
   assert.equal(result.inviteUrl, 'https://invite.test/abc123');
+});
+
+test('createInvite falls back to legacy invite endpoints when necessary', async (t) => {
+  const fetchMock = createFetchMock([
+    { status: 404, body: { detail: 'not here' } },
+    { status: 404, body: { detail: 'still missing' } },
+    { status: 201, body: { code: 'legacy', url: 'https://invite.test/legacy' } },
+  ]);
+
+  if (fetchCacheEntry) {
+    fetchCacheEntry.exports = fetchMock;
+  }
+  delete require.cache[wizarrModulePath];
+  const { createInvite } = require(wizarrModulePath);
+
+  t.after(restoreModules);
+
+  const result = await createInvite(
+    { email: 'user@example.com', note: 'hi', expiresInDays: 5 },
+    { baseUrl: 'https://host/wizarr/api', apiKey: 'key', defaultDurationDays: 7 }
+  );
+
+  assert.equal(fetchMock.calls.length, 3);
+  assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/v1/invitations');
+  assert.equal(fetchMock.calls[1].url, 'https://host/wizarr/api/v1/invites');
+  assert.equal(fetchMock.calls[2].url, 'https://host/wizarr/api/invites');
+  assert.equal(result.inviteCode, 'legacy');
 });
 
 test('verifyConnection uses normalized invite endpoint', async (t) => {
@@ -115,7 +142,7 @@ test('verifyConnection uses normalized invite endpoint', async (t) => {
   });
 
   assert.equal(fetchMock.calls.length, 1);
-  assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/invites');
+  assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/v1/invitations');
   assert.equal(result.status, 400);
 });
 
@@ -146,6 +173,6 @@ test('revokeInvite uses normalized invite endpoint', async (t) => {
   assert.equal(fetchMock.calls.length, 1);
   assert.equal(
     fetchMock.calls[0].url,
-    'https://host/wizarr/api/invites/invite-code'
+    'https://host/wizarr/api/v1/invitations/invite-code'
   );
 });
