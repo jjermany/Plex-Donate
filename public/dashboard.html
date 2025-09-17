@@ -324,7 +324,7 @@
           <span class="eyebrow">Plex Donate</span>
           <h1>Welcome back to your streaming hub</h1>
           <p class="muted">
-            Sign in with your PayPal subscription ID and email to manage invites,
+            Sign in with the email and password you set up to manage invites,
             keep your contact details up to date, and jump back into your
             libraries anytime.
           </p>
@@ -334,21 +334,11 @@
           <div>
             <span class="section-title">Customer sign-in</span>
             <p class="muted small">
-              You can find the subscription ID in your PayPal confirmation email
-              or billing agreement details.
+              Use the same credentials you created when following your invite
+              link from the welcome email.
             </p>
           </div>
           <form id="login-form">
-            <label>
-              <span>PayPal subscription ID</span>
-              <input
-                id="login-subscription"
-                type="text"
-                placeholder="I-XXXXXXXXXXXX"
-                autocomplete="off"
-                required
-              />
-            </label>
             <label>
               <span>Email on file</span>
               <input
@@ -356,6 +346,16 @@
                 type="email"
                 placeholder="you@example.com"
                 autocomplete="email"
+                required
+              />
+            </label>
+            <label>
+              <span>Password</span>
+              <input
+                id="login-password"
+                type="password"
+                placeholder="••••••••"
+                autocomplete="current-password"
                 required
               />
             </label>
@@ -517,7 +517,7 @@
       const loginForm = document.getElementById('login-form');
       const loginButton = document.getElementById('login-button');
       const loginStatus = document.getElementById('login-status');
-      const loginSubscription = document.getElementById('login-subscription');
+      const loginPassword = document.getElementById('login-password');
       const loginEmail = document.getElementById('login-email');
 
       const logoutButton = document.getElementById('logout-button');
@@ -720,6 +720,18 @@
 
       loginForm.addEventListener('submit', async (event) => {
         event.preventDefault();
+        const email = loginEmail.value.trim();
+        const password = loginPassword.value;
+
+        if (!email || !password) {
+          setStatusText(
+            loginStatus,
+            'Enter both your email and password to continue.',
+            'error'
+          );
+          return;
+        }
+
         setStatusText(loginStatus, 'Signing in…', 'info');
         loginButton.disabled = true;
         try {
@@ -727,8 +739,8 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              subscriptionId: loginSubscription.value.trim(),
-              email: loginEmail.value.trim(),
+              email,
+              password,
             }),
           });
           const payload = await response.json();
@@ -737,6 +749,7 @@
           }
           setStatusText(loginStatus, 'Signed in successfully!', 'success');
           renderDashboard(payload);
+          loginPassword.value = '';
         } catch (err) {
           setStatusText(loginStatus, err.message, 'error');
         } finally {
