@@ -104,10 +104,63 @@ async function getSubscription(subscriptionId) {
   return response.json();
 }
 
+async function createSubscription(planId, subscriber = {}, overrideSettings) {
+  if (!planId) {
+    throw new Error('PayPal plan ID is required to create a subscription');
+  }
+
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+
+  const payload = { plan_id: planId };
+  if (
+    subscriber &&
+    typeof subscriber === 'object' &&
+    Object.keys(subscriber).length > 0
+  ) {
+    payload.subscriber = subscriber;
+  }
+
+  const response = await fetch(`${paypal.apiBase}/v1/billing/subscriptions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to create PayPal subscription: ${text}`);
+  }
+
+  const data = await response.json();
+  const approvalLink = Array.isArray(data.links)
+    ? data.links.find((link) => link && link.rel === 'approve')
+    : null;
+
+  if (!approvalLink || !approvalLink.href) {
+    throw new Error(
+      'PayPal subscription response did not include an approval URL'
+    );
+  }
+
+  if (!data.id) {
+    throw new Error('PayPal subscription response did not include an ID');
+  }
+
+  return {
+    subscriptionId: data.id,
+    approvalUrl: approvalLink.href,
+  };
+}
+
 module.exports = {
   getPaypalConfig,
   getAccessToken,
   verifyWebhookSignature,
   getSubscription,
   verifyConnection,
+  createSubscription,
 };

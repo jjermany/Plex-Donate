@@ -10,6 +10,7 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
+const paypalService = require('../services/paypal');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -52,6 +53,50 @@ function buildShareResponse({ shareLink, donor, invite }) {
   };
 }
 
+function getProvidedSessionToken(req) {
+  const authorizationHeader = (req.get('authorization') || '').trim();
+  let providedSessionToken = '';
+  if (authorizationHeader.toLowerCase().startsWith('bearer ')) {
+    providedSessionToken = authorizationHeader.slice(7).trim();
+  }
+  if (!providedSessionToken) {
+    providedSessionToken = (req.get('x-share-session') || '').trim();
+  }
+  if (
+    !providedSessionToken &&
+    req.body &&
+    typeof req.body.sessionToken === 'string'
+  ) {
+    providedSessionToken = req.body.sessionToken.trim();
+  }
+  return providedSessionToken;
+}
+
+function buildSubscriberFromDonor(donor) {
+  if (!donor || typeof donor !== 'object') {
+    return {};
+  }
+
+  const subscriber = {};
+  const email = (donor.email || '').trim();
+  if (email) {
+    subscriber.email_address = email;
+  }
+
+  const name = (donor.name || '').trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length > 0) {
+      subscriber.name = { given_name: parts[0] };
+      if (parts.length > 1) {
+        subscriber.name.surname = parts.slice(1).join(' ');
+      }
+    }
+  }
+
+  return subscriber;
+}
+
 router.get(
   '/:token',
   asyncHandler(async (req, res) => {
@@ -82,6 +127,73 @@ router.get(
 );
 
 router.post(
+  '/:token/subscription',
+  asyncHandler(async (req, res) => {
+    const shareLink = getShareLinkByToken(req.params.token);
+    if (!shareLink) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    const donor = getDonorById(shareLink.donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Share link is no longer valid' });
+    }
+
+    const providedSessionToken = getProvidedSessionToken(req);
+    if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
+      return res
+        .status(401)
+        .json({ error: 'Invalid or missing share session token' });
+    }
+
+    const paypal = settingsStore.getPaypalSettings();
+    if (!paypal.planId) {
+      return res
+        .status(400)
+        .json({ error: 'Donation plan is not configured. Contact the server admin for help.' });
+    }
+
+    const subscriber = buildSubscriberFromDonor(donor);
+    if (!subscriber.email_address) {
+      return res.status(400).json({
+        error: 'Email address is required before starting a subscription.',
+      });
+    }
+
+    let subscription;
+    try {
+      subscription = await paypalService.createSubscription(
+        paypal.planId,
+        subscriber
+      );
+    } catch (err) {
+      logger.warn('Failed to create PayPal subscription via share link', err.message);
+      return res.status(502).json({
+        error: 'Failed to initiate PayPal subscription',
+        details: err.message,
+      });
+    }
+
+    logEvent('share.subscription.created', {
+      donorId: donor.id,
+      shareLinkId: shareLink.id,
+      planId: paypal.planId,
+      subscriptionId: subscription.subscriptionId,
+      approvalUrl: subscription.approvalUrl,
+      subscriberEmail: subscriber.email_address,
+    });
+
+    return res.json({
+      subscription: {
+        id: subscription.subscriptionId,
+        subscriptionId: subscription.subscriptionId,
+        approvalUrl: subscription.approvalUrl,
+      },
+    });
+  })
+);
+
+router.post(
   '/:token',
   asyncHandler(async (req, res) => {
     const shareLink = getShareLinkByToken(req.params.token);
@@ -94,20 +206,7 @@ router.post(
       return res.status(404).json({ error: 'Share link is no longer valid' });
     }
 
-    const authorizationHeader = (req.get('authorization') || '').trim();
-    let providedSessionToken = '';
-    if (authorizationHeader.toLowerCase().startsWith('bearer ')) {
-      providedSessionToken = authorizationHeader.slice(7).trim();
-    }
-    if (!providedSessionToken) {
-      providedSessionToken = (req.get('x-share-session') || '').trim();
-    }
-    if (!providedSessionToken) {
-      providedSessionToken =
-        req.body && typeof req.body.sessionToken === 'string'
-          ? req.body.sessionToken.trim()
-          : '';
-    }
+    const providedSessionToken = getProvidedSessionToken(req);
 
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
       return res.status(401).json({ error: 'Invalid or missing share session token' });
