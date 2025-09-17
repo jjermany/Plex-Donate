@@ -12,6 +12,10 @@ const {
   markPlexRevoked,
   createOrUpdateShareLink,
   getShareLinkByDonorId,
+  createProspect,
+  updateProspect,
+  getProspectById,
+  getShareLinkByProspectId,
   logEvent,
   getRecentEvents,
 } = require('../db');
@@ -384,6 +388,69 @@ router.post(
     const url = `${origin}/share/${shareLink.token}`;
 
     return res.json({
+      shareLink: { ...shareLink, url },
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/share-links/prospect',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const payload = req.body || {};
+    const note =
+      payload && typeof payload.note === 'string' ? payload.note.trim() : '';
+    const email =
+      payload && typeof payload.email === 'string' ? payload.email.trim() : '';
+    const name =
+      payload && typeof payload.name === 'string' ? payload.name.trim() : '';
+    const prospectIdRaw = payload && payload.prospectId;
+    const regenerate = Boolean(payload && payload.regenerate);
+
+    let prospect = null;
+    const parsedProspectId = Number.parseInt(prospectIdRaw, 10);
+    if (Number.isFinite(parsedProspectId) && parsedProspectId > 0) {
+      const existing = getProspectById(parsedProspectId);
+      if (!existing) {
+        return res.status(404).json({ error: 'Prospect not found' });
+      }
+      prospect = updateProspect(parsedProspectId, { email, name, note });
+    }
+
+    if (!prospect) {
+      prospect = createProspect({ email, name, note });
+    }
+
+    let shareLink = getShareLinkByProspectId(prospect.id);
+    const hadExistingLink = Boolean(shareLink);
+
+    if (!shareLink || regenerate) {
+      const token = nanoid(36);
+      const sessionToken = nanoid(48);
+      shareLink = createOrUpdateShareLink({
+        prospectId: prospect.id,
+        token,
+        sessionToken,
+      });
+      const wasRegenerated = hadExistingLink && regenerate;
+      logEvent('share_link.generated', {
+        prospectId: prospect.id,
+        shareLinkId: shareLink.id,
+        regenerated: wasRegenerated,
+      });
+      logger.info('Created shareable invite link for prospect', {
+        prospectId: prospect.id,
+        shareLinkId: shareLink.id,
+        regenerated: wasRegenerated,
+      });
+    }
+
+    const origin = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+    const url = `${origin}/share/${shareLink.token}`;
+
+    return res.json({
+      prospect,
       shareLink: { ...shareLink, url },
       csrfToken: res.locals.csrfToken,
     });
