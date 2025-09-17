@@ -142,6 +142,165 @@ function getPortalUrl(wizarr) {
   }
 }
 
+function normalizeServerId(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const stringValue = String(value).trim();
+  if (!stringValue) {
+    return null;
+  }
+
+  const numericValue = Number(stringValue);
+  if (Number.isFinite(numericValue)) {
+    return numericValue;
+  }
+
+  return stringValue;
+}
+
+function parseServerIds(value) {
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+
+  const ids = [];
+  const seen = new Set();
+
+  const addId = (candidate) => {
+    const normalized = normalizeServerId(candidate);
+    if (normalized === null || normalized === undefined) {
+      return;
+    }
+    const key = typeof normalized === 'number' ? `#${normalized}` : `str:${normalized}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    ids.push(normalized);
+  };
+
+  if (Array.isArray(value)) {
+    value.forEach(addId);
+    return ids;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return ids;
+    }
+
+    if (/^\[.*\]$/.test(trimmed) || /^\{.*\}$/.test(trimmed)) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parseServerIds(parsed);
+      } catch (err) {
+        // fall through to delimiter parsing when JSON parsing fails
+      }
+    }
+
+    trimmed
+      .split(/[,\s]+/)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach(addId);
+
+    return ids;
+  }
+
+  addId(value);
+  return ids;
+}
+
+function extractServerIds(config) {
+  if (!config || typeof config !== 'object') {
+    return [];
+  }
+
+  const candidates = [
+    config.server_ids,
+    config.serverIds,
+    config.defaultServerIds,
+    config.default_server_ids,
+    config.defaultServerId,
+    config.serverId,
+  ];
+
+  for (const candidate of candidates) {
+    const ids = parseServerIds(candidate);
+    if (ids.length > 0) {
+      return ids;
+    }
+  }
+
+  return [];
+}
+
+function extractAvailableServers(details) {
+  if (!details || typeof details !== 'object') {
+    return [];
+  }
+
+  const serversRaw =
+    details.available_servers || details.availableServers || details.servers || [];
+  if (!Array.isArray(serversRaw)) {
+    return [];
+  }
+
+  return serversRaw
+    .map((server) => {
+      if (!server || typeof server !== 'object') {
+        return null;
+      }
+      const id =
+        normalizeServerId(
+          server.id ?? server.server_id ?? server.serverId ?? server.serverID
+        );
+      if (id === null || id === undefined) {
+        return null;
+      }
+      return {
+        id,
+        name: server.name || server.friendly_name || server.friendlyName || '',
+        type: server.server_type || server.serverType || server.type || '',
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatServerOptions(servers) {
+  if (!Array.isArray(servers) || servers.length === 0) {
+    return '';
+  }
+
+  return servers
+    .map((server) => {
+      if (!server) {
+        return '';
+      }
+      const name = server.name ? String(server.name) : '';
+      const type = server.type ? String(server.type) : '';
+      const labelParts = [];
+      if (name) {
+        labelParts.push(name);
+      }
+      if (type) {
+        labelParts.push(type.toUpperCase());
+      }
+      const label = labelParts.length > 0 ? labelParts.join(' • ') : '';
+      const idLabel = typeof server.id === 'number' ? `#${server.id}` : String(server.id);
+      return label ? `${label} (${idLabel})` : idLabel;
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
 function buildRequestUrl(baseUrlString, path) {
   const sanitizedBase = (baseUrlString || '').replace(/\/+$/, '');
   const baseUrl = new URL(`${sanitizedBase}/`);
@@ -181,21 +340,80 @@ function buildRequestUrl(baseUrlString, path) {
 
 async function createInvite({ email, note, expiresInDays }, overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
-  const payload = {
+  const configuredServerIds = extractServerIds(wizarr);
+  let requestBody = {
     email,
     note: note || '',
     expires_in_days: expiresInDays || wizarr.defaultDurationDays || 7,
   };
 
-  const { response, text } = await requestWithFallback({
-    wizarr,
-    method: 'POST',
-    pathCandidates: INVITE_CREATION_ENDPOINTS,
-    body: payload,
-  });
+  if (configuredServerIds.length > 0) {
+    requestBody = { ...requestBody, server_ids: configuredServerIds };
+  }
+
+  const sendRequest = (body) =>
+    requestWithFallback({
+      wizarr,
+      method: 'POST',
+      pathCandidates: INVITE_CREATION_ENDPOINTS,
+      body,
+    });
+
+  let attempt = await sendRequest(requestBody);
+  let { response } = attempt;
+  let { text } = attempt;
+  let details = response.ok ? null : safeParseJson(text);
 
   if (!response.ok) {
-    throw new Error(`Failed to create Wizarr invite: ${text}`);
+    const availableServers = extractAvailableServers(details);
+
+    if (
+      configuredServerIds.length === 0 &&
+      (!Array.isArray(requestBody.server_ids) || requestBody.server_ids.length === 0) &&
+      (response.status === 400 || response.status === 422)
+    ) {
+      if (availableServers.length === 1) {
+        const fallbackId = availableServers[0].id;
+        if (fallbackId !== undefined && fallbackId !== null) {
+          requestBody = { ...requestBody, server_ids: [fallbackId] };
+          attempt = await sendRequest(requestBody);
+          response = attempt.response;
+          text = attempt.text;
+          details = response.ok ? null : safeParseJson(text);
+        }
+      } else if (availableServers.length > 1) {
+        const optionsLabel = formatServerOptions(availableServers);
+        const messageParts = [
+          'Wizarr requires selecting a server before creating invites.',
+          'Update the Wizarr settings with default server IDs.',
+        ];
+        if (optionsLabel) {
+          messageParts.push(`Available servers: ${optionsLabel}.`);
+        }
+        const error = new Error(messageParts.join(' '));
+        error.status = response.status;
+        error.details = details;
+        error.availableServers = availableServers;
+        throw error;
+      }
+    }
+
+    if (!response.ok) {
+      const optionsLabel = formatServerOptions(availableServers);
+      const messageParts = [];
+      if (details && typeof details === 'object' && details.error) {
+        messageParts.push(`Failed to create Wizarr invite: ${details.error}`);
+      } else {
+        messageParts.push(`Failed to create Wizarr invite: ${text}`);
+      }
+      if (optionsLabel) {
+        messageParts.push(`Available servers: ${optionsLabel}.`);
+      }
+      const error = new Error(messageParts.join(' '));
+      error.status = response.status;
+      error.details = details;
+      throw error;
+    }
   }
 
   const data = safeParseJson(text);
@@ -232,11 +450,16 @@ async function revokeInvite(inviteCode) {
 
 async function verifyConnection(overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
+  const serverIds = extractServerIds(wizarr);
+  const body = { email: '', note: 'Connection test', expires_in_days: 1 };
+  if (serverIds.length > 0) {
+    body.server_ids = serverIds;
+  }
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
     pathCandidates: INVITE_CREATION_ENDPOINTS,
-    body: { email: '', note: 'Connection test', expires_in_days: 1 },
+    body,
   });
 
   if (response.status === 401 || response.status === 403) {

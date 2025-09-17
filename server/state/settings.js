@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
     baseUrl: '',
     apiKey: '',
     defaultDurationDays: 7,
+    defaultServerIds: '',
   },
   smtp: {
     host: '',

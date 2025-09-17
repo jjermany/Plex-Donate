@@ -647,6 +647,7 @@
       const shareLastUsedEl = document.getElementById('share-last-used');
       const subscriptionActions = document.getElementById('subscription-actions');
       const subscriptionButton = document.getElementById('subscription-button');
+      const subscriptionHint = document.getElementById('subscription-hint');
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
@@ -965,7 +966,6 @@
           shareLastUsedEl.classList.add('hidden');
         }
 
-        const paypal = data.paypal || {};
         const amount = Number(paypal.subscriptionPrice);
         if (Number.isFinite(amount) && amount > 0) {
           priceRow.textContent = `Recurring amount: ${formatPrice(amount, paypal.currency)}`;
