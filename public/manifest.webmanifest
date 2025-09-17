@@ -1,0 +1,22 @@
+{
+  "name": "Plex Donate",
+  "short_name": "Plex Donate",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "description": "Manage Plex donations and share invites with supporters.",
+  "icons": [
+    {
+      "src": "/icons/icon-round-android.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icons/icon-square-ios.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}

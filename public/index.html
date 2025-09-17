@@ -1,111 +1,256 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f8fafc" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Plex Donate Admin</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('plexDonateTheme');
+          const prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : prefersDark
+                ? 'dark'
+                : 'light';
+          document.documentElement.dataset.theme = theme;
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute('content', theme === 'dark' ? '#0f172a' : '#f8fafc');
+          }
+        } catch (err) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: light;
         font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: #f8fafc;
-        color: #0f172a;
+        background: var(--page-background);
+        color: var(--text-primary);
+        --page-background: #f8fafc;
+        --background-gradient: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+        --text-primary: #0f172a;
+        --text-muted: #475569;
+        --text-muted-soft: #64748b;
+        --panel-background: rgba(255, 255, 255, 0.88);
+        --panel-border-color: rgba(148, 163, 184, 0.18);
+        --panel-shadow: 0 25px 50px -12px rgba(30, 64, 175, 0.2);
+        --input-border: #c7d2fe;
+        --input-background: rgba(255, 255, 255, 0.7);
+        --table-border: rgba(148, 163, 184, 0.3);
+        --table-hover: rgba(99, 102, 241, 0.08);
+        --settings-divider: rgba(148, 163, 184, 0.25);
+        --events-time-color: #64748b;
+        --event-payload-bg: #f1f5f9;
+        --badge-bg: rgba(79, 70, 229, 0.12);
+        --badge-color: #4f46e5;
+        --badge-note-bg: rgba(99, 102, 241, 0.16);
+        --badge-note-color: #4338ca;
+        --badge-revoked-bg: rgba(248, 113, 113, 0.15);
+        --badge-revoked-color: #b91c1c;
+        --badge-visited-bg: rgba(34, 197, 94, 0.12);
+        --badge-visited-color: #15803d;
+        --status-active-bg: rgba(34, 197, 94, 0.15);
+        --status-active-color: #15803d;
+        --status-pending-bg: rgba(59, 130, 246, 0.15);
+        --status-pending-color: #1d4ed8;
+        --status-danger-bg: rgba(248, 113, 113, 0.18);
+        --status-danger-color: #b91c1c;
+        --status-message-color: #b91c1c;
+        --form-status: #64748b;
+        --form-status-error: #b91c1c;
+        --form-status-success: #15803d;
+        --button-primary-bg: #6366f1;
+        --button-primary-color: #ffffff;
+        --button-primary-shadow: 0 6px 12px rgba(79, 70, 229, 0.2);
+        --button-secondary-bg: #e2e8f0;
+        --button-secondary-color: #1e293b;
+        --button-secondary-shadow: 0 6px 12px rgba(148, 163, 184, 0.35);
+        --button-danger-bg: #f87171;
+        --button-danger-color: #ffffff;
+        --button-danger-shadow: 0 6px 12px rgba(248, 113, 113, 0.35);
       }
+
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --page-background: #0f172a;
+        --background-gradient: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+        --text-primary: #e2e8f0;
+        --text-muted: #cbd5f5;
+        --text-muted-soft: #94a3b8;
+        --panel-background: rgba(15, 23, 42, 0.9);
+        --panel-border-color: rgba(71, 85, 105, 0.55);
+        --panel-shadow: 0 25px 50px -16px rgba(15, 23, 42, 0.6);
+        --input-border: rgba(129, 140, 248, 0.4);
+        --input-background: rgba(15, 23, 42, 0.75);
+        --table-border: rgba(71, 85, 105, 0.6);
+        --table-hover: rgba(79, 70, 229, 0.2);
+        --settings-divider: rgba(71, 85, 105, 0.6);
+        --events-time-color: #94a3b8;
+        --event-payload-bg: rgba(30, 41, 59, 0.75);
+        --badge-bg: rgba(165, 180, 252, 0.18);
+        --badge-color: #c7d2fe;
+        --badge-note-bg: rgba(99, 102, 241, 0.28);
+        --badge-note-color: #c7d2fe;
+        --badge-revoked-bg: rgba(248, 113, 113, 0.28);
+        --badge-revoked-color: #fecdd3;
+        --badge-visited-bg: rgba(34, 197, 94, 0.28);
+        --badge-visited-color: #bbf7d0;
+        --status-active-bg: rgba(34, 197, 94, 0.32);
+        --status-active-color: #bbf7d0;
+        --status-pending-bg: rgba(59, 130, 246, 0.28);
+        --status-pending-color: #bfdbfe;
+        --status-danger-bg: rgba(248, 113, 113, 0.32);
+        --status-danger-color: #fecdd3;
+        --status-message-color: #fca5a5;
+        --form-status: #94a3b8;
+        --form-status-error: #fca5a5;
+        --form-status-success: #bbf7d0;
+        --button-primary-bg: #4f46e5;
+        --button-primary-shadow: 0 6px 12px rgba(99, 102, 241, 0.4);
+        --button-secondary-bg: rgba(71, 85, 105, 0.7);
+        --button-secondary-color: #e2e8f0;
+        --button-secondary-shadow: 0 6px 12px rgba(15, 23, 42, 0.5);
+        --button-danger-bg: #ef4444;
+        --button-danger-color: #ffffff;
+        --button-danger-shadow: 0 6px 12px rgba(239, 68, 68, 0.45);
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
-        background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+        background: var(--background-gradient);
+        background-color: var(--page-background);
+        color: var(--text-primary);
+        transition: background 0.3s ease, color 0.3s ease;
       }
+
       .container {
         max-width: 1080px;
         margin: 0 auto;
         padding: 32px 24px 64px;
       }
+
       header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 32px;
+        gap: 16px;
       }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
       h1 {
         font-size: clamp(1.8rem, 2.2vw, 2.4rem);
         margin: 0;
       }
+
       button {
         cursor: pointer;
         border: none;
         border-radius: 8px;
         font-weight: 600;
         padding: 10px 18px;
-        background: #6366f1;
-        color: white;
+        background: var(--button-primary-bg);
+        color: var(--button-primary-color);
         transition: transform 0.1s ease, box-shadow 0.1s ease;
       }
-      button:hover {
+
+      button:hover:not(:disabled) {
         transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(79, 70, 229, 0.2);
+        box-shadow: var(--button-primary-shadow);
       }
+
       button.secondary {
-        background: #e2e8f0;
-        color: #1e293b;
+        background: var(--button-secondary-bg);
+        color: var(--button-secondary-color);
       }
-      button.secondary:hover {
-        box-shadow: 0 6px 12px rgba(148, 163, 184, 0.35);
+
+      button.secondary:hover:not(:disabled) {
+        box-shadow: var(--button-secondary-shadow);
       }
+
       button.danger {
-        background: #f87171;
+        background: var(--button-danger-bg);
+        color: var(--button-danger-color);
       }
-      button.danger:hover {
-        box-shadow: 0 6px 12px rgba(248, 113, 113, 0.35);
+
+      button.danger:hover:not(:disabled) {
+        box-shadow: var(--button-danger-shadow);
       }
+
       button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
         transform: none;
         box-shadow: none;
       }
+
       .panel {
-        background: rgba(255, 255, 255, 0.88);
-        backdrop-filter: blur(14px);
+        background: var(--panel-background);
         border-radius: 16px;
         padding: 28px;
-        box-shadow: 0 25px 50px -12px rgba(30, 64, 175, 0.2);
+        box-shadow: var(--panel-shadow);
         margin-bottom: 24px;
+        border: 1px solid var(--panel-border-color);
+        backdrop-filter: blur(14px);
       }
+
       label {
         display: block;
         font-weight: 600;
         margin-bottom: 8px;
       }
+
       input[type='password'] {
         width: 100%;
         border-radius: 8px;
-        border: 1px solid #c7d2fe;
+        border: 1px solid var(--input-border);
         padding: 10px 12px;
         font-size: 1rem;
         box-sizing: border-box;
+        background: var(--input-background);
+        color: var(--text-primary);
       }
+
       table {
         width: 100%;
         border-collapse: collapse;
         margin-top: 16px;
       }
+
       th,
       td {
         text-align: left;
         padding: 10px 12px;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.3);
+        border-bottom: 1px solid var(--table-border);
         vertical-align: top;
       }
+
       th {
         font-size: 0.85rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
-        color: #475569;
+        color: var(--text-muted);
       }
+
       tbody tr:hover {
-        background-color: rgba(99, 102, 241, 0.08);
+        background-color: var(--table-hover);
       }
+
       .status-pill {
         display: inline-flex;
         align-items: center;
@@ -114,43 +259,53 @@
         border-radius: 999px;
         padding: 4px 10px;
         font-weight: 600;
+        text-transform: capitalize;
       }
+
       .status-pill[data-status='active'] {
-        background: rgba(34, 197, 94, 0.15);
-        color: #15803d;
+        background: var(--status-active-bg);
+        color: var(--status-active-color);
       }
+
       .status-pill[data-status='pending'] {
-        background: rgba(59, 130, 246, 0.15);
-        color: #1d4ed8;
+        background: var(--status-pending-bg);
+        color: var(--status-pending-color);
       }
+
       .status-pill[data-status='cancelled'],
       .status-pill[data-status='canceled'],
       .status-pill[data-status='suspended'] {
-        background: rgba(248, 113, 113, 0.18);
-        color: #b91c1c;
+        background: var(--status-danger-bg);
+        color: var(--status-danger-color);
       }
+
       .actions {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
       }
+
       #status-message {
         margin-top: 12px;
-        color: #b91c1c;
+        color: var(--status-message-color);
         font-weight: 500;
       }
+
       .hidden {
         display: none;
       }
+
       .grid {
         display: grid;
         gap: 24px;
       }
+
       @media (min-width: 960px) {
         .grid {
           grid-template-columns: 2fr 1fr;
         }
       }
+
       .events-list {
         list-style: none;
         padding: 0;
@@ -158,32 +313,46 @@
         max-height: 420px;
         overflow-y: auto;
       }
+
       .events-list li {
         padding: 10px 0;
-        border-bottom: 1px dashed rgba(148, 163, 184, 0.4);
+        border-bottom: 1px dashed var(--table-border);
         font-size: 0.9rem;
       }
+
       .events-list time {
         display: block;
         font-size: 0.78rem;
-        color: #64748b;
+        color: var(--events-time-color);
         margin-bottom: 4px;
       }
+
+      .event-payload {
+        white-space: pre-wrap;
+        background: var(--event-payload-bg);
+        padding: 8px;
+        border-radius: 8px;
+        margin-top: 6px;
+      }
+
       .settings-form {
         margin-top: 24px;
         padding-top: 16px;
-        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        border-top: 1px solid var(--settings-divider);
         display: grid;
         gap: 12px;
       }
+
       .settings-form:first-of-type {
         margin-top: 0;
         padding-top: 0;
         border-top: none;
       }
+
       .settings-form h3 {
         margin: 0;
       }
+
       .settings-form label {
         display: flex;
         flex-direction: column;
@@ -191,71 +360,112 @@
         font-weight: 600;
         margin-bottom: 0;
       }
+
       .settings-form input[type='text'],
       .settings-form input[type='password'],
       .settings-form input[type='url'],
       .settings-form input[type='number'],
       .settings-form input[type='email'] {
         border-radius: 8px;
-        border: 1px solid #c7d2fe;
+        border: 1px solid var(--input-border);
         padding: 10px 12px;
         font-size: 0.95rem;
         box-sizing: border-box;
+        background: var(--input-background);
+        color: var(--text-primary);
       }
+
       .settings-form label span.help {
         font-weight: 500;
-        color: #64748b;
+        color: var(--text-muted-soft);
         font-size: 0.8rem;
       }
+
       .field-grid {
         display: grid;
         gap: 12px;
       }
+
       @media (min-width: 720px) {
         .field-grid {
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         }
       }
+
       .checkbox-row {
         display: flex;
         align-items: center;
         gap: 8px;
         font-weight: 600;
       }
+
       .checkbox-row input[type='checkbox'] {
         width: 18px;
         height: 18px;
       }
+
       .form-status {
         min-height: 18px;
         font-size: 0.85rem;
-        color: #64748b;
+        color: var(--form-status);
       }
+
       .form-status[data-state='error'] {
-        color: #b91c1c;
+        color: var(--form-status-error);
       }
+
       .form-status[data-state='success'] {
-        color: #15803d;
+        color: var(--form-status-success);
       }
+
       .form-actions {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 8px;
       }
+
       @media (min-width: 560px) {
         .form-actions {
           flex-direction: row;
         }
       }
+
       .badge {
-        background: rgba(79, 70, 229, 0.12);
-        color: #4f46e5;
+        background: var(--badge-bg);
+        color: var(--badge-color);
         padding: 3px 8px;
         border-radius: 6px;
         font-size: 0.75rem;
         margin-right: 6px;
         font-weight: 600;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .badge-note {
+        background: var(--badge-note-bg);
+        color: var(--badge-note-color);
+      }
+
+      .badge-revoked {
+        background: var(--badge-revoked-bg);
+        color: var(--badge-revoked-color);
+      }
+
+      .badge-visited {
+        background: var(--badge-visited-bg);
+        color: var(--badge-visited-color);
+      }
+
+      .muted-text {
+        color: var(--text-muted);
+      }
+
+      .subtle-text {
+        color: var(--text-muted-soft);
+        font-size: 0.85rem;
       }
     </style>
   </head>
@@ -263,7 +473,12 @@
     <div class="container">
       <header>
         <h1>Plex Donate Control Center</h1>
-        <button id="logout-button" class="hidden" type="button">Log out</button>
+        <div class="header-actions">
+          <button id="theme-toggle" type="button" class="secondary" aria-pressed="false">
+            Use dark theme
+          </button>
+          <button id="logout-button" class="hidden" type="button">Log out</button>
+        </div>
       </header>
 
       <section id="login-panel" class="panel">
@@ -283,7 +498,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
               <div>
                 <h2 style="margin:0 0 4px;">Active subscribers</h2>
-                <p style="margin:0;color:#475569;">Manage Wizarr invites and check the latest payments.</p>
+                <p class="muted-text" style="margin:0;">Manage Wizarr invites and check the latest payments.</p>
               </div>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
             </div>
@@ -310,7 +525,7 @@
         </div>
         <section class="panel" id="settings-panel">
           <h2 style="margin-top:0;">Integration settings</h2>
-          <p style="margin:0 0 16px;color:#475569;">Keep service credentials in one place so you can avoid editing environment files.</p>
+          <p class="muted-text" style="margin:0 0 16px;">Keep service credentials in one place so you can avoid editing environment files.</p>
 
           <form class="settings-form" data-group="paypal">
             <h3>PayPal</h3>
@@ -444,7 +659,8 @@
         <td>
           <div class="actions">
             <button data-action="invite">Generate invite</button>
-            <button data-action="share" class="secondary">Copy share link</button>
+            <button data-action="share" class="secondary">Copy invite page link</button>
+            <button data-action="share-generate" class="secondary">Generate invite page link</button>
             <button data-action="resend" class="secondary">Resend email</button>
             <button data-action="revoke" class="danger">Revoke</button>
           </div>
@@ -464,6 +680,10 @@
       const settingsForms = settingsPanel
         ? Array.from(settingsPanel.querySelectorAll('.settings-form'))
         : [];
+      const themeToggleButton = document.getElementById('theme-toggle');
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      const rootElement = document.documentElement;
+      const THEME_STORAGE_KEY = 'plexDonateTheme';
 
       let csrfToken = null;
       let state = {
@@ -474,6 +694,52 @@
       };
 
       const statusClearTimers = new WeakMap();
+
+      function storeThemePreference(theme) {
+        try {
+          localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (err) {
+          /* noop */
+        }
+      }
+
+      function applyTheme(theme, persist = true) {
+        const normalized = theme === 'dark' ? 'dark' : 'light';
+        rootElement.dataset.theme = normalized;
+        if (persist) {
+          storeThemePreference(normalized);
+        }
+        if (themeMeta) {
+          themeMeta.setAttribute('content', normalized === 'dark' ? '#0f172a' : '#f8fafc');
+        }
+        if (themeToggleButton) {
+          themeToggleButton.textContent =
+            normalized === 'dark' ? 'Use light theme' : 'Use dark theme';
+          themeToggleButton.setAttribute('aria-pressed', normalized === 'dark' ? 'true' : 'false');
+        }
+      }
+
+      applyTheme(rootElement.dataset.theme || 'light', false);
+
+      if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+          const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          applyTheme(nextTheme);
+        });
+      }
+
+      function registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) {
+          return;
+        }
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('/service-worker.js')
+            .catch((err) => {
+              console.warn('Service worker registration failed', err);
+            });
+        });
+      }
 
       function escapeHtml(value) {
         return String(value)
@@ -629,7 +895,7 @@
           const cell = document.createElement('td');
           cell.colSpan = 5;
           cell.textContent = 'No subscribers yet.';
-          cell.style.color = '#64748b';
+          cell.style.color = 'var(--text-muted-soft)';
           row.appendChild(cell);
           subscribersTable.appendChild(row);
           return;
@@ -645,7 +911,7 @@
           const lastPaymentCell = clone.querySelector('.col-last-payment');
           const inviteCell = clone.querySelector('.col-invite');
 
-          subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:#64748b;font-size:0.85rem;">${donor.email || '—'}<br/>Sub ID: ${donor.subscriptionId}</span>`;
+          subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:var(--text-muted-soft);font-size:0.85rem;">${donor.email || '—'}<br/>Sub ID: ${donor.subscriptionId}</span>`;
 
           const status = (donor.status || 'pending').toLowerCase();
           statusPill.dataset.status = status;
@@ -666,7 +932,7 @@
             }
             if (invite.recipientEmail) {
               inviteParts.push(
-                `<span class="badge" style="background:rgba(99,102,241,0.16);color:#4338ca;">For ${escapeHtml(
+                `<span class="badge badge-note">For ${escapeHtml(
                   invite.recipientEmail
                 )}</span>`
               );
@@ -677,7 +943,7 @@
             }
             if (invite.revokedAt) {
               const date = new Date(invite.revokedAt);
-              inviteParts.push(`<span class="badge" style="background:rgba(248,113,113,0.15);color:#b91c1c;">Revoked ${date.toLocaleDateString()}</span>`);
+              inviteParts.push(`<span class="badge badge-revoked">Revoked ${date.toLocaleDateString()}</span>`);
             }
           }
 
@@ -690,7 +956,7 @@
             if (donor.shareLink.lastUsedAt) {
               const usedDate = new Date(donor.shareLink.lastUsedAt);
               inviteParts.push(
-                `<span class="badge" style="background:rgba(34,197,94,0.12);color:#15803d;">Visited ${usedDate.toLocaleDateString()}</span>`
+                `<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`
               );
             }
           }
@@ -730,7 +996,7 @@
               return event.payload;
             }
           })();
-          li.innerHTML = `<time>${new Date(event.createdAt).toLocaleString()}</time><strong>${event.eventType}</strong><pre style="white-space:pre-wrap;background:#f1f5f9;padding:8px;border-radius:8px;margin-top:6px;">${payload}</pre>`;
+          li.innerHTML = `<time>${new Date(event.createdAt).toLocaleString()}</time><strong>${event.eventType}</strong><pre class="event-payload">${payload}</pre>`;
           eventsList.appendChild(li);
         });
       }
@@ -888,8 +1154,8 @@
         try {
           if (action === 'invite') {
             await api(`/api/admin/subscribers/${donorId}/invite`, { method: 'POST' });
-          } else if (action === 'share') {
-            const regenerate = event.shiftKey;
+          } else if (action === 'share' || action === 'share-generate') {
+            const regenerate = action === 'share-generate' ? true : event.shiftKey;
             const options = { method: 'POST' };
             if (regenerate) {
               options.body = { regenerate: true };
@@ -904,7 +1170,7 @@
               shareLink.url ||
               (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
             if (!shareUrl) {
-              throw new Error('Unable to determine share link URL');
+              throw new Error('Unable to determine invite page URL');
             }
             let copied = false;
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -917,15 +1183,18 @@
             }
             if (copied) {
               alert(
-                regenerate
-                  ? 'Share link regenerated and copied to clipboard.'
-                  : 'Share link copied to clipboard.'
+                action === 'share-generate'
+                  ? 'New invite page link generated and copied to clipboard.'
+                  : regenerate
+                    ? 'Invite page link regenerated and copied to clipboard.'
+                    : 'Invite page link copied to clipboard.'
               );
             } else {
-              window.prompt(
-                'Share this link with the subscriber:',
-                shareUrl
-              );
+              const promptMessage =
+                action === 'share-generate'
+                  ? 'New invite page link generated. Share this link with the subscriber:'
+                  : 'Share this invite page link with the subscriber:';
+              window.prompt(promptMessage, shareUrl);
             }
           } else if (action === 'resend') {
             await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
@@ -943,6 +1212,7 @@
         }
       });
 
+      registerServiceWorker();
       checkSession();
     </script>
   </body>

@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050818" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>Plex Donate Invite</title>
     <style>
       :root {
@@ -550,6 +552,19 @@
       const inviteCreatedEl = document.getElementById('invite-created');
       const inviteEmailEl = document.getElementById('invite-email');
 
+      function registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) {
+          return;
+        }
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('/service-worker.js')
+            .catch((err) => {
+              console.warn('Service worker registration failed', err);
+            });
+        });
+      }
+
       function showLoading() {
         loadingPanel.classList.remove('hidden');
         errorPanel.classList.add('hidden');
@@ -846,6 +861,7 @@
         }
       });
 
+      registerServiceWorker();
       loadShareData();
     </script>
   </body>
