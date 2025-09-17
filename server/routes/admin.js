@@ -171,6 +171,122 @@ router.post(
   })
 );
 
+router.get(
+  '/settings/paypal/plan',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const paypalSettings = settingsStore.getPaypalSettings();
+    if (!paypalSettings.planId) {
+      return res.json({
+        plan: null,
+        product: null,
+        manageUrl: '',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    try {
+      const plan = await paypalService.getPlan(paypalSettings.planId, paypalSettings);
+      let product = null;
+      if (plan && plan.product_id) {
+        try {
+          product = await paypalService.getProduct(plan.product_id, paypalSettings);
+        } catch (err) {
+          if (!err || err.status !== 404) {
+            throw err;
+          }
+        }
+      }
+
+      const manageUrl = paypalService.getPlanManagementUrl(
+        paypalSettings.planId,
+        paypalSettings
+      );
+
+      res.json({
+        plan,
+        product,
+        manageUrl,
+        csrfToken: res.locals.csrfToken,
+      });
+    } catch (err) {
+      logger.warn(
+        `Failed to load PayPal plan ${paypalSettings.planId}`,
+        err.message
+      );
+
+      if (err && err.status === 404) {
+        return res.json({
+          plan: null,
+          product: null,
+          manageUrl: '',
+          error: 'PayPal could not find the configured billing plan. Generate a new plan to continue.',
+          csrfToken: res.locals.csrfToken,
+        });
+      }
+
+      res.status(400).json({
+        error: err.message,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+  })
+);
+
+router.post(
+  '/settings/paypal/plan',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const overrides = req.body || {};
+    const preview = settingsStore.previewGroup('paypal', overrides);
+
+    try {
+      const result = await paypalService.generateSubscriptionPlan(
+        {
+          price: preview.subscriptionPrice,
+          currency: preview.currency,
+          existingProductId: preview.productId,
+        },
+        preview
+      );
+
+      const updatedSettings = settingsStore.updateGroup('paypal', {
+        planId: result.planId,
+        productId: result.productId,
+        subscriptionPrice: preview.subscriptionPrice,
+        currency: preview.currency,
+      });
+
+      logEvent('paypal.plan.generated', {
+        planId: result.planId,
+        productId: result.productId,
+        price: result.priceValue,
+        currency: result.currencyCode,
+      });
+      logger.info(`Generated PayPal billing plan ${result.planId}`);
+
+      const manageUrl = paypalService.getPlanManagementUrl(
+        result.planId,
+        updatedSettings
+      );
+
+      res.json({
+        plan: result.plan,
+        product: result.product,
+        manageUrl,
+        settings: updatedSettings,
+        csrfToken: res.locals.csrfToken,
+      });
+    } catch (err) {
+      logger.warn('Failed to generate PayPal subscription plan', err.message);
+      res.status(400).json({
+        error: err.message,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+  })
+);
+
 router.post(
   '/subscribers/:id/invite',
   requireAdmin,

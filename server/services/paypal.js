@@ -26,12 +26,290 @@ async function getAccessToken(overrideSettings) {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PayPal access token request failed: ${text}`);
+    await handleErrorResponse(response, 'PayPal access token request failed');
   }
 
   const data = await response.json();
   return data.access_token;
+}
+
+async function handleErrorResponse(response, defaultMessage) {
+  let text = '';
+  try {
+    text = await response.text();
+  } catch (err) {
+    text = '';
+  }
+  const trimmed = text && text.trim();
+  const message = trimmed
+    ? `${defaultMessage}: ${trimmed}`
+    : `${defaultMessage} (status ${response.status})`;
+  const error = new Error(message);
+  error.status = response.status;
+  error.details = trimmed;
+  throw error;
+}
+
+async function parseJsonResponse(response, defaultMessage) {
+  if (response.ok) {
+    if (response.status === 204) {
+      return null;
+    }
+    return response.json();
+  }
+  await handleErrorResponse(response, defaultMessage);
+}
+
+function normalizeCurrency(currency) {
+  const normalized = (currency || '').toString().trim().toUpperCase();
+  return normalized || 'USD';
+}
+
+function formatPriceValue(amount) {
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    throw new Error('A positive subscription price is required to generate a PayPal plan.');
+  }
+  return numeric.toFixed(2);
+}
+
+function truncate(value, maxLength) {
+  if (value == null) {
+    return '';
+  }
+  const stringValue = String(value);
+  if (stringValue.length <= maxLength) {
+    return stringValue;
+  }
+  return stringValue.slice(0, maxLength);
+}
+
+function buildPlanPayload({
+  productId,
+  planName,
+  planDescription,
+  priceValue,
+  currencyCode,
+}) {
+  return {
+    product_id: productId,
+    name: planName,
+    description: planDescription,
+    billing_cycles: [
+      {
+        frequency: {
+          interval_unit: 'MONTH',
+          interval_count: 1,
+        },
+        tenure_type: 'REGULAR',
+        sequence: 1,
+        total_cycles: 0,
+        pricing_scheme: {
+          fixed_price: {
+            value: priceValue,
+            currency_code: currencyCode,
+          },
+        },
+      },
+    ],
+    payment_preferences: {
+      auto_bill_outstanding: true,
+      setup_fee_failure_action: 'CANCEL',
+      payment_failure_threshold: 3,
+    },
+    taxes: {
+      percentage: '0',
+      inclusive: false,
+    },
+  };
+}
+
+async function getProduct(productId, overrideSettings) {
+  if (!productId) {
+    throw new Error('PayPal product ID is required');
+  }
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+  const response = await fetch(
+    `${paypal.apiBase}/v1/catalogs/products/${productId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return parseJsonResponse(
+    response,
+    `Failed to fetch PayPal product ${productId}`
+  );
+}
+
+async function createProduct({ name, description }, overrideSettings) {
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+  const payload = {
+    name: truncate(name || 'Plex Donate Subscription', 127),
+    description: truncate(
+      description || 'Recurring subscription for Plex server access support.',
+      256
+    ),
+    type: 'SERVICE',
+    category: 'SOFTWARE',
+  };
+
+  const response = await fetch(`${paypal.apiBase}/v1/catalogs/products`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse(response, 'Failed to create PayPal product');
+}
+
+async function ensureProduct({ productId, name, description }, overrideSettings) {
+  const trimmedId = (productId || '').trim();
+  if (trimmedId) {
+    try {
+      const product = await getProduct(trimmedId, overrideSettings);
+      return { product, created: false };
+    } catch (err) {
+      if (err && err.status !== 404) {
+        throw err;
+      }
+    }
+  }
+
+  const product = await createProduct({ name, description }, overrideSettings);
+  return { product, created: true };
+}
+
+async function createPlan(planPayload, overrideSettings) {
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+  const response = await fetch(`${paypal.apiBase}/v1/billing/plans`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(planPayload),
+  });
+
+  return parseJsonResponse(response, 'Failed to create PayPal billing plan');
+}
+
+async function activatePlan(planId, overrideSettings) {
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+  const response = await fetch(
+    `${paypal.apiBase}/v1/billing/plans/${planId}/activate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ reason: 'Activate plan' }),
+    }
+  );
+
+  if (response.ok || response.status === 204) {
+    return true;
+  }
+
+  await handleErrorResponse(response, `Failed to activate PayPal plan ${planId}`);
+}
+
+async function getPlan(planId, overrideSettings) {
+  if (!planId) {
+    throw new Error('PayPal plan ID is required');
+  }
+  const paypal = getPaypalConfig(overrideSettings);
+  const token = await getAccessToken(overrideSettings);
+  const response = await fetch(
+    `${paypal.apiBase}/v1/billing/plans/${planId}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  return parseJsonResponse(response, `Failed to fetch PayPal plan ${planId}`);
+}
+
+function getPlanManagementUrl(planId, overrideSettings) {
+  if (!planId) {
+    return '';
+  }
+  const paypal = getPaypalConfig(overrideSettings);
+  const isSandbox = (paypal.apiBase || '').toLowerCase().includes('sandbox');
+  const base = isSandbox
+    ? 'https://www.sandbox.paypal.com/billing/plans'
+    : 'https://www.paypal.com/billing/plans';
+  return `${base}/${encodeURIComponent(planId)}`;
+}
+
+async function generateSubscriptionPlan(
+  {
+    price,
+    currency,
+    existingProductId,
+    productName,
+    productDescription,
+    planName,
+    planDescription,
+  } = {},
+  overrideSettings
+) {
+  const priceValue = formatPriceValue(price);
+  const currencyCode = normalizeCurrency(currency);
+  const descriptor = `${priceValue} ${currencyCode}`;
+  const uniqueSuffix = Date.now().toString(36).toUpperCase();
+  const defaultPlanName = planName || `Plex Donate Monthly (${descriptor})`;
+  const defaultPlanDescription =
+    planDescription ||
+    `Recurring Plex donation billed monthly at ${descriptor}.`;
+  const defaultProductName = productName || 'Plex Donate Subscription';
+  const defaultProductDescription =
+    productDescription ||
+    'Recurring subscription for Plex server access support.';
+
+  const { product } = await ensureProduct(
+    {
+      productId: existingProductId,
+      name: truncate(defaultProductName, 127),
+      description: truncate(defaultProductDescription, 256),
+    },
+    overrideSettings
+  );
+
+  const planPayload = buildPlanPayload({
+    productId: product.id,
+    planName: truncate(`${defaultPlanName} ${uniqueSuffix}`, 127),
+    planDescription: truncate(defaultPlanDescription, 127),
+    priceValue,
+    currencyCode,
+  });
+
+  const draftPlan = await createPlan(planPayload, overrideSettings);
+  await activatePlan(draftPlan.id, overrideSettings);
+  const plan = await getPlan(draftPlan.id, overrideSettings);
+
+  return {
+    plan,
+    product,
+    planId: plan.id,
+    productId: product.id,
+    priceValue,
+    currencyCode,
+  };
 }
 
 async function verifyConnection(overrideSettings) {
@@ -73,8 +351,7 @@ async function verifyWebhookSignature(headers, body) {
   );
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PayPal webhook verification failed: ${text}`);
+    await handleErrorResponse(response, 'PayPal webhook verification failed');
   }
 
   const data = await response.json();
@@ -94,14 +371,10 @@ async function getSubscription(subscriptionId) {
     }
   );
 
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Failed to fetch PayPal subscription ${subscriptionId}: ${text}`
-    );
-  }
-
-  return response.json();
+  return parseJsonResponse(
+    response,
+    `Failed to fetch PayPal subscription ${subscriptionId}`
+  );
 }
 
 async function createSubscription(planId, subscriber = {}, overrideSettings) {
@@ -131,8 +404,7 @@ async function createSubscription(planId, subscriber = {}, overrideSettings) {
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Failed to create PayPal subscription: ${text}`);
+    await handleErrorResponse(response, 'Failed to create PayPal subscription');
   }
 
   const data = await response.json();
@@ -163,4 +435,10 @@ module.exports = {
   getSubscription,
   verifyConnection,
   createSubscription,
+  getProduct,
+  createProduct,
+  getPlan,
+  activatePlan,
+  generateSubscriptionPlan,
+  getPlanManagementUrl,
 };

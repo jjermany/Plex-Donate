@@ -381,6 +381,103 @@
         font-size: 0.8rem;
       }
 
+      .paypal-plan-management {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--settings-divider);
+        display: grid;
+        gap: 16px;
+      }
+
+      .paypal-plan-management.hidden {
+        display: none;
+      }
+
+      .paypal-plan-management .plan-management-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .paypal-plan-management .plan-management-header h4 {
+        margin: 0 0 4px;
+        font-size: 1rem;
+      }
+
+      .paypal-plan-management .plan-management-header p {
+        margin: 0;
+        color: var(--text-muted-soft);
+        font-size: 0.9rem;
+      }
+
+      .paypal-plan-management .plan-management-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+
+      .paypal-plan-management .plan-management-actions .manage-link {
+        font-weight: 600;
+        color: var(--button-primary-bg);
+        text-decoration: none;
+      }
+
+      .paypal-plan-management .plan-management-actions .manage-link:hover {
+        text-decoration: underline;
+      }
+
+      .paypal-plan-management .plan-management-body {
+        border-radius: 12px;
+        border: 1px solid var(--panel-border-color);
+        background: var(--event-payload-bg);
+        padding: 16px;
+      }
+
+      .paypal-plan-management .plan-management-body.empty {
+        border-style: dashed;
+        background: transparent;
+        color: var(--text-muted-soft);
+      }
+
+      .paypal-plan-management .plan-management-body p {
+        margin: 0;
+      }
+
+      .paypal-plan-management .plan-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .paypal-plan-management .plan-details dt {
+        margin: 0;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .paypal-plan-management .plan-details dd {
+        margin: 6px 0 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+
+      .paypal-plan-management .plan-error {
+        color: var(--form-status-error);
+        font-weight: 600;
+      }
+
+      .paypal-plan-management .plan-loading {
+        color: var(--text-muted-soft);
+      }
+
       .field-grid {
         display: grid;
         gap: 12px;
@@ -562,6 +659,31 @@
                 <input name="currency" type="text" autocomplete="off" placeholder="USD" />
               </label>
             </div>
+            <div class="paypal-plan-management" id="paypal-plan-management">
+              <div class="plan-management-header">
+                <div>
+                  <h4>Subscription plan management</h4>
+                  <p>Generate a PayPal billing plan using the price and currency above.</p>
+                </div>
+                <div class="plan-management-actions">
+                  <a
+                    href="#"
+                    class="manage-link"
+                    id="paypal-plan-manage-link"
+                    target="_blank"
+                    rel="noopener"
+                    hidden
+                    >Open in PayPal</a
+                  >
+                  <button type="button" class="secondary" data-action="generate-plan">
+                    Generate plan
+                  </button>
+                </div>
+              </div>
+              <div class="plan-management-body empty" id="paypal-plan-body">
+                <p>No PayPal subscription plan has been generated yet.</p>
+              </div>
+            </div>
             <p class="form-status" data-status-for="paypal"></p>
             <div class="form-actions">
               <button type="submit" class="secondary">Save PayPal settings</button>
@@ -680,6 +802,9 @@
       const settingsForms = settingsPanel
         ? Array.from(settingsPanel.querySelectorAll('.settings-form'))
         : [];
+      const paypalPlanSection = document.getElementById('paypal-plan-management');
+      const paypalPlanBody = document.getElementById('paypal-plan-body');
+      const paypalPlanManageLink = document.getElementById('paypal-plan-manage-link');
       const themeToggleButton = document.getElementById('theme-toggle');
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
@@ -691,6 +816,11 @@
         donors: [],
         events: [],
         settings: null,
+        paypalPlan: null,
+        paypalProduct: null,
+        paypalPlanError: '',
+        paypalPlanManageUrl: '',
+        paypalPlanLoading: false,
       };
 
       const statusClearTimers = new WeakMap();
@@ -748,6 +878,115 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function toTitleCase(value) {
+        const normalized = String(value || '').replace(/_/g, ' ').trim();
+        if (!normalized) {
+          return 'Unknown';
+        }
+        return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+      }
+
+      function formatPlanFrequency(frequency) {
+        if (!frequency || typeof frequency !== 'object') {
+          return '';
+        }
+        const count = Number(frequency.interval_count || frequency.intervalCount || 0);
+        const unitRaw = frequency.interval_unit || frequency.intervalUnit;
+        const unit = unitRaw ? String(unitRaw).toLowerCase() : '';
+        if (!unit) {
+          return count > 0 ? `${count}` : '';
+        }
+        if (!Number.isFinite(count) || count <= 0) {
+          return unit;
+        }
+        const plural = count === 1 ? unit : `${unit}s`;
+        return `${count} ${plural}`;
+      }
+
+      function buildPaypalPlanDetails(plan, product) {
+        if (!plan || typeof plan !== 'object') {
+          return '<p class="plan-error">Unable to display PayPal plan details.</p>';
+        }
+
+        const planId = plan.id || '';
+        const statusLabel = toTitleCase(plan.status || 'unknown');
+        const billingCycles = Array.isArray(plan.billing_cycles)
+          ? plan.billing_cycles
+          : [];
+        const regularCycle =
+          billingCycles.find((cycle) => cycle && cycle.tenure_type === 'REGULAR') ||
+          billingCycles[0];
+
+        let priceLabel = '—';
+        if (
+          regularCycle &&
+          regularCycle.pricing_scheme &&
+          regularCycle.pricing_scheme.fixed_price &&
+          regularCycle.pricing_scheme.fixed_price.value != null
+        ) {
+          const fixed = regularCycle.pricing_scheme.fixed_price;
+          const value = String(fixed.value);
+          const currency = fixed.currency_code || '';
+          priceLabel = `${value} ${currency}`.trim();
+        }
+
+        const frequencyLabel = formatPlanFrequency(regularCycle && regularCycle.frequency);
+        const cycleLabel =
+          priceLabel !== '—' && frequencyLabel
+            ? `${priceLabel} every ${frequencyLabel}`
+            : priceLabel !== '—'
+              ? priceLabel
+              : frequencyLabel || '—';
+
+        let productLabel = '—';
+        if (product && (product.name || product.id)) {
+          if (product.name && (plan.product_id || product.id)) {
+            const idLabel = plan.product_id || product.id;
+            productLabel = `${escapeHtml(product.name)} (${escapeHtml(idLabel)})`;
+          } else {
+            productLabel = escapeHtml(product.name || product.id);
+          }
+        } else if (plan.product_id) {
+          productLabel = escapeHtml(plan.product_id);
+        }
+
+        const createdAt = plan.create_time
+          ? new Date(plan.create_time).toLocaleString()
+          : '—';
+        const updatedAt = plan.update_time
+          ? new Date(plan.update_time).toLocaleString()
+          : '—';
+
+        return `
+          <dl class="plan-details">
+            <div>
+              <dt>Plan ID</dt>
+              <dd>${escapeHtml(planId)}</dd>
+            </div>
+            <div>
+              <dt>Status</dt>
+              <dd>${escapeHtml(statusLabel)}</dd>
+            </div>
+            <div>
+              <dt>Billing cycle</dt>
+              <dd>${escapeHtml(cycleLabel)}</dd>
+            </div>
+            <div>
+              <dt>Product</dt>
+              <dd>${productLabel}</dd>
+            </div>
+            <div>
+              <dt>Created</dt>
+              <dd>${escapeHtml(createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>${escapeHtml(updatedAt)}</dd>
+            </div>
+          </dl>
+        `;
       }
 
       async function api(path, options = {}) {
@@ -858,21 +1097,70 @@
       }
 
       function renderSettings() {
-        if (!settingsPanel || !state.settings) {
+        if (!settingsPanel) {
           return;
         }
-        settingsForms.forEach((form) => {
-          const group = form.dataset.group;
-          const values = group ? state.settings[group] : null;
-          form.querySelectorAll('[name]').forEach((input) => {
-            if (input.type === 'checkbox') {
-              input.checked = Boolean(values && values[input.name]);
-            } else {
-              const rawValue = values ? values[input.name] : '';
-              input.value = rawValue == null ? '' : String(rawValue);
-            }
+        if (state.settings) {
+          settingsForms.forEach((form) => {
+            const group = form.dataset.group;
+            const values = group && state.settings ? state.settings[group] : null;
+            form.querySelectorAll('[name]').forEach((input) => {
+              if (input.type === 'checkbox') {
+                input.checked = Boolean(values && values[input.name]);
+              } else {
+                const rawValue = values ? values[input.name] : '';
+                input.value = rawValue == null ? '' : String(rawValue);
+              }
+            });
           });
-        });
+        }
+        renderPaypalPlan();
+      }
+
+      function renderPaypalPlan() {
+        if (!paypalPlanSection || !paypalPlanBody) {
+          return;
+        }
+
+        if (paypalPlanManageLink) {
+          if (state.paypalPlanManageUrl) {
+            paypalPlanManageLink.href = state.paypalPlanManageUrl;
+            paypalPlanManageLink.hidden = false;
+          } else {
+            paypalPlanManageLink.hidden = true;
+          }
+        }
+
+        if (state.paypalPlanLoading) {
+          paypalPlanBody.classList.remove('empty');
+          paypalPlanBody.innerHTML =
+            '<p class="plan-loading">Loading PayPal plan details…</p>';
+          return;
+        }
+
+        if (state.paypalPlanError) {
+          paypalPlanBody.classList.remove('empty');
+          paypalPlanBody.innerHTML = `<p class="plan-error">${escapeHtml(
+            state.paypalPlanError
+          )}</p>`;
+          return;
+        }
+
+        if (!state.paypalPlan) {
+          paypalPlanBody.classList.add('empty');
+          paypalPlanBody.innerHTML =
+            '<p>No PayPal subscription plan has been generated yet.</p>';
+          if (paypalPlanManageLink) {
+            paypalPlanManageLink.hidden = true;
+          }
+          return;
+        }
+
+        paypalPlanBody.classList.remove('empty');
+        paypalPlanBody.innerHTML = buildPaypalPlanDetails(
+          state.paypalPlan,
+          state.paypalProduct
+        );
       }
 
       async function loadSettings() {
@@ -885,6 +1173,46 @@
           settingsForms.forEach((form) => setFormStatus(form, ''));
         } catch (err) {
           console.error(err);
+        }
+      }
+
+      async function loadPaypalPlan() {
+        if (!paypalPlanSection) {
+          return;
+        }
+
+        const paypalSettings =
+          state.settings && state.settings.paypal ? state.settings.paypal : null;
+
+        if (!paypalSettings || !paypalSettings.planId) {
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanError = '';
+          state.paypalPlanLoading = false;
+          renderPaypalPlan();
+          return;
+        }
+
+        state.paypalPlanLoading = true;
+        state.paypalPlanError = '';
+        renderPaypalPlan();
+
+        try {
+          const response = await api('/api/admin/settings/paypal/plan');
+          state.paypalPlan = response.plan || null;
+          state.paypalProduct = response.product || null;
+          state.paypalPlanManageUrl = response.manageUrl || '';
+          state.paypalPlanError = response.error || '';
+        } catch (err) {
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanError =
+            err.message || 'Unable to load PayPal plan details.';
+        } finally {
+          state.paypalPlanLoading = false;
+          renderPaypalPlan();
         }
       }
 
@@ -1015,6 +1343,7 @@
           console.error(err);
         }
         await loadSettings();
+        await loadPaypalPlan();
         render();
       }
 
@@ -1027,6 +1356,11 @@
             await loadDashboardData();
           } else {
             state.settings = null;
+            state.paypalPlan = null;
+            state.paypalProduct = null;
+            state.paypalPlanError = '';
+            state.paypalPlanManageUrl = '';
+            state.paypalPlanLoading = false;
             render();
           }
         } catch (err) {
@@ -1065,6 +1399,11 @@
           state.donors = [];
           state.events = [];
           state.settings = null;
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanError = '';
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanLoading = false;
           render();
         }
       });
@@ -1093,6 +1432,9 @@
               state.settings = {};
             }
             state.settings[group] = response.settings || {};
+            if (group === 'paypal') {
+              await loadPaypalPlan();
+            }
             renderSettings();
             setFormStatus(form, 'Saved!', 'success');
             scheduleStatusClear(form);
@@ -1106,8 +1448,12 @@
         });
 
         form.addEventListener('click', async (event) => {
-          const button = event.target.closest("button[data-action='test']");
+          const button = event.target.closest('button[data-action]');
           if (!button) {
+            return;
+          }
+          const action = button.dataset.action;
+          if (!action) {
             return;
           }
           event.preventDefault();
@@ -1115,30 +1461,73 @@
           if (!group) {
             return;
           }
-          const payload = getFormPayload(form);
-          const previousDisabledState = button.disabled;
-          try {
-            button.disabled = true;
-            setFormStatus(form, 'Testing…');
-            const response = await api(`/api/admin/settings/${group}/test`, {
-              method: 'POST',
-              body: payload,
-            });
-            const result = response.result || {};
-            const message =
-              result.message ||
-              response.message ||
-              'Settings test completed successfully.';
-            setFormStatus(form, message, 'success');
-            scheduleStatusClear(form);
-          } catch (err) {
-            setFormStatus(
-              form,
-              err.message || 'Failed to verify settings',
-              'error'
-            );
-          } finally {
-            button.disabled = previousDisabledState;
+
+          if (action === 'test') {
+            const payload = getFormPayload(form);
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Testing…');
+              const response = await api(`/api/admin/settings/${group}/test`, {
+                method: 'POST',
+                body: payload,
+              });
+              const result = response.result || {};
+              const message =
+                result.message ||
+                response.message ||
+                'Settings test completed successfully.';
+              setFormStatus(form, message, 'success');
+              scheduleStatusClear(form);
+            } catch (err) {
+              setFormStatus(
+                form,
+                err.message || 'Failed to verify settings',
+                'error'
+              );
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+            return;
+          }
+
+          if (action === 'generate-plan') {
+            if (group !== 'paypal') {
+              return;
+            }
+            const payload = getFormPayload(form);
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Generating PayPal subscription plan…');
+              state.paypalPlanLoading = true;
+              state.paypalPlanError = '';
+              renderPaypalPlan();
+              const response = await api('/api/admin/settings/paypal/plan', {
+                method: 'POST',
+                body: payload,
+              });
+              if (!state.settings) {
+                state.settings = {};
+              }
+              state.settings.paypal = response.settings || state.settings.paypal || {};
+              state.paypalPlan = response.plan || null;
+              state.paypalProduct = response.product || null;
+              state.paypalPlanManageUrl = response.manageUrl || '';
+              state.paypalPlanError = '';
+              state.paypalPlanLoading = false;
+              renderSettings();
+              setFormStatus(form, 'PayPal subscription plan generated!', 'success');
+              scheduleStatusClear(form);
+            } catch (err) {
+              state.paypalPlanLoading = false;
+              state.paypalPlanError =
+                err.message || 'Failed to generate PayPal plan.';
+              renderPaypalPlan();
+              setFormStatus(form, state.paypalPlanError, 'error');
+            } finally {
+              button.disabled = previousDisabledState;
+            }
           }
         });
       });

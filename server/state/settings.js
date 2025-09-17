@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
     webhookId: '',
     apiBase: 'https://api-m.sandbox.paypal.com',
     planId: '',
+    productId: '',
     subscriptionPrice: 0,
     currency: 'USD',
   },
