@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
@@ -7,8 +8,19 @@ const adminRouter = require('./routes/admin');
 const webhookRouter = require('./routes/webhook');
 const shareRouter = require('./routes/share');
 const logger = require('./utils/logger');
+const SqliteSessionStore = require('./session-store');
+const { db } = require('./db');
 
 const app = express();
+
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+
+fs.mkdirSync(config.dataDir, { recursive: true });
+
+const sessionStore = new SqliteSessionStore({
+  db,
+  ttl: SESSION_TTL_MS,
+});
 
 app.set('trust proxy', 1);
 
@@ -17,11 +29,12 @@ app.use(
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
+    store: sessionStore,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
       secure: config.sessionCookieSecure,
-      maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
+      maxAge: SESSION_TTL_MS,
     },
   })
 );
