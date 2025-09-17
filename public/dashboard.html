@@ -747,12 +747,34 @@
         profileName.value = donor.name || '';
         inviteEmail.value = donor.email || '';
 
-        if (data.wizarr && data.wizarr.baseUrl) {
-          wizarrLink.href = data.wizarr.baseUrl;
-          wizarrLink.textContent = 'Open Wizarr';
-        } else {
-          wizarrLink.removeAttribute('href');
-          wizarrLink.textContent = 'Wizarr link coming soon';
+        if (wizarrLink) {
+          const wizarrUrl = (() => {
+            if (!data || !data.wizarr) {
+              return '';
+            }
+            const portalUrl =
+              typeof data.wizarr.portalUrl === 'string'
+                ? data.wizarr.portalUrl.trim()
+                : '';
+            if (portalUrl) {
+              return portalUrl;
+            }
+            return typeof data.wizarr.baseUrl === 'string'
+              ? data.wizarr.baseUrl.trim()
+              : '';
+          })();
+
+          if (wizarrUrl) {
+            wizarrLink.href = wizarrUrl;
+            wizarrLink.textContent = 'Open Wizarr';
+            wizarrLink.target = '_blank';
+            wizarrLink.rel = 'noopener';
+          } else {
+            wizarrLink.removeAttribute('href');
+            wizarrLink.removeAttribute('target');
+            wizarrLink.removeAttribute('rel');
+            wizarrLink.textContent = 'Wizarr link coming soon';
+          }
         }
 
         renderInvite(data.invite);
@@ -812,7 +834,14 @@
 
         let checkoutWindow = null;
         try {
-          checkoutWindow = window.open('', '_blank', 'noopener');
+          checkoutWindow = window.open('', '_blank');
+          if (checkoutWindow) {
+            try {
+              checkoutWindow.opener = null;
+            } catch (err) {
+              // Ignore browsers that prevent direct assignment.
+            }
+          }
         } catch (err) {
           checkoutWindow = null;
         }
@@ -831,10 +860,27 @@
           }
 
           if (data.approvalUrl) {
+            let opened = false;
             if (checkoutWindow) {
               checkoutWindow.location = data.approvalUrl;
+              opened = true;
             } else {
-              window.open(data.approvalUrl, '_blank', 'noopener');
+              const fallbackWindow = window.open(data.approvalUrl, '_blank');
+              if (fallbackWindow) {
+                opened = true;
+                checkoutWindow = fallbackWindow;
+                try {
+                  fallbackWindow.opener = null;
+                } catch (err) {
+                  // Ignore browsers that prevent direct assignment.
+                }
+              }
+            }
+
+            if (!opened) {
+              throw new Error(
+                'Your browser blocked the PayPal checkout window. Allow pop-ups and try again.'
+              );
             }
             setStatusText(
               subscriptionNote,
@@ -849,7 +895,11 @@
           setStatusText(subscriptionNote, err.message, 'error');
           subscriptionNote.classList.add('small');
           if (checkoutWindow) {
-            checkoutWindow.close();
+            try {
+              checkoutWindow.close();
+            } catch (closeErr) {
+              // Ignore close errors.
+            }
           }
         } finally {
           subscriptionButton.disabled = false;

@@ -105,6 +105,43 @@ function getBaseUrl(wizarr) {
   return wizarr.baseUrl.replace(/\/$/, '');
 }
 
+function getPortalUrl(wizarr) {
+  if (!wizarr || !wizarr.baseUrl) {
+    return '';
+  }
+
+  const trimmed = wizarr.baseUrl.toString().trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const url = new URL(trimmed);
+    url.hash = '';
+    url.search = '';
+
+    const segments = url.pathname.split('/').filter(Boolean);
+    const cutoffIndex = segments.findIndex(
+      (segment) => segment && segment.toLowerCase() === 'api'
+    );
+    const normalizedSegments =
+      cutoffIndex === -1 ? segments : segments.slice(0, cutoffIndex);
+
+    if (normalizedSegments.length > 0) {
+      url.pathname = `/${normalizedSegments.join('/')}`;
+    } else {
+      url.pathname = '/';
+    }
+
+    const normalized = url.toString();
+    return normalized.endsWith('/') && url.pathname !== '/'
+      ? normalized.replace(/\/+$/, '')
+      : normalized.replace(/\/$/, '');
+  } catch (err) {
+    return trimmed.replace(/\/+$/, '');
+  }
+}
+
 function buildRequestUrl(baseUrlString, path) {
   const sanitizedBase = (baseUrlString || '').replace(/\/+$/, '');
   const baseUrl = new URL(`${sanitizedBase}/`);
@@ -469,4 +506,5 @@ module.exports = {
   getWizarrConfig,
   verifyConnection,
   buildRequestUrl,
+  getPortalUrl,
 };

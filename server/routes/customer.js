@@ -51,7 +51,11 @@ function buildDashboardResponse({ donor, invite }) {
         apiBase: paypal.apiBase,
       })
     : '';
-  const wizarr = settingsStore.getWizarrSettings();
+  const wizarrSettings = settingsStore.getWizarrSettings();
+  const wizarrBaseUrl = (wizarrSettings.baseUrl || '').trim();
+  const wizarrPortalUrl = wizarrBaseUrl
+    ? wizarrService.getPortalUrl(wizarrSettings)
+    : '';
   return {
     authenticated: Boolean(donor),
     donor: donor
@@ -75,7 +79,8 @@ function buildDashboardResponse({ donor, invite }) {
       subscriptionCheckoutAvailable: checkoutAvailable,
     },
     wizarr: {
-      baseUrl: wizarr.baseUrl || '',
+      baseUrl: wizarrBaseUrl,
+      portalUrl: wizarrPortalUrl,
     },
   };
 }

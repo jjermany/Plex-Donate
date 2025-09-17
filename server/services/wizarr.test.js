@@ -42,6 +42,35 @@ test('buildRequestUrl removes overlapping suffix segments', (t) => {
   );
 });
 
+test('getPortalUrl returns a customer-facing Wizarr link', (t) => {
+  restoreModules();
+  t.after(restoreModules);
+  const { getPortalUrl } = require(wizarrModulePath);
+
+  assert.equal(
+    getPortalUrl({ baseUrl: 'https://host/wizarr/api' }),
+    'https://host/wizarr'
+  );
+  assert.equal(
+    getPortalUrl({ baseUrl: 'https://host/wizarr/api/v1/' }),
+    'https://host/wizarr'
+  );
+  assert.equal(
+    getPortalUrl({ baseUrl: 'https://host/' }),
+    'https://host'
+  );
+  assert.equal(
+    getPortalUrl({ baseUrl: 'https://host' }),
+    'https://host'
+  );
+  assert.equal(
+    getPortalUrl({ baseUrl: 'wizarr.local/api/' }),
+    'wizarr.local/api'
+  );
+  assert.equal(getPortalUrl({ baseUrl: '' }), '');
+  assert.equal(getPortalUrl({}), '');
+});
+
 function createFetchMock(responses) {
   const calls = [];
   const fn = async (url, options) => {
