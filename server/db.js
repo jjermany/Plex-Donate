@@ -10,6 +10,14 @@ const db = new Database(config.databaseFile);
 db.pragma('foreign_keys = ON');
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS sessions (
+  sid TEXT PRIMARY KEY,
+  sess TEXT NOT NULL,
+  expired INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_expired_idx ON sessions(expired);
+
 CREATE TABLE IF NOT EXISTS donors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
