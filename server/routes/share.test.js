@@ -14,6 +14,8 @@ const {
   getShareLinkByToken,
   getProspectById,
 } = require('../db');
+const paypalService = require('../services/paypal');
+const settingsStore = require('../state/settings');
 
 function createApp() {
   const app = express();
@@ -173,6 +175,152 @@ test('share routes handle donor and prospect flows', async (t) => {
         .get(accountResponse.body.donor.id);
       assert.ok(row.password_hash && row.password_hash.startsWith('pbkdf2$'));
     } finally {
+      await server.close();
+    }
+  });
+
+  await t.test('pending donor cannot generate invite from share link', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'pending@example.com',
+        name: 'Pending Donor',
+        subscriptionId: 'I-PENDING',
+        status: 'pending',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'pending-token',
+        sessionToken: 'pending-session',
+      });
+
+      const response = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'pending@example.com',
+            name: 'Pending Donor',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(response.status, 403);
+      assert.ok(
+        response.body &&
+          typeof response.body.error === 'string' &&
+          response.body.error.toLowerCase().includes('subscription'),
+        'response should include subscription error message'
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  await t.test('suspended donor can view share link but invite remains blocked', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'suspended@example.com',
+        name: 'Suspended Donor',
+        subscriptionId: 'I-SUSPENDED',
+        status: 'suspended',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'suspended-token',
+        sessionToken: 'suspended-session',
+      });
+
+      const viewResponse = await requestJson(
+        server,
+        'GET',
+        `/share/${shareLink.token}`
+      );
+      assert.equal(viewResponse.status, 200);
+      assert.equal(viewResponse.body.donor.status, 'suspended');
+
+      const response = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'suspended@example.com',
+            name: 'Suspended Donor',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(response.status, 403);
+    } finally {
+      await server.close();
+    }
+  });
+
+  await t.test('share link can create PayPal checkout approval URL', async (t) => {
+    resetDatabase();
+    settingsStore.updateGroup('paypal', {
+      planId: 'P-TEST',
+      clientId: 'client',
+      clientSecret: 'secret',
+    });
+
+    const app = createApp();
+    const server = await startServer(app);
+
+    const mock = t.mock.method(paypalService, 'createSubscription', async () => ({
+      subscriptionId: 'I-NEW',
+      approvalUrl: 'https://paypal.example/checkout',
+    }));
+
+    try {
+      const donor = createDonor({
+        email: 'checkout@example.com',
+        name: 'Checkout Donor',
+        status: 'pending',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'checkout-token',
+        sessionToken: 'checkout-session',
+      });
+
+      const unauthorized = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/paypal-checkout`,
+        { body: { sessionToken: 'wrong' } }
+      );
+      assert.equal(unauthorized.status, 401);
+
+      const response = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/paypal-checkout`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: { sessionToken: shareLink.sessionToken },
+        }
+      );
+
+      assert.equal(response.status, 200);
+      assert.equal(response.body.subscriptionId, 'I-NEW');
+      assert.equal(response.body.approvalUrl, 'https://paypal.example/checkout');
+      assert.equal(mock.mock.callCount(), 1);
+    } finally {
+      mock.mock.restore();
       await server.close();
     }
   });

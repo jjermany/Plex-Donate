@@ -6,11 +6,19 @@ const {
   logEvent,
   updateDonorContact,
   getDonorAuthByEmail,
+  updateDonorSubscriptionId,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
+const paypalService = require('../services/paypal');
 const logger = require('../utils/logger');
 const { verifyPassword } = require('../utils/passwords');
+const {
+  getSubscriptionCheckoutUrl,
+  getPaypalEnvironment,
+  isSubscriptionCheckoutConfigured,
+  buildSubscriberDetails,
+} = require('../utils/paypal');
 
 const router = express.Router();
 
@@ -35,6 +43,14 @@ function isValidEmail(email) {
 
 function buildDashboardResponse({ donor, invite }) {
   const paypal = settingsStore.getPaypalSettings();
+  const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
+  const checkoutAvailable = isSubscriptionCheckoutConfigured(paypal);
+  const subscriptionUrl = checkoutAvailable
+    ? getSubscriptionCheckoutUrl({
+        planId: paypal.planId,
+        apiBase: paypal.apiBase,
+      })
+    : '';
   const wizarr = settingsStore.getWizarrSettings();
   return {
     authenticated: Boolean(donor),
@@ -54,11 +70,22 @@ function buildDashboardResponse({ donor, invite }) {
       planId: paypal.planId || '',
       subscriptionPrice: paypal.subscriptionPrice || 0,
       currency: paypal.currency || '',
+      environment: paypalEnvironment,
+      subscriptionUrl,
+      subscriptionCheckoutAvailable: checkoutAvailable,
     },
     wizarr: {
       baseUrl: wizarr.baseUrl || '',
     },
   };
+}
+
+function hasActiveSubscription(donor) {
+  if (!donor) {
+    return false;
+  }
+  const status = (donor.status || '').toLowerCase();
+  return status === 'active';
 }
 
 function getAuthenticatedDonor(req) {
@@ -157,6 +184,74 @@ router.post(
 );
 
 router.post(
+  '/paypal-checkout',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const paypalSettings = settingsStore.getPaypalSettings();
+    if (!isSubscriptionCheckoutConfigured(paypalSettings)) {
+      return res
+        .status(503)
+        .json({ error: 'Subscription checkout is not available right now.' });
+    }
+
+    const donor = req.customer.donor;
+    const overrides =
+      req.body && typeof req.body === 'object'
+        ? {
+            email: req.body.email,
+            name: req.body.name,
+          }
+        : {};
+
+    const subscriber = buildSubscriberDetails(
+      {
+        email: overrides.email || donor.email,
+        name: overrides.name || donor.name,
+      },
+      { email: donor.email, name: donor.name }
+    );
+
+    try {
+      const checkout = await paypalService.createSubscription(
+        paypalSettings.planId,
+        subscriber,
+        paypalSettings
+      );
+
+      let updatedDonor = donor;
+      if (
+        checkout.subscriptionId &&
+        checkout.subscriptionId !== (donor.subscriptionId || '').trim()
+      ) {
+        updatedDonor = updateDonorSubscriptionId(
+          donor.id,
+          checkout.subscriptionId
+        );
+      }
+
+      logEvent('paypal.checkout.created', {
+        donorId: updatedDonor.id,
+        subscriptionId: checkout.subscriptionId,
+        context: 'customer-dashboard',
+      });
+
+      return res.json({
+        approvalUrl: checkout.approvalUrl,
+        subscriptionId: checkout.subscriptionId,
+      });
+    } catch (err) {
+      logger.error('Failed to create PayPal checkout for donor', {
+        donorId: donor.id,
+        error: err && err.message,
+      });
+      return res.status(502).json({
+        error: 'Failed to start PayPal subscription. Try again shortly.',
+      });
+    }
+  })
+);
+
+router.post(
   '/profile',
   requireCustomer,
   asyncHandler(async (req, res) => {
@@ -215,11 +310,10 @@ router.post(
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
+    if (!hasActiveSubscription(donor)) {
       return res.status(403).json({
-        error: 'This subscription is not active. Contact the server admin for help.',
+        error:
+          'An active subscription is required to generate a new invite.',
       });
     }
 

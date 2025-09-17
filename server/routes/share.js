@@ -20,6 +20,13 @@ const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
 const logger = require('../utils/logger');
 const { hashPassword, isPasswordStrong } = require('../utils/passwords');
+const paypalService = require('../services/paypal');
+const {
+  getSubscriptionCheckoutUrl,
+  getPaypalEnvironment,
+  isSubscriptionCheckoutConfigured,
+  buildSubscriberDetails,
+} = require('../utils/paypal');
 
 const router = express.Router();
 
@@ -44,6 +51,14 @@ function isValidEmail(email) {
 
 function buildShareResponse({ shareLink, donor, invite, prospect }) {
   const paypal = settingsStore.getPaypalSettings();
+  const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
+  const checkoutAvailable = isSubscriptionCheckoutConfigured(paypal);
+  const subscriptionUrl = checkoutAvailable
+    ? getSubscriptionCheckoutUrl({
+        planId: paypal.planId,
+        apiBase: paypal.apiBase,
+      })
+    : '';
   return {
     donor: donor
       ? {
@@ -76,8 +91,19 @@ function buildShareResponse({ shareLink, donor, invite, prospect }) {
       planId: paypal.planId || '',
       subscriptionPrice: paypal.subscriptionPrice || 0,
       currency: paypal.currency || '',
+      environment: paypalEnvironment,
+      subscriptionUrl,
+      subscriptionCheckoutAvailable: checkoutAvailable,
     },
   };
+}
+
+function hasActiveSubscription(donor) {
+  if (!donor) {
+    return false;
+  }
+  const status = (donor.status || '').toLowerCase();
+  return status === 'active';
 }
 
 function getProvidedSessionToken(req) {
@@ -122,14 +148,6 @@ router.get(
     }
 
     if (donor) {
-      const status = (donor.status || '').toLowerCase();
-      const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-      if (blockedStatuses.has(status)) {
-        return res.status(403).json({
-          error: 'Subscription is not active. Contact the server admin for help.',
-        });
-      }
-
       const invite = getLatestActiveInviteForDonor(donor.id);
 
       return res.json(
@@ -197,11 +215,9 @@ router.post(
         ? req.body.name.trim()
         : '';
 
-    const status = (donor.status || '').toLowerCase();
-    const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
-    if (blockedStatuses.has(status)) {
+    if (!hasActiveSubscription(donor)) {
       return res.status(403).json({
-        error: 'Subscription is not active. Contact the server admin for help.',
+        error: 'Start or resume your subscription to generate a new invite.',
       });
     }
 
@@ -295,6 +311,99 @@ router.post(
         prospect: null,
       })
     );
+  })
+);
+
+router.post(
+  '/:token/paypal-checkout',
+  asyncHandler(async (req, res) => {
+    const shareLink = getShareLinkByToken(req.params.token);
+    if (!shareLink) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    const providedSessionToken = getProvidedSessionToken(req);
+    if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
+      return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    const paypalSettings = settingsStore.getPaypalSettings();
+    if (!isSubscriptionCheckoutConfigured(paypalSettings)) {
+      return res
+        .status(503)
+        .json({ error: 'Subscription checkout is not available right now.' });
+    }
+
+    let donor = null;
+    if (shareLink.donorId) {
+      donor = getDonorById(shareLink.donorId);
+    }
+
+    let prospect = null;
+    if (!donor && shareLink.prospectId) {
+      prospect = getProspectById(shareLink.prospectId);
+    }
+
+    const overrides =
+      req.body && typeof req.body === 'object'
+        ? {
+            email: req.body.email,
+            name: req.body.name,
+          }
+        : {};
+
+    const subscriber = buildSubscriberDetails(
+      {
+        email:
+          overrides.email ||
+          (donor && donor.email) ||
+          (prospect && prospect.email) ||
+          '',
+        name:
+          overrides.name ||
+          (donor && donor.name) ||
+          (prospect && prospect.name) ||
+          '',
+      },
+      {}
+    );
+
+    try {
+      const checkout = await paypalService.createSubscription(
+        paypalSettings.planId,
+        subscriber,
+        paypalSettings
+      );
+
+      if (
+        donor &&
+        checkout.subscriptionId &&
+        checkout.subscriptionId !== (donor.subscriptionId || '').trim()
+      ) {
+        donor = updateDonorSubscriptionId(donor.id, checkout.subscriptionId);
+      }
+
+      logEvent('paypal.checkout.created', {
+        shareLinkId: shareLink.id,
+        donorId: donor ? donor.id : null,
+        prospectId: prospect ? prospect.id : null,
+        subscriptionId: checkout.subscriptionId,
+        context: donor ? 'share-donor' : 'share-prospect',
+      });
+
+      return res.json({
+        approvalUrl: checkout.approvalUrl,
+        subscriptionId: checkout.subscriptionId,
+      });
+    } catch (err) {
+      logger.error('Failed to create PayPal checkout from share link', {
+        shareLinkId: shareLink.id,
+        error: err && err.message,
+      });
+      return res.status(502).json({
+        error: 'Failed to start PayPal subscription. Try again shortly.',
+      });
+    }
   })
 );
 

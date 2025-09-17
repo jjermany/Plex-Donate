@@ -36,6 +36,24 @@ function asyncHandler(handler) {
   };
 }
 
+function resolvePublicBaseUrl(req) {
+  let configured = '';
+  try {
+    const appSettings = settingsStore.getAppSettings();
+    configured = appSettings && appSettings.publicBaseUrl
+      ? String(appSettings.publicBaseUrl).trim()
+      : '';
+  } catch (err) {
+    configured = '';
+  }
+
+  if (configured && /^https?:\/\//i.test(configured)) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+}
+
 router.use(express.json());
 router.use(csrfProtection);
 router.use((req, res, next) => {
@@ -384,7 +402,7 @@ router.post(
       });
     }
 
-    const origin = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+    const origin = resolvePublicBaseUrl(req);
     const url = `${origin}/share/${shareLink.token}`;
 
     return res.json({
@@ -446,7 +464,7 @@ router.post(
       });
     }
 
-    const origin = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+    const origin = resolvePublicBaseUrl(req);
     const url = `${origin}/share/${shareLink.token}`;
 
     return res.json({

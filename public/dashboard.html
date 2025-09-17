@@ -303,6 +303,16 @@
         flex-wrap: wrap;
         align-items: center;
       }
+      .subscription-cta {
+        margin-top: 18px;
+        display: grid;
+        gap: 8px;
+        justify-items: start;
+      }
+      .subscription-cta .button-primary {
+        text-decoration: none;
+        text-align: center;
+      }
       .section-title {
         font-size: 1.2rem;
         font-weight: 600;
@@ -399,6 +409,14 @@
                 <span class="label">Last payment</span>
                 <span id="member-last-payment"></span>
               </div>
+            </div>
+            <div id="subscription-cta" class="subscription-cta hidden">
+              <button id="subscription-button" class="button-primary" type="button">
+                Start PayPal subscription
+              </button>
+              <p id="subscription-note" class="status-text small">
+                Opens PayPal checkout in a new tab.
+              </p>
             </div>
           </article>
 
@@ -530,6 +548,15 @@
       const memberSubscriptionId = document.getElementById('member-subscription-id');
       const memberLastPaymentRow = document.getElementById('member-last-payment-row');
       const memberLastPayment = document.getElementById('member-last-payment');
+      const subscriptionCta = document.getElementById('subscription-cta');
+      const subscriptionButton = document.getElementById('subscription-button');
+      const defaultSubscriptionButtonLabel = subscriptionButton
+        ? subscriptionButton.textContent
+        : 'Start PayPal subscription';
+      if (subscriptionButton) {
+        subscriptionButton.disabled = true;
+        subscriptionButton.dataset.available = 'false';
+      }
 
       const profileForm = document.getElementById('profile-form');
       const profileEmail = document.getElementById('profile-email');
@@ -654,10 +681,10 @@
           ? donor.email
           : 'Set your preferred streaming email under profile settings.';
 
+        const normalizedStatus = (donor.status || 'pending').toLowerCase();
         if (memberStatusEl) {
-          const status = (donor.status || 'pending').toLowerCase();
-          memberStatusEl.dataset.status = status;
-          memberStatusEl.textContent = status || 'pending';
+          memberStatusEl.dataset.status = normalizedStatus;
+          memberStatusEl.textContent = normalizedStatus || 'pending';
         }
 
         if (donor.subscriptionId) {
@@ -688,6 +715,34 @@
           memberPlanEl.innerHTML = '';
         }
 
+        const showSubscriptionCta = Boolean(
+          data.paypal &&
+            data.paypal.subscriptionCheckoutAvailable &&
+            (!donor.subscriptionId || normalizedStatus !== 'active')
+        );
+
+        if (subscriptionButton && subscriptionCta) {
+          if (showSubscriptionCta) {
+            subscriptionCta.classList.remove('hidden');
+            subscriptionButton.disabled = false;
+            subscriptionButton.dataset.available = 'true';
+            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+            setStatusText(
+              subscriptionNote,
+              'Opens PayPal checkout in a new tab.',
+              'info'
+            );
+            subscriptionNote.classList.add('small');
+          } else {
+            subscriptionCta.classList.add('hidden');
+            subscriptionButton.disabled = true;
+            subscriptionButton.dataset.available = 'false';
+            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+            setStatusText(subscriptionNote, '', null);
+            subscriptionNote.classList.add('small');
+          }
+        }
+
         profileEmail.value = donor.email || '';
         profileName.value = donor.name || '';
         inviteEmail.value = donor.email || '';
@@ -702,9 +757,103 @@
 
         renderInvite(data.invite);
 
+        const inviteBlocked = normalizedStatus !== 'active';
+        if (inviteSubmit) {
+          inviteSubmit.disabled = inviteBlocked;
+        }
+        if (inviteEmail) {
+          inviteEmail.disabled = inviteBlocked;
+        }
+        if (inviteNote) {
+          inviteNote.disabled = inviteBlocked;
+        }
+
+        if (inviteBlocked) {
+          inviteDescription.textContent = showSubscriptionCta
+            ? 'Start your PayPal subscription to unlock invite generation.'
+            : 'Invite generation unlocks once your subscription is active.';
+        }
+
         const identifier = donor.name || donor.email || donor.subscriptionId || '';
         if (identifier) {
           document.title = `Plex Dashboard • ${identifier}`;
+        }
+      }
+
+      async function openDashboardSubscriptionCheckout() {
+        if (!subscriptionButton || subscriptionButton.dataset.available !== 'true') {
+          return;
+        }
+
+        subscriptionButton.disabled = true;
+        subscriptionButton.textContent = 'Opening PayPal…';
+        setStatusText(
+          subscriptionNote,
+          'Opening PayPal checkout in a new tab…',
+          'info'
+        );
+        subscriptionNote.classList.add('small');
+
+        const payload = {};
+        const emailValue = profileEmail ? profileEmail.value.trim() : '';
+        const nameValue = profileName ? profileName.value.trim() : '';
+        if (emailValue) {
+          payload.email = emailValue;
+        }
+        if (nameValue) {
+          payload.name = nameValue;
+        }
+
+        const requestInit = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        };
+
+        let checkoutWindow = null;
+        try {
+          checkoutWindow = window.open('', '_blank', 'noopener');
+        } catch (err) {
+          checkoutWindow = null;
+        }
+
+        try {
+          const response = await fetch('/api/customer/paypal-checkout', requestInit);
+          let data;
+          try {
+            data = await response.json();
+          } catch (err) {
+            data = {};
+          }
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Unable to start PayPal checkout.');
+          }
+
+          if (data.approvalUrl) {
+            if (checkoutWindow) {
+              checkoutWindow.location = data.approvalUrl;
+            } else {
+              window.open(data.approvalUrl, '_blank', 'noopener');
+            }
+            setStatusText(
+              subscriptionNote,
+              'Follow the steps in the PayPal tab to complete your subscription.',
+              'success'
+            );
+            subscriptionNote.classList.add('small');
+          } else {
+            throw new Error('PayPal did not return a checkout URL.');
+          }
+        } catch (err) {
+          setStatusText(subscriptionNote, err.message, 'error');
+          subscriptionNote.classList.add('small');
+          if (checkoutWindow) {
+            checkoutWindow.close();
+          }
+        } finally {
+          subscriptionButton.disabled = false;
+          subscriptionButton.textContent = defaultSubscriptionButtonLabel;
         }
       }
 
@@ -771,6 +920,16 @@
         }
       });
 
+      if (subscriptionButton) {
+        subscriptionButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (subscriptionButton.disabled || subscriptionButton.dataset.available !== 'true') {
+            return;
+          }
+          await openDashboardSubscriptionCheckout();
+        });
+      }
+
       profileForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         setStatusText(profileStatus, 'Saving…', 'info');
@@ -799,6 +958,9 @@
 
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
+        if (inviteSubmit.disabled) {
+          return;
+        }
         setStatusText(inviteStatus, 'Generating invite…', 'info');
         inviteSubmit.disabled = true;
         try {

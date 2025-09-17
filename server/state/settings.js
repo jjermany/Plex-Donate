@@ -1,6 +1,9 @@
 const { getAllSettings, saveSettings } = require('../db');
 
 const DEFAULT_SETTINGS = {
+  app: {
+    publicBaseUrl: '',
+  },
   paypal: {
     clientId: '',
     clientSecret: '',
@@ -147,6 +150,10 @@ function getPaypalSettings() {
   return getGroup('paypal');
 }
 
+function getAppSettings() {
+  return getGroup('app');
+}
+
 function getWizarrSettings() {
   return getGroup('wizarr');
 }
@@ -165,6 +172,7 @@ module.exports = {
   getGroup,
   updateGroup,
   previewGroup,
+  getAppSettings,
   getPaypalSettings,
   getWizarrSettings,
   getSmtpSettings,
