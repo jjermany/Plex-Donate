@@ -21,21 +21,21 @@ async function createInvite({ email, note, expiresInDays }, overrideSettings) {
     expires_in_days: expiresInDays || wizarr.defaultDurationDays || 7,
   };
 
-  const response = await fetch(`${getBaseUrl(wizarr)}/api/invites`, {
+  const { response, text } = await requestWithFallback({
+    wizarr,
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': wizarr.apiKey,
-    },
-    body: JSON.stringify(payload),
+    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invite'],
+    body: payload,
   });
 
   if (!response.ok) {
-    const text = await response.text();
     throw new Error(`Failed to create Wizarr invite: ${text}`);
   }
 
-  const data = await response.json();
+  const data = safeParseJson(text);
+  if (!data || typeof data !== 'object') {
+    throw new Error('Unexpected response from Wizarr API while creating invite');
+  }
   return {
     inviteCode: data.code || data.invite_code || data.id,
     inviteUrl: data.url || data.invite_url || data.link,
@@ -49,16 +49,17 @@ async function revokeInvite(inviteCode) {
     throw new Error('inviteCode is required to revoke Wizarr invite');
   }
 
-  const response = await fetch(`${getBaseUrl(wizarr)}/api/invites/${inviteCode}`, {
+  const { response, text } = await requestWithFallback({
+    wizarr,
     method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': wizarr.apiKey,
-    },
+    pathCandidates: [
+      `/api/invites/${encodeURIComponent(inviteCode)}`,
+      `/api/invite/${encodeURIComponent(inviteCode)}`,
+      `/api/v1/invite/${encodeURIComponent(inviteCode)}`,
+    ],
   });
 
   if (!response.ok) {
-    const text = await response.text();
     throw new Error(`Failed to revoke Wizarr invite: ${text}`);
   }
 
@@ -67,16 +68,12 @@ async function revokeInvite(inviteCode) {
 
 async function verifyConnection(overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
-  const response = await fetch(`${getBaseUrl(wizarr)}/api/invites`, {
+  const { response, text } = await requestWithFallback({
+    wizarr,
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': wizarr.apiKey,
-    },
-    body: JSON.stringify({ email: '', note: 'Connection test', expires_in_days: 1 }),
+    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invite'],
+    body: { email: '', note: 'Connection test', expires_in_days: 1 },
   });
-
-  const text = await response.text();
 
   if (response.status === 401 || response.status === 403) {
     throw new Error('Wizarr API rejected the provided API key');
@@ -99,6 +96,44 @@ async function verifyConnection(overrideSettings) {
     status: response.status,
     details: safeParseJson(text),
   };
+}
+
+async function requestWithFallback({
+  wizarr,
+  method,
+  pathCandidates,
+  body,
+}) {
+  const attempts = [];
+  for (const path of pathCandidates) {
+    if (!path) {
+      continue;
+    }
+    const url = `${getBaseUrl(wizarr)}${path}`;
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': wizarr.apiKey,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await response.text();
+
+    if (response.status === 404 || response.status === 405) {
+      attempts.push({ path, status: response.status });
+      continue;
+    }
+
+    return { response, text, url: path };
+  }
+
+  const attemptedSummary = attempts.length
+    ? attempts.map((attempt) => `${attempt.path} (${attempt.status})`).join(', ')
+    : pathCandidates.filter(Boolean).join(', ');
+  throw new Error(
+    `Wizarr API endpoint not found. Check the Wizarr base URL. Tried: ${attemptedSummary}`
+  );
 }
 
 function safeParseJson(value) {

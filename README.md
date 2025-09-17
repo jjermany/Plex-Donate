@@ -67,3 +67,7 @@ npm start      # production mode
 ```
 
 The admin dashboard is served from `http://localhost:3000/` and exposes JSON APIs under `/api/admin`. Configure your PayPal webhook to POST to `/api/paypal/webhook`.
+
+### Shareable donor pages
+
+Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
