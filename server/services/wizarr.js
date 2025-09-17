@@ -1,6 +1,37 @@
 const fetch = require('node-fetch');
 const { getWizarrSettings } = require('../state/settings');
 
+const INVITE_ENDPOINT_BASES = [
+  '/api/invites',
+  '/api/invite',
+  '/api/v1/invites',
+  '/api/v1/invite',
+  '/api/v2/invites',
+  '/api/v2/invite',
+  '/api/admin/invites',
+  '/api/admin/invite',
+  '/api/v1/admin/invites',
+  '/api/v1/admin/invite',
+  '/api/v2/admin/invites',
+  '/api/v2/admin/invite',
+];
+
+const INVITE_CREATION_ENDPOINTS = [
+  ...INVITE_ENDPOINT_BASES,
+  '/api/invites/create',
+  '/api/invite/create',
+  '/api/v1/invites/create',
+  '/api/v1/invite/create',
+  '/api/v2/invites/create',
+  '/api/v2/invite/create',
+  '/api/admin/invites/create',
+  '/api/admin/invite/create',
+  '/api/v1/admin/invites/create',
+  '/api/v1/admin/invite/create',
+  '/api/v2/admin/invites/create',
+  '/api/v2/admin/invite/create',
+];
+
 function getWizarrConfig(overrideSettings) {
   const settings = overrideSettings || getWizarrSettings();
   if (!settings.baseUrl || !settings.apiKey) {
@@ -48,7 +79,7 @@ async function createInvite({ email, note, expiresInDays }, overrideSettings) {
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
-    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invites', '/api/v1/invite'],
+    pathCandidates: INVITE_CREATION_ENDPOINTS,
     body: payload,
   });
 
@@ -76,12 +107,9 @@ async function revokeInvite(inviteCode) {
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'DELETE',
-    pathCandidates: [
-      `/api/invites/${encodeURIComponent(inviteCode)}`,
-      `/api/invite/${encodeURIComponent(inviteCode)}`,
-      `/api/v1/invites/${encodeURIComponent(inviteCode)}`,
-      `/api/v1/invite/${encodeURIComponent(inviteCode)}`,
-    ],
+    pathCandidates: INVITE_ENDPOINT_BASES.map(
+      (path) => `${path}/${encodeURIComponent(inviteCode)}`
+    ),
   });
 
   if (!response.ok) {
@@ -96,7 +124,7 @@ async function verifyConnection(overrideSettings) {
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
-    pathCandidates: ['/api/invites', '/api/invite', '/api/v1/invites', '/api/v1/invite'],
+    pathCandidates: INVITE_CREATION_ENDPOINTS,
     body: { email: '', note: 'Connection test', expires_in_days: 1 },
   });
 
@@ -123,6 +151,46 @@ async function verifyConnection(overrideSettings) {
   };
 }
 
+function toFormBody(body) {
+  const params = new URLSearchParams();
+  if (!body || typeof body !== 'object') {
+    return params.toString();
+  }
+  Object.entries(body).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    params.append(key, String(value));
+  });
+  return params.toString();
+}
+
+async function performRequest({ url, method, apiKey, body, format }) {
+  const headers = {
+    Accept: 'application/json, text/plain, */*',
+    'X-API-KEY': apiKey,
+  };
+
+  let requestBody;
+  if (body && method && method.toUpperCase() !== 'GET') {
+    if (format === 'form') {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      requestBody = toFormBody(body);
+    } else {
+      headers['Content-Type'] = 'application/json';
+      requestBody = JSON.stringify(body);
+    }
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: requestBody,
+  });
+  const text = await response.text();
+  return { response, text };
+}
+
 async function requestWithFallback({
   wizarr,
   method,
@@ -135,27 +203,84 @@ async function requestWithFallback({
     if (!path) {
       continue;
     }
-    const url = buildRequestUrl(baseUrl, path);
-    const response = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-KEY': wizarr.apiKey,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const text = await response.text();
 
-    if (response.status === 404 || response.status === 405) {
-      attempts.push({ path, status: response.status });
+    const url = buildRequestUrl(baseUrl, path);
+    let response;
+    let text = '';
+
+    try {
+      ({ response, text } = await performRequest({
+        url,
+        method,
+        apiKey: wizarr.apiKey,
+        body,
+        format: 'json',
+      }));
+    } catch (err) {
+      attempts.push({
+        url,
+        status: err && err.message ? err.message : 'network error',
+        format: 'json',
+      });
       continue;
     }
 
-    return { response, text, url: path };
+    if (response.status === 404 || response.status === 405) {
+      attempts.push({ url, status: response.status, format: 'json' });
+      continue;
+    }
+
+    if (
+      response.status === 415 &&
+      body &&
+      method &&
+      method.toUpperCase() !== 'GET'
+    ) {
+      attempts.push({ url, status: response.status, format: 'json' });
+      try {
+        ({ response, text } = await performRequest({
+          url,
+          method,
+          apiKey: wizarr.apiKey,
+          body,
+          format: 'form',
+        }));
+      } catch (err) {
+        attempts.push({
+          url,
+          status: err && err.message ? err.message : 'network error',
+          format: 'form',
+        });
+        continue;
+      }
+
+      if (response.status === 404 || response.status === 405) {
+        attempts.push({ url, status: response.status, format: 'form' });
+        continue;
+      }
+
+      if (response.status === 415) {
+        attempts.push({ url, status: response.status, format: 'form' });
+        continue;
+      }
+    }
+
+    return { response, text, url };
   }
 
   const attemptedSummary = attempts.length
-    ? attempts.map((attempt) => `${attempt.path} (${attempt.status})`).join(', ')
+    ? attempts
+        .map((attempt) => {
+          try {
+            const { pathname } = new URL(attempt.url);
+            const formatLabel = attempt.format ? ` [${attempt.format}]` : '';
+            return `${pathname}${formatLabel} (${attempt.status})`;
+          } catch (err) {
+            const formatLabel = attempt.format ? ` [${attempt.format}]` : '';
+            return `${attempt.url}${formatLabel} (${attempt.status})`;
+          }
+        })
+        .join(', ')
     : pathCandidates.filter(Boolean).join(', ');
   throw new Error(
     `Wizarr API endpoint not found. Check the Wizarr base URL. Tried: ${attemptedSummary}`
