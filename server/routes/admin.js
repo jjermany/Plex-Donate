@@ -16,6 +16,7 @@ const {
   updateProspect,
   getProspectById,
   getShareLinkByProspectId,
+  deleteDonorById,
   logEvent,
   getRecentEvents,
 } = require('../db');
@@ -252,6 +253,151 @@ router.get(
         csrfToken: res.locals.csrfToken,
       });
     }
+  })
+);
+
+router.post(
+  '/settings/wizarr/test-invite',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const emailRaw = body.email;
+    const email = typeof emailRaw === 'string' ? emailRaw.trim() : '';
+    if (!email) {
+      return res.status(400).json({
+        error: 'Enter an email address to send a test invite.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        error: 'Enter a valid email address for the test invite.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const noteRaw = body.note;
+    const nameRaw = body.name;
+    const expiresRaw = body.expiresInDays;
+    const overrides =
+      body && body.overrides && typeof body.overrides === 'object'
+        ? body.overrides
+        : undefined;
+
+    const note = typeof noteRaw === 'string' ? noteRaw.trim() : '';
+    const name =
+      typeof nameRaw === 'string' && nameRaw.trim()
+        ? nameRaw.trim()
+        : 'Test Invite';
+    let expiresInDays;
+    if (expiresRaw !== undefined && expiresRaw !== null && `${expiresRaw}`.trim() !== '') {
+      const parsed = Number.parseInt(expiresRaw, 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        expiresInDays = parsed;
+      }
+    }
+
+    let wizarrConfig;
+    try {
+      wizarrConfig = settingsStore.previewGroup('wizarr', overrides);
+    } catch (err) {
+      logger.warn('Failed to preview Wizarr settings for test invite', err.message);
+      return res.status(400).json({
+        error: err.message || 'Wizarr settings are not configured',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    let smtpConfig;
+    try {
+      smtpConfig = emailService.getSmtpConfig();
+    } catch (err) {
+      logger.warn('Cannot send test invite due to email configuration', err.message);
+      return res.status(400).json({
+        error: `Email settings are not configured: ${err.message}`,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    let invite;
+    try {
+      invite = await wizarrService.createInvite(
+        {
+          email,
+          note,
+          expiresInDays,
+        },
+        wizarrConfig
+      );
+    } catch (err) {
+      logger.warn('Failed to create Wizarr test invite', err.message);
+      return res.status(500).json({
+        error: err.message || 'Failed to create Wizarr invite',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    if (!invite || !invite.inviteUrl) {
+      logger.warn('Wizarr did not return an invite URL for test invite');
+      return res.status(500).json({
+        error: 'Wizarr did not return an invite link',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const inviteCode = invite.inviteCode;
+    const inviteUrl = invite.inviteUrl;
+    const subscriptionId = `TEST-${nanoid(10)}`;
+
+    try {
+      await emailService.sendInviteEmail(
+        {
+          to: email,
+          inviteUrl,
+          name,
+          subscriptionId,
+        },
+        smtpConfig
+      );
+    } catch (err) {
+      logger.warn('Failed to send Wizarr test invite email', err.message);
+      if (inviteCode) {
+        try {
+          await wizarrService.revokeInvite(inviteCode);
+        } catch (revokeErr) {
+          logger.warn(
+            'Failed to revoke Wizarr invite after test email failure',
+            revokeErr.message
+          );
+        }
+      }
+      return res.status(500).json({
+        error: 'Invite created but email delivery failed',
+        details: err.message,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    logEvent('wizarr.test_invite', {
+      email,
+      invite: {
+        code: inviteCode,
+        url: inviteUrl,
+      },
+      note: note || undefined,
+      expiresInDays,
+    });
+    logger.info('Sent Wizarr test invite', { email });
+
+    res.json({
+      success: true,
+      invite: {
+        code: inviteCode,
+        url: inviteUrl,
+      },
+      message: `Test invite sent to ${email}.`,
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 
@@ -540,6 +686,31 @@ router.post(
     }
 
     logEvent('invite.revoked', { donorId: donor.id, inviteId: invite.id });
+
+    res.json({ success: true, csrfToken: res.locals.csrfToken });
+  })
+);
+
+router.delete(
+  '/subscribers/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    const removed = deleteDonorById(donor.id);
+    if (!removed) {
+      return res.status(500).json({ error: 'Failed to remove subscriber' });
+    }
+
+    logEvent('subscriber.removed', {
+      donorId: donor.id,
+      email: donor.email,
+    });
 
     res.json({ success: true, csrfToken: res.locals.csrfToken });
   })

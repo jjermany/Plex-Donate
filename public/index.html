@@ -489,6 +489,18 @@
         }
       }
 
+      .test-invite-group {
+        margin-top: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .test-invite-group p {
+        margin: 0;
+        color: var(--text-muted-soft);
+        font-size: 0.9rem;
+      }
+
       .checkbox-row {
         display: flex;
         align-items: center;
@@ -834,10 +846,31 @@
                 <span class="help">Used when generating invites without a custom duration.</span>
               </label>
             </div>
+            <div class="test-invite-group">
+              <label>
+                Send test invite to
+                <input
+                  name="testInviteEmail"
+                  type="email"
+                  placeholder="you@example.com"
+                  autocomplete="off"
+                  data-test-field="invite-email"
+                  data-transient="true"
+                />
+                <span class="help"
+                  >Creates a real Wizarr invite and emails it using your saved SMTP settings.</span
+                >
+              </label>
+              <p>
+                Use this to verify invite delivery before sharing your donation link. Remember to
+                revoke the test account in Wizarr when you're done.
+              </p>
+            </div>
             <p class="form-status" data-status-for="wizarr"></p>
             <div class="form-actions">
               <button type="submit" class="secondary">Save Wizarr settings</button>
               <button type="button" data-action="test">Test Wizarr connection</button>
+              <button type="button" data-action="test-invite">Send test invite</button>
             </div>
           </form>
 
@@ -911,6 +944,7 @@
             <button data-action="share-generate" class="secondary">Generate invite page link</button>
             <button data-action="resend" class="secondary">Resend email</button>
             <button data-action="revoke" class="danger">Revoke</button>
+            <button data-action="remove" class="danger secondary">Remove</button>
           </div>
         </td>
       </tr>
@@ -1260,6 +1294,9 @@
       function getFormPayload(form) {
         const payload = {};
         form.querySelectorAll('[name]').forEach((input) => {
+          if (input.dataset && input.dataset.transient === 'true') {
+            return;
+          }
           if (input.type === 'checkbox') {
             payload[input.name] = input.checked;
           } else {
@@ -1278,6 +1315,9 @@
             const group = form.dataset.group;
             const values = group && state.settings ? state.settings[group] : null;
             form.querySelectorAll('[name]').forEach((input) => {
+              if (input.dataset && input.dataset.transient === 'true') {
+                return;
+              }
               if (input.type === 'checkbox') {
                 input.checked = Boolean(values && values[input.name]);
               } else {
@@ -1626,9 +1666,10 @@
             lastPaymentCell.textContent = '—';
           }
 
+          const invites = Array.isArray(donor.invites) ? donor.invites : [];
           const inviteParts = [];
-          if (donor.invites.length > 0) {
-            const invite = donor.invites[0];
+          if (invites.length > 0) {
+            const invite = invites[0];
             if (invite.wizarrInviteUrl) {
               inviteParts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
             }
@@ -1660,6 +1701,57 @@
                 `<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`
               );
             }
+          }
+
+          const activeInvite = invites.find((invite) => !invite.revokedAt);
+          const inviteButton = clone.querySelector('button[data-action="invite"]');
+          const shareButton = clone.querySelector('button[data-action="share"]');
+          const shareGenerateButton = clone.querySelector(
+            'button[data-action="share-generate"]'
+          );
+          const resendButton = clone.querySelector('button[data-action="resend"]');
+          const revokeButton = clone.querySelector('button[data-action="revoke"]');
+          const removeButton = clone.querySelector('button[data-action="remove"]');
+
+          const hasShareUrl = Boolean(shareUrl);
+
+          if (inviteButton) {
+            const hasEmail = Boolean(donor.email);
+            inviteButton.disabled = !hasEmail;
+            inviteButton.title = hasEmail
+              ? 'Generate a new Wizarr invite'
+              : 'Add an email address to generate an invite';
+          }
+
+          if (shareButton) {
+            shareButton.disabled = !hasShareUrl;
+            shareButton.title = hasShareUrl
+              ? 'Copy the existing invite page link'
+              : 'Generate an invite page link first';
+          }
+
+          if (shareGenerateButton) {
+            shareGenerateButton.title = 'Generate a new invite page link';
+          }
+
+          if (resendButton) {
+            const canResend = Boolean(activeInvite && activeInvite.wizarrInviteUrl);
+            resendButton.disabled = !canResend;
+            resendButton.title = canResend
+              ? 'Resend the most recent invite email'
+              : 'No active invite available to resend';
+          }
+
+          if (revokeButton) {
+            const canRevoke = Boolean(activeInvite);
+            revokeButton.disabled = !canRevoke;
+            revokeButton.title = canRevoke
+              ? 'Revoke the most recent active invite'
+              : 'No active invite available to revoke';
+          }
+
+          if (removeButton) {
+            removeButton.title = 'Remove this subscriber and all related records';
           }
 
           if (inviteParts.length > 0) {
@@ -1938,6 +2030,56 @@
             return;
           }
 
+          if (action === 'test-invite') {
+            if (group !== 'wizarr') {
+              return;
+            }
+
+            const emailInput = form.querySelector('[data-test-field="invite-email"]');
+            const emailValue = emailInput ? emailInput.value.trim() : '';
+            if (!emailValue) {
+              setFormStatus(
+                form,
+                'Enter an email address to send a test invite.',
+                'error'
+              );
+              if (emailInput) {
+                emailInput.focus();
+              }
+              return;
+            }
+
+            const payload = getFormPayload(form);
+            const requestBody = {
+              email: emailValue,
+              overrides: payload,
+            };
+
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Sending test invite…');
+              const response = await api('/api/admin/settings/wizarr/test-invite', {
+                method: 'POST',
+                body: requestBody,
+              });
+              const message =
+                response.message ||
+                `Test invite sent to ${emailValue}. Check your inbox for the Wizarr link.`;
+              setFormStatus(form, message, 'success');
+              scheduleStatusClear(form, 5000);
+            } catch (err) {
+              setFormStatus(
+                form,
+                err.message || 'Failed to send test invite',
+                'error'
+              );
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+            return;
+          }
+
           if (action === 'generate-plan') {
             if (group !== 'paypal') {
               return;
@@ -2041,6 +2183,14 @@
               return;
             }
             await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
+          } else if (action === 'remove') {
+            const confirmation = confirm(
+              'Remove this subscriber and delete all related invites, payments, and share links?'
+            );
+            if (!confirmation) {
+              return;
+            }
+            await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
           }
           await loadDashboardData();
         } catch (err) {
