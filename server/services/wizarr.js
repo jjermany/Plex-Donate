@@ -32,6 +32,55 @@ const INVITE_CREATION_ENDPOINTS = [
   '/api/v2/admin/invite/create',
 ];
 
+const AUTH_STRATEGIES = [
+  {
+    label: 'x-api-key',
+    build: (url, apiKey) => ({
+      url,
+      headers: { 'X-API-KEY': apiKey },
+    }),
+  },
+  {
+    label: 'x-api-key-camel',
+    build: (url, apiKey) => ({
+      url,
+      headers: { 'X-Api-Key': apiKey },
+    }),
+  },
+  {
+    label: 'bearer',
+    build: (url, apiKey) => ({
+      url,
+      headers: { Authorization: `Bearer ${apiKey}` },
+    }),
+  },
+  {
+    label: 'token',
+    build: (url, apiKey) => ({
+      url,
+      headers: { Authorization: `Token ${apiKey}` },
+    }),
+  },
+  {
+    label: 'raw-authorization',
+    build: (url, apiKey) => ({
+      url,
+      headers: { Authorization: apiKey },
+    }),
+  },
+  {
+    label: 'query-param',
+    build: (url, apiKey) => {
+      const urlObj = new URL(url);
+      urlObj.searchParams.set('api_key', apiKey);
+      return {
+        url: urlObj.toString(),
+        headers: { 'X-API-KEY': apiKey },
+      };
+    },
+  },
+];
+
 function getWizarrConfig(overrideSettings) {
   const settings = overrideSettings || getWizarrSettings();
   if (!settings.baseUrl || !settings.apiKey) {
@@ -166,29 +215,86 @@ function toFormBody(body) {
 }
 
 async function performRequest({ url, method, apiKey, body, format }) {
-  const headers = {
-    Accept: 'application/json, text/plain, */*',
-    'X-API-KEY': apiKey,
-  };
+  const attempts = [];
+  let lastResult = null;
+  let lastError = null;
 
-  let requestBody;
-  if (body && method && method.toUpperCase() !== 'GET') {
-    if (format === 'form') {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      requestBody = toFormBody(body);
-    } else {
-      headers['Content-Type'] = 'application/json';
-      requestBody = JSON.stringify(body);
+  for (const strategy of AUTH_STRATEGIES) {
+    let requestUrl = url;
+    let strategyHeaders = {};
+
+    try {
+      const built = strategy.build ? strategy.build(url, apiKey) : { url };
+      requestUrl = built.url || url;
+      strategyHeaders = built.headers || {};
+    } catch (err) {
+      attempts.push({
+        url,
+        status: err && err.message ? err.message : 'strategy error',
+        strategy: strategy.label,
+        format,
+      });
+      continue;
     }
+
+    const headers = {
+      Accept: 'application/json, text/plain, */*',
+      ...strategyHeaders,
+    };
+
+    let requestBody;
+    if (body && method && method.toUpperCase() !== 'GET') {
+      if (format === 'form') {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        requestBody = toFormBody(body);
+      } else {
+        headers['Content-Type'] = 'application/json';
+        requestBody = JSON.stringify(body);
+      }
+    }
+
+    let response;
+    let text = '';
+    try {
+      response = await fetch(requestUrl, {
+        method,
+        headers,
+        body: requestBody,
+      });
+      text = await response.text();
+    } catch (err) {
+      attempts.push({
+        url: requestUrl,
+        status: err && err.message ? err.message : 'network error',
+        strategy: strategy.label,
+        format,
+      });
+      lastError = err;
+      continue;
+    }
+
+    attempts.push({
+      url: requestUrl,
+      status: response.status,
+      strategy: strategy.label,
+      format,
+    });
+
+    if (response.status !== 401 && response.status !== 403) {
+      return { response, text, url: requestUrl, attempts };
+    }
+
+    lastResult = { response, text, url: requestUrl };
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: requestBody,
-  });
-  const text = await response.text();
-  return { response, text };
+  if (lastResult) {
+    return { ...lastResult, attempts };
+  }
+
+  const error =
+    lastError || new Error('Wizarr request failed for all authentication strategies');
+  error.attempts = attempts;
+  throw error;
 }
 
 async function requestWithFallback({
@@ -209,24 +315,41 @@ async function requestWithFallback({
     let text = '';
 
     try {
-      ({ response, text } = await performRequest({
+      const result = await performRequest({
         url,
         method,
         apiKey: wizarr.apiKey,
         body,
         format: 'json',
-      }));
-    } catch (err) {
-      attempts.push({
-        url,
-        status: err && err.message ? err.message : 'network error',
-        format: 'json',
       });
+      response = result.response;
+      text = result.text;
+      if (result.attempts && result.attempts.length > 0) {
+        attempts.push(...result.attempts);
+      } else {
+        attempts.push({
+          url: result.url || url,
+          status: response.status,
+          format: 'json',
+        });
+      }
+    } catch (err) {
+      if (err && err.attempts && err.attempts.length > 0) {
+        attempts.push(...err.attempts);
+      } else {
+        attempts.push({
+          url,
+          status: err && err.message ? err.message : 'network error',
+          format: 'json',
+        });
+      }
       continue;
     }
 
+    const lastAttempt = attempts[attempts.length - 1];
+    const lastUrl = (lastAttempt && lastAttempt.url) || url;
+
     if (response.status === 404 || response.status === 405) {
-      attempts.push({ url, status: response.status, format: 'json' });
       continue;
     }
 
@@ -236,36 +359,50 @@ async function requestWithFallback({
       method &&
       method.toUpperCase() !== 'GET'
     ) {
-      attempts.push({ url, status: response.status, format: 'json' });
       try {
-        ({ response, text } = await performRequest({
-          url,
+        const result = await performRequest({
+          url: lastUrl,
           method,
           apiKey: wizarr.apiKey,
           body,
           format: 'form',
-        }));
-      } catch (err) {
-        attempts.push({
-          url,
-          status: err && err.message ? err.message : 'network error',
-          format: 'form',
         });
+        response = result.response;
+        text = result.text;
+        if (result.attempts && result.attempts.length > 0) {
+          attempts.push(...result.attempts);
+        } else {
+          attempts.push({
+            url: result.url || lastUrl,
+            status: response.status,
+            format: 'form',
+          });
+        }
+      } catch (err) {
+        if (err && err.attempts && err.attempts.length > 0) {
+          attempts.push(...err.attempts);
+        } else {
+          attempts.push({
+            url: lastUrl,
+            status: err && err.message ? err.message : 'network error',
+            format: 'form',
+          });
+        }
         continue;
       }
 
       if (response.status === 404 || response.status === 405) {
-        attempts.push({ url, status: response.status, format: 'form' });
         continue;
       }
 
       if (response.status === 415) {
-        attempts.push({ url, status: response.status, format: 'form' });
         continue;
       }
     }
 
-    return { response, text, url };
+    const finalAttempt = attempts[attempts.length - 1];
+    const finalUrl = finalAttempt && finalAttempt.url ? finalAttempt.url : url;
+    return { response, text, url: finalUrl };
   }
 
   const attemptedSummary = attempts.length
@@ -274,10 +411,16 @@ async function requestWithFallback({
           try {
             const { pathname } = new URL(attempt.url);
             const formatLabel = attempt.format ? ` [${attempt.format}]` : '';
-            return `${pathname}${formatLabel} (${attempt.status})`;
+            const strategyLabel = attempt.strategy
+              ? ` {${attempt.strategy}}`
+              : '';
+            return `${pathname}${formatLabel}${strategyLabel} (${attempt.status})`;
           } catch (err) {
             const formatLabel = attempt.format ? ` [${attempt.format}]` : '';
-            return `${attempt.url}${formatLabel} (${attempt.status})`;
+            const strategyLabel = attempt.strategy
+              ? ` {${attempt.strategy}}`
+              : '';
+            return `${attempt.url}${formatLabel}${strategyLabel} (${attempt.status})`;
           }
         })
         .join(', ')
