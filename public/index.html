@@ -528,6 +528,50 @@
         }
       }
 
+      #prospect-share-form input,
+      #prospect-share-form textarea {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--input-border);
+        padding: 12px 14px;
+        font-size: 1rem;
+        background: var(--input-background);
+        color: var(--text-primary);
+        box-sizing: border-box;
+      }
+
+      #prospect-share-form textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      .share-output {
+        margin-top: 20px;
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px dashed var(--panel-border-color);
+        background: var(--event-payload-bg);
+        display: grid;
+        gap: 12px;
+      }
+
+      .share-output .share-url {
+        display: inline-block;
+        word-break: break-word;
+        font-weight: 600;
+      }
+
+      .share-output-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .share-output-meta {
+        color: var(--text-muted-soft);
+        font-size: 0.9rem;
+      }
+
       .badge {
         background: var(--badge-bg);
         color: var(--badge-color);
@@ -590,6 +634,64 @@
       </section>
 
       <div id="dashboard" class="hidden">
+        <section class="panel" id="prospect-share-panel">
+          <h2 style="margin-top:0;">Invite a new supporter</h2>
+          <p class="muted-text" style="margin:0 0 16px;">
+            Generate a share page for someone who isn't subscribed yet. The link walks them
+            through account creation and the PayPal signup flow before unlocking Plex access.
+          </p>
+          <form id="prospect-share-form">
+            <input type="hidden" name="prospectId" />
+            <div class="field-grid">
+              <label>
+                Contact email
+                <input
+                  name="email"
+                  type="email"
+                  autocomplete="off"
+                  placeholder="future.supporter@example.com"
+                />
+              </label>
+              <label>
+                Display name
+                <input
+                  name="name"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Future Supporter"
+                />
+              </label>
+            </div>
+            <label>
+              Internal notes
+              <textarea name="note" placeholder="Optional details for other admins"></textarea>
+            </label>
+            <p class="form-status" data-status-for="prospect-share"></p>
+            <div class="form-actions">
+              <button type="submit">Generate invite page link</button>
+              <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
+            </div>
+          </form>
+          <div class="share-output hidden" id="prospect-share-result">
+            <div>
+              <div class="share-output-meta" id="prospect-share-summary"></div>
+              <a
+                id="prospect-share-url"
+                class="share-url"
+                href="#"
+                target="_blank"
+                rel="noopener"
+              ></a>
+            </div>
+            <div class="share-output-actions">
+              <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
+              <button type="button" class="secondary" id="prospect-share-regenerate">
+                Generate new link
+              </button>
+            </div>
+            <div class="share-output-meta" id="prospect-share-note"></div>
+          </div>
+        </section>
         <div class="grid">
           <section class="panel">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
@@ -805,16 +907,33 @@
       const paypalPlanSection = document.getElementById('paypal-plan-management');
       const paypalPlanBody = document.getElementById('paypal-plan-body');
       const paypalPlanManageLink = document.getElementById('paypal-plan-manage-link');
+      const prospectSharePanel = document.getElementById('prospect-share-panel');
+      const prospectShareForm = document.getElementById('prospect-share-form');
+      const prospectShareResult = document.getElementById('prospect-share-result');
+      const prospectShareSummary = document.getElementById('prospect-share-summary');
+      const prospectShareUrl = document.getElementById('prospect-share-url');
+      const prospectShareNote = document.getElementById('prospect-share-note');
+      const prospectShareCopy = document.getElementById('prospect-share-copy');
+      const prospectShareRegenerate = document.getElementById('prospect-share-regenerate');
+      const prospectShareReset = document.getElementById('prospect-share-reset');
       const themeToggleButton = document.getElementById('theme-toggle');
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
       const THEME_STORAGE_KEY = 'plexDonateTheme';
+
+      if (prospectShareCopy) {
+        prospectShareCopy.disabled = true;
+      }
+      if (prospectShareRegenerate) {
+        prospectShareRegenerate.disabled = true;
+      }
 
       let csrfToken = null;
       let state = {
         authenticated: false,
         donors: [],
         events: [],
+        prospectShare: null,
         settings: null,
         paypalPlan: null,
         paypalProduct: null,
@@ -878,6 +997,20 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function buildShareUrl(link) {
+        if (!link || typeof link !== 'object') {
+          return '';
+        }
+        if (link.url) {
+          return String(link.url);
+        }
+        if (link.token) {
+          const origin = window.location.origin.replace(/\/$/, '');
+          return `${origin}/share/${link.token}`;
+        }
+        return '';
       }
 
       function toTitleCase(value) {
@@ -1027,6 +1160,7 @@
       }
 
       function render() {
+        renderProspectSharePanel();
         if (state.authenticated) {
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
@@ -1039,6 +1173,9 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
+          if (prospectSharePanel) {
+            prospectSharePanel.classList.add('hidden');
+          }
         }
       }
 
@@ -1163,6 +1300,207 @@
         );
       }
 
+      function renderProspectSharePanel() {
+        if (!prospectSharePanel) {
+          return;
+        }
+
+        if (!state.authenticated) {
+          prospectSharePanel.classList.add('hidden');
+          if (prospectShareResult) {
+            prospectShareResult.classList.add('hidden');
+          }
+          if (prospectShareCopy) {
+            prospectShareCopy.disabled = true;
+          }
+          if (prospectShareRegenerate) {
+            prospectShareRegenerate.disabled = true;
+          }
+          return;
+        }
+
+        prospectSharePanel.classList.remove('hidden');
+
+        const shareData = state.prospectShare || null;
+        const prospect = shareData && shareData.prospect ? shareData.prospect : null;
+        const shareLink = shareData && shareData.shareLink ? shareData.shareLink : null;
+        const shareUrl = buildShareUrl(shareLink);
+
+        if (prospectShareUrl) {
+          if (shareUrl) {
+            prospectShareUrl.href = shareUrl;
+            prospectShareUrl.textContent = shareUrl;
+          } else {
+            prospectShareUrl.removeAttribute('href');
+            prospectShareUrl.textContent = '';
+          }
+        }
+
+        if (prospectShareNote) {
+          prospectShareNote.textContent =
+            prospect && prospect.note ? `Note: ${prospect.note}` : '';
+        }
+
+        if (prospectShareSummary) {
+          const summaryParts = [];
+          if (prospect && prospect.name) {
+            summaryParts.push(prospect.name);
+          }
+          if (prospect && prospect.email) {
+            summaryParts.push(prospect.email);
+          }
+          if (shareUrl) {
+            prospectShareSummary.textContent =
+              summaryParts.length > 0
+                ? `Link ready for ${summaryParts.join(' • ')}`
+                : 'Share this link with your prospective supporter.';
+          } else if (summaryParts.length > 0) {
+            prospectShareSummary.textContent = `Preparing link for ${summaryParts.join(
+              ' • '
+            )}`;
+          } else {
+            prospectShareSummary.textContent = '';
+          }
+        }
+
+        if (!shareUrl) {
+          if (prospectShareResult) {
+            prospectShareResult.classList.add('hidden');
+          }
+          if (prospectShareCopy) {
+            prospectShareCopy.disabled = true;
+          }
+          if (prospectShareRegenerate) {
+            prospectShareRegenerate.disabled = !(prospect && prospect.id);
+          }
+          return;
+        }
+
+        if (prospectShareResult) {
+          prospectShareResult.classList.remove('hidden');
+        }
+        if (prospectShareCopy) {
+          prospectShareCopy.disabled = false;
+        }
+        if (prospectShareRegenerate) {
+          prospectShareRegenerate.disabled = false;
+        }
+      }
+
+      async function generateProspectShareLink({ regenerate = false } = {}) {
+        if (!prospectShareForm) {
+          return;
+        }
+
+        const submitButton = prospectShareForm.querySelector('button[type="submit"]');
+        const previousDisabledState = submitButton ? submitButton.disabled : false;
+
+        const formPayload = getFormPayload(prospectShareForm);
+        const requestBody = {
+          email: (formPayload.email || '').trim(),
+          name: (formPayload.name || '').trim(),
+          note: (formPayload.note || '').trim(),
+        };
+
+        const parsedProspectId = Number.parseInt(formPayload.prospectId, 10);
+        if (Number.isFinite(parsedProspectId) && parsedProspectId > 0) {
+          requestBody.prospectId = parsedProspectId;
+        }
+        if (regenerate) {
+          requestBody.regenerate = true;
+        }
+
+        setFormStatus(
+          prospectShareForm,
+          regenerate
+            ? 'Regenerating invite page link…'
+            : 'Generating invite page link…',
+          'info'
+        );
+
+        if (submitButton) {
+          submitButton.disabled = true;
+        }
+        if (prospectShareRegenerate) {
+          prospectShareRegenerate.disabled = true;
+        }
+        if (prospectShareCopy) {
+          prospectShareCopy.disabled = true;
+        }
+
+        try {
+          const response = await api('/api/admin/share-links/prospect', {
+            method: 'POST',
+            body: requestBody,
+          });
+
+          const prospect = response.prospect || null;
+          const shareLink = response.shareLink || null;
+          state.prospectShare = { prospect, shareLink };
+
+          if (prospectShareForm) {
+            const emailInput = prospectShareForm.querySelector('[name="email"]');
+            if (emailInput) {
+              emailInput.value = prospect && prospect.email ? prospect.email : '';
+            }
+            const nameInput = prospectShareForm.querySelector('[name="name"]');
+            if (nameInput) {
+              nameInput.value = prospect && prospect.name ? prospect.name : '';
+            }
+            const noteInput = prospectShareForm.querySelector('[name="note"]');
+            if (noteInput) {
+              noteInput.value = prospect && prospect.note ? prospect.note : '';
+            }
+            const idInput = prospectShareForm.querySelector('[name="prospectId"]');
+            if (idInput) {
+              idInput.value = prospect && prospect.id ? String(prospect.id) : '';
+            }
+          }
+
+          renderProspectSharePanel();
+
+          const shareUrl = buildShareUrl(shareLink);
+          let copied = false;
+          if (shareUrl && navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              copied = true;
+            } catch (err) {
+              console.warn('Clipboard copy failed', err);
+            }
+          }
+
+          setFormStatus(
+            prospectShareForm,
+            copied
+              ? 'Invite page link copied to clipboard!'
+              : 'Invite page link ready! Use the buttons below to share.',
+            'success'
+          );
+          scheduleStatusClear(prospectShareForm, 4000);
+        } catch (err) {
+          setFormStatus(prospectShareForm, err.message, 'error');
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = previousDisabledState;
+          }
+          const hasProspect = Boolean(
+            state.prospectShare &&
+              state.prospectShare.prospect &&
+              state.prospectShare.prospect.id
+          );
+          const hasShareLink = Boolean(
+            buildShareUrl(state.prospectShare && state.prospectShare.shareLink)
+          );
+          if (prospectShareRegenerate) {
+            prospectShareRegenerate.disabled = !hasProspect;
+          }
+          if (prospectShareCopy) {
+            prospectShareCopy.disabled = !hasShareLink;
+          }
+        }
+      }
+
       async function loadSettings() {
         if (!settingsPanel) {
           return;
@@ -1275,9 +1613,8 @@
             }
           }
 
-          if (donor.shareLink && donor.shareLink.token) {
-            const origin = window.location.origin.replace(/\/$/, '');
-            const shareUrl = `${origin}/share/${donor.shareLink.token}`;
+          const shareUrl = buildShareUrl(donor.shareLink);
+          if (shareUrl) {
             inviteParts.push(
               `<a href="${shareUrl}" target="_blank" rel="noopener">Share page</a>`
             );
@@ -1361,6 +1698,7 @@
             state.paypalPlanError = '';
             state.paypalPlanManageUrl = '';
             state.paypalPlanLoading = false;
+            state.prospectShare = null;
             render();
           }
         } catch (err) {
@@ -1404,11 +1742,84 @@
           state.paypalPlanError = '';
           state.paypalPlanManageUrl = '';
           state.paypalPlanLoading = false;
+          state.prospectShare = null;
           render();
         }
       });
 
       refreshButton.addEventListener('click', loadDashboardData);
+
+      if (prospectShareForm) {
+        prospectShareForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          await generateProspectShareLink({ regenerate: false });
+        });
+      }
+
+      if (prospectShareRegenerate) {
+        prospectShareRegenerate.addEventListener('click', async () => {
+          await generateProspectShareLink({ regenerate: true });
+        });
+      }
+
+      if (prospectShareCopy) {
+        prospectShareCopy.addEventListener('click', async () => {
+          const shareLink = state.prospectShare ? state.prospectShare.shareLink : null;
+          const shareUrl = buildShareUrl(shareLink);
+          if (!shareUrl) {
+            return;
+          }
+          let copied = false;
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+              await navigator.clipboard.writeText(shareUrl);
+              copied = true;
+            } catch (err) {
+              console.warn('Clipboard copy failed', err);
+            }
+          }
+          if (copied) {
+            setFormStatus(prospectShareForm, 'Invite page link copied to clipboard!', 'success');
+            scheduleStatusClear(prospectShareForm, 4000);
+          } else {
+            window.prompt(
+              'Copy this invite page link and share it with your supporter:',
+              shareUrl
+            );
+          }
+        });
+      }
+
+      if (prospectShareReset) {
+        prospectShareReset.addEventListener('click', () => {
+          if (!prospectShareForm) {
+            return;
+          }
+          prospectShareForm.reset();
+          const idInput = prospectShareForm.querySelector('[name="prospectId"]');
+          if (idInput) {
+            idInput.value = '';
+          }
+          state.prospectShare = null;
+          if (prospectShareResult) {
+            prospectShareResult.classList.add('hidden');
+          }
+          if (prospectShareCopy) {
+            prospectShareCopy.disabled = true;
+          }
+          if (prospectShareRegenerate) {
+            prospectShareRegenerate.disabled = true;
+          }
+          if (prospectShareSummary) {
+            prospectShareSummary.textContent = '';
+          }
+          if (prospectShareNote) {
+            prospectShareNote.textContent = '';
+          }
+          setFormStatus(prospectShareForm, '');
+          renderProspectSharePanel();
+        });
+      }
 
       settingsForms.forEach((form) => {
         form.addEventListener('submit', async (event) => {
