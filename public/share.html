@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plex Donate Invite</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(
+            120% 120% at 50% -10%,
+            rgba(99, 102, 241, 0.35) 0%,
+            rgba(15, 23, 42, 0.92) 45%,
+            #050818 100%
+          ),
+          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
+        color: #e2e8f0;
+        display: flex;
+        justify-content: center;
+        padding: 32px 16px 64px;
+        position: relative;
+      }
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(76, 29, 149, 0.18),
+          transparent 70%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+      a {
+        color: inherit;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0;
+      }
+      h1 {
+        font-size: clamp(2.2rem, 4vw, 3rem);
+        line-height: 1.1;
+        background: linear-gradient(135deg, #c7d2fe 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+      h2 {
+        font-size: clamp(1.4rem, 2vw, 1.8rem);
+        line-height: 1.3;
+      }
+      p {
+        margin: 0;
+        line-height: 1.6;
+      }
+      .hidden {
+        display: none !important;
+      }
+      .panel {
+        width: min(760px, 100%);
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 20px;
+        padding: 28px;
+        text-align: center;
+        box-shadow: 0 25px 60px -25px rgba(30, 64, 175, 0.6);
+        position: relative;
+        z-index: 1;
+      }
+      .panel.error {
+        background: rgba(76, 29, 149, 0.18);
+        border-color: rgba(248, 113, 113, 0.4);
+        color: #fecdd3;
+      }
+      #content {
+        width: 100%;
+        position: relative;
+        z-index: 1;
+      }
+      .canvas {
+        width: min(960px, 100%);
+        margin: 0 auto;
+        display: grid;
+        gap: 28px;
+      }
+      .surface {
+        background: rgba(15, 23, 42, 0.76);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 24px;
+        padding: clamp(24px, 4vw, 36px);
+        box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        backdrop-filter: blur(18px);
+      }
+      .hero {
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        gap: 16px;
+      }
+      .hero::after {
+        content: '';
+        position: absolute;
+        inset: -40% 40% auto -30%;
+        height: 120%;
+        transform: rotate(18deg);
+        background: radial-gradient(
+          60% 60% at 50% 50%,
+          rgba(59, 130, 246, 0.3),
+          transparent 70%
+        );
+        z-index: 0;
+      }
+      .hero > * {
+        position: relative;
+        z-index: 1;
+      }
+      .eyebrow {
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        color: rgba(165, 180, 252, 0.9);
+      }
+      .lead {
+        color: #cbd5f5;
+        max-width: 52ch;
+      }
+      .hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(129, 140, 248, 0.6);
+        background: rgba(79, 70, 229, 0.3);
+        color: #c7d2fe;
+        font-size: 0.82rem;
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        gap: 24px;
+      }
+      @media (min-width: 860px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .muted {
+        color: rgba(203, 213, 225, 0.8);
+      }
+      .small {
+        font-size: 0.85rem;
+      }
+      .headline {
+        font-size: 1.35rem;
+        font-weight: 600;
+      }
+      .profile {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-top: 12px;
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        background: rgba(59, 130, 246, 0.24);
+        color: #bfdbfe;
+        text-transform: capitalize;
+      }
+      .status-pill[data-status='active'] {
+        background: rgba(34, 197, 94, 0.22);
+        color: #bbf7d0;
+      }
+      .status-pill[data-status='pending'] {
+        background: rgba(59, 130, 246, 0.24);
+        color: #cfe1ff;
+      }
+      .status-pill[data-status='cancelled'],
+      .status-pill[data-status='canceled'],
+      .status-pill[data-status='suspended'],
+      .status-pill[data-status='expired'] {
+        background: rgba(248, 113, 113, 0.2);
+        color: #fecdd3;
+      }
+      .details {
+        margin-top: 18px;
+        display: grid;
+        gap: 12px;
+      }
+      .detail {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 0.95rem;
+      }
+      .detail .label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: rgba(148, 163, 184, 0.7);
+      }
+      .support-list {
+        list-style: none;
+        padding: 0;
+        margin: 16px 0 0;
+        display: grid;
+        gap: 12px;
+      }
+      .support-list li::before {
+        content: '✦';
+        margin-right: 10px;
+        color: rgba(129, 140, 248, 0.8);
+      }
+      .cta {
+        margin-top: 24px;
+        padding: 20px;
+        border-radius: 18px;
+        background: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(96, 165, 250, 0.2);
+      }
+      .cta-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 20px;
+        margin-top: 12px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #38bdf8, #6366f1);
+        color: #0f172a;
+        font-weight: 700;
+        text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 18px 36px -16px rgba(56, 189, 248, 0.65);
+      }
+      .cta-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 24px 48px -18px rgba(56, 189, 248, 0.75);
+      }
+      form {
+        margin-top: 20px;
+      }
+      label {
+        display: grid;
+        gap: 6px;
+        font-weight: 600;
+        margin-bottom: 16px;
+      }
+      input[type='email'],
+      input[type='text'] {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(129, 140, 248, 0.4);
+        background: rgba(15, 23, 42, 0.88);
+        padding: 12px 14px;
+        font-size: 1rem;
+        color: #e2e8f0;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      input[type='email']:focus,
+      input[type='text']:focus {
+        outline: none;
+        border-color: rgba(165, 180, 252, 0.8);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+      }
+      button {
+        appearance: none;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 22px;
+        font-size: 1rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        color: #f8fafc;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        box-shadow: 0 18px 38px -18px rgba(79, 70, 229, 0.65);
+      }
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 24px 48px -20px rgba(79, 70, 229, 0.7);
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+      .form-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      @media (min-width: 560px) {
+        .form-actions {
+          flex-direction: row;
+          align-items: center;
+        }
+      }
+      .status-text {
+        margin: 0;
+        font-size: 0.95rem;
+        min-height: 20px;
+        color: rgba(165, 180, 252, 0.9);
+      }
+      .status-text.error {
+        color: #fca5a5;
+      }
+      .status-text.success {
+        color: #86efac;
+      }
+      .status-text.info {
+        color: #bae6fd;
+      }
+      .invite-ready {
+        margin-top: 24px;
+        padding: 20px;
+        border-radius: 18px;
+        background: rgba(40, 54, 99, 0.6);
+        border: 1px solid rgba(129, 140, 248, 0.35);
+        display: grid;
+        gap: 12px;
+      }
+      .invite-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        background: rgba(129, 140, 248, 0.25);
+        color: #c7d2fe;
+      }
+      .badge.success {
+        background: rgba(34, 197, 94, 0.22);
+        color: #bbf7d0;
+      }
+      .invite-link {
+        word-break: break-all;
+        font-weight: 600;
+        color: #c7d2fe;
+        text-decoration: none;
+      }
+      .invite-link:hover {
+        text-decoration: underline;
+      }
+      #share-last-used.hidden {
+        display: none;
+      }
+      @media (max-width: 640px) {
+        .surface {
+          padding: 24px;
+        }
+        .panel {
+          padding: 24px;
+        }
+        .profile {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .form-actions {
+          align-items: stretch;
+        }
+        button,
+        .cta-button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" class="panel">Setting the stage for your invite…</div>
+    <div id="error-panel" class="panel error hidden"></div>
+    <div id="content" class="hidden">
+      <main class="canvas">
+        <header class="surface hero">
+          <span class="eyebrow">Welcome to your streaming lounge</span>
+          <h1>All your streaming platforms. One invite.</h1>
+          <p class="lead">
+            One stop shop for the best streaming platforms combined into one,
+            managed by yours truly. Every bit of support keeps the mission moving
+            forward.
+          </p>
+          <div class="hero-badges">
+            <span class="chip">Plex · Wizarr ready</span>
+            <span class="chip">Community powered</span>
+            <span class="chip">Streaming sanctuary</span>
+          </div>
+        </header>
+
+        <section class="grid">
+          <article class="surface" id="subscription-panel">
+            <h2>Your membership</h2>
+            <p class="muted">
+              We keep everything running so you can press play and relax.
+            </p>
+            <div class="profile">
+              <div>
+                <div class="headline" id="donor-name">Hi there!</div>
+                <div class="muted" id="donor-email"></div>
+              </div>
+              <span class="status-pill" id="subscription-status" data-status="pending"
+                >pending</span
+              >
+            </div>
+            <div class="details">
+              <div id="subscription-id-row" class="detail hidden">
+                <span class="label">Subscription ID</span>
+                <span id="subscription-id"></span>
+              </div>
+              <div id="price-row" class="detail hidden"></div>
+              <div id="share-last-used" class="detail muted hidden"></div>
+            </div>
+          </article>
+
+          <article class="surface" id="support-card">
+            <h2>Support the mission</h2>
+            <p class="muted">
+              Your contribution fuels our combined streaming library and keeps the
+              lights glowing.
+            </p>
+            <ul class="support-list">
+              <li>One stop shop for every streaming world you love.</li>
+              <li>Personally curated and managed by yours truly.</li>
+              <li>Supporting keeps servers humming and new content flowing.</li>
+            </ul>
+            <div id="paypal-cta" class="cta hidden">
+              <h3>Need to activate your donation?</h3>
+              <p class="muted">
+                Launch PayPal in a new tab, complete the subscription, then pop
+                back here to claim your invite.
+              </p>
+              <a
+                id="paypal-link"
+                class="cta-button"
+                href="#"
+                target="_blank"
+                rel="noopener"
+                >Start PayPal subscription</a
+              >
+            </div>
+          </article>
+        </section>
+
+        <section class="surface" id="invite-panel">
+          <h2>Claim your Plex access</h2>
+          <p class="muted" id="invite-description">
+            Choose the email you want to use for streaming access and we will
+            generate a fresh Wizarr invite instantly.
+          </p>
+          <form id="invite-form">
+            <label>
+              <span>Email for streaming access</span>
+              <input
+                id="recipient-email"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+                autocapitalize="none"
+                spellcheck="false"
+                required
+              />
+            </label>
+            <label>
+              <span>Name (optional)</span>
+              <input
+                id="display-name"
+                type="text"
+                placeholder="Preferred display name"
+                autocomplete="name"
+              />
+            </label>
+            <div class="form-actions">
+              <button id="generate-button" type="submit">Generate my invite</button>
+              <p class="status-text" id="action-status"></p>
+            </div>
+          </form>
+          <div id="invite-ready" class="invite-ready hidden">
+            <div class="invite-meta">
+              <span class="badge success">Invite ready</span>
+              <span id="invite-email" class="muted small"></span>
+            </div>
+            <a
+              id="invite-link"
+              class="invite-link"
+              href="#"
+              target="_blank"
+              rel="noopener"
+            ></a>
+            <p class="muted" id="invite-created"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const state = {
+        token: window.location.pathname.split('/').pop(),
+        data: null,
+        sessionToken: '',
+      };
+
+      const loadingPanel = document.getElementById('loading');
+      const errorPanel = document.getElementById('error-panel');
+      const content = document.getElementById('content');
+      const donorNameEl = document.getElementById('donor-name');
+      const donorEmailEl = document.getElementById('donor-email');
+      const statusPill = document.getElementById('subscription-status');
+      const subscriptionIdRow = document.getElementById('subscription-id-row');
+      const subscriptionIdEl = document.getElementById('subscription-id');
+      const priceRow = document.getElementById('price-row');
+      const paypalCta = document.getElementById('paypal-cta');
+      const paypalLink = document.getElementById('paypal-link');
+      const shareLastUsedEl = document.getElementById('share-last-used');
+      const inviteDescription = document.getElementById('invite-description');
+      const inviteForm = document.getElementById('invite-form');
+      const emailInput = document.getElementById('recipient-email');
+      const nameInput = document.getElementById('display-name');
+      const generateButton = document.getElementById('generate-button');
+      const actionStatus = document.getElementById('action-status');
+      const inviteReady = document.getElementById('invite-ready');
+      const inviteLinkEl = document.getElementById('invite-link');
+      const inviteCreatedEl = document.getElementById('invite-created');
+      const inviteEmailEl = document.getElementById('invite-email');
+
+      function showLoading() {
+        loadingPanel.classList.remove('hidden');
+        errorPanel.classList.add('hidden');
+        content.classList.add('hidden');
+      }
+
+      function showError(message) {
+        loadingPanel.classList.add('hidden');
+        errorPanel.textContent = message || 'Something went wrong.';
+        errorPanel.classList.remove('hidden');
+        content.classList.add('hidden');
+      }
+
+      function formatPrice(amount, currency) {
+        if (!Number.isFinite(amount)) {
+          return '';
+        }
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currency || 'USD',
+            minimumFractionDigits: 2,
+          }).format(amount);
+        } catch (err) {
+          return `${amount.toFixed(2)} ${currency || ''}`.trim();
+        }
+      }
+
+      function renderInvite(invite) {
+        if (!invite || !invite.wizarrInviteUrl) {
+          inviteReady.classList.add('hidden');
+          inviteLinkEl.removeAttribute('href');
+          inviteLinkEl.textContent = '';
+          inviteEmailEl.textContent = '';
+          inviteCreatedEl.textContent = '';
+          inviteDescription.textContent =
+            'Choose the email you want to use for streaming access and we will generate a fresh Wizarr invite instantly.';
+          generateButton.textContent = 'Generate my invite';
+          return;
+        }
+
+        inviteReady.classList.remove('hidden');
+        inviteLinkEl.href = invite.wizarrInviteUrl;
+        inviteLinkEl.textContent = invite.wizarrInviteUrl;
+        inviteEmailEl.textContent = invite.recipientEmail
+          ? `Delivering to ${invite.recipientEmail}`
+          : '';
+        if (invite.createdAt) {
+          const createdDate = new Date(invite.createdAt);
+          inviteCreatedEl.textContent = `Created ${createdDate.toLocaleString()}`;
+        } else {
+          inviteCreatedEl.textContent = '';
+        }
+        inviteDescription.textContent =
+          'Invite ready! Feel free to regenerate with a new email whenever you need to.';
+        generateButton.textContent = 'Generate another invite';
+      }
+
+      function render(data) {
+        state.data = data;
+        if (data.shareLink && data.shareLink.sessionToken) {
+          state.sessionToken = data.shareLink.sessionToken;
+        }
+        loadingPanel.classList.add('hidden');
+        errorPanel.classList.add('hidden');
+        content.classList.remove('hidden');
+        actionStatus.textContent = '';
+        actionStatus.className = 'status-text';
+
+        const donor = data.donor || {};
+        donorNameEl.textContent = donor.name ? `Hi ${donor.name}!` : 'Hi there!';
+        donorEmailEl.textContent = donor.email || 'Add your preferred streaming email below.';
+
+        let blocked = false;
+        if (statusPill) {
+          const status = (donor.status || 'pending').toLowerCase();
+          statusPill.dataset.status = status || 'pending';
+          statusPill.textContent = status ? status.replace(/_/g, ' ') : 'pending';
+          blocked = ['cancelled', 'suspended', 'expired'].includes(status);
+          generateButton.dataset.blocked = blocked ? 'true' : 'false';
+          generateButton.disabled = blocked;
+          emailInput.disabled = blocked;
+          nameInput.disabled = blocked;
+          if (blocked) {
+            actionStatus.textContent =
+              'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
+            actionStatus.classList.add('error');
+          }
+        }
+
+        if (donor.subscriptionId) {
+          subscriptionIdEl.textContent = donor.subscriptionId;
+          subscriptionIdRow.classList.remove('hidden');
+        } else {
+          subscriptionIdRow.classList.add('hidden');
+        }
+
+        const shareLink = data.shareLink || {};
+        if (shareLink.lastUsedAt) {
+          const lastUsed = new Date(shareLink.lastUsedAt);
+          shareLastUsedEl.textContent = `Last visited ${lastUsed.toLocaleString()}`;
+          shareLastUsedEl.classList.remove('hidden');
+        } else {
+          shareLastUsedEl.classList.add('hidden');
+        }
+
+        const paypal = data.paypal || {};
+        const amount = Number(paypal.subscriptionPrice);
+        if (Number.isFinite(amount) && amount > 0) {
+          priceRow.textContent = `Recurring amount: ${formatPrice(amount, paypal.currency)}`;
+          priceRow.classList.remove('hidden');
+        } else {
+          priceRow.classList.add('hidden');
+        }
+
+        if (paypal.planId) {
+          const planId = encodeURIComponent(paypal.planId);
+          paypalLink.href = `https://www.paypal.com/webapps/billing/subscriptions?plan_id=${planId}`;
+          paypalCta.classList.remove('hidden');
+        } else {
+          paypalCta.classList.add('hidden');
+        }
+
+        const invite = data.invite || null;
+        const emailPrefill =
+          (invite && invite.recipientEmail) || donor.email || emailInput.value;
+        if (document.activeElement !== emailInput) {
+          emailInput.value = emailPrefill;
+        }
+        if (document.activeElement !== nameInput) {
+          nameInput.value = donor.name || '';
+        }
+
+        renderInvite(invite);
+
+        if (blocked) {
+          inviteDescription.textContent =
+            'Once your donation is active we will unlock invite generation.';
+        }
+
+        const identifier = donor.name || donor.email || '';
+        if (identifier) {
+          document.title = `Plex Invite • ${identifier}`;
+        }
+      }
+
+      async function loadShareData() {
+        showLoading();
+        try {
+          const response = await fetch(`/api/share/${encodeURIComponent(state.token)}`);
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to load share link');
+          }
+          render(payload);
+        } catch (err) {
+          showError(err.message);
+        }
+      }
+
+      inviteForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!state.token || generateButton.dataset.blocked === 'true') {
+          return;
+        }
+        const email = (emailInput.value || '').trim();
+        const name = (nameInput.value || '').trim();
+        if (!email) {
+          actionStatus.textContent = 'Please enter the email that should receive streaming access.';
+          actionStatus.classList.add('error');
+          return;
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (state.sessionToken) {
+          headers['X-Share-Session'] = state.sessionToken;
+          headers['Authorization'] = `Bearer ${state.sessionToken}`;
+        }
+
+        generateButton.disabled = true;
+        actionStatus.textContent = 'Generating invite…';
+        actionStatus.className = 'status-text info';
+
+        try {
+          const response = await fetch(`/api/share/${encodeURIComponent(state.token)}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              email,
+              name,
+              sessionToken: state.sessionToken,
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to create invite');
+          }
+          render(payload);
+          actionStatus.textContent =
+            'Invite created! Use the link below to finish connecting your Plex account.';
+          actionStatus.className = 'status-text success';
+        } catch (err) {
+          actionStatus.textContent = err.message;
+          actionStatus.className = 'status-text error';
+        } finally {
+          if (generateButton.dataset.blocked !== 'true') {
+            generateButton.disabled = false;
+          }
+        }
+      });
+
+      loadShareData();
+    </script>
+  </body>
+</html>

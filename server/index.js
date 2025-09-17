@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const config = require('./config');
 const adminRouter = require('./routes/admin');
 const webhookRouter = require('./routes/webhook');
+const shareRouter = require('./routes/share');
 const logger = require('./utils/logger');
 
 const app = express();
@@ -33,6 +34,11 @@ app.get('/api/health', (req, res) => {
 
 app.use('/api/paypal/webhook', webhookRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/share', shareRouter);
+
+app.get('/share/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/share.html'));
+});
 
 app.use(express.static(path.join(__dirname, '../public')));
 

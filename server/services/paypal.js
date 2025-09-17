@@ -1,8 +1,8 @@
 const fetch = require('node-fetch');
 const { getPaypalSettings } = require('../state/settings');
 
-function getPaypalConfig() {
-  const settings = getPaypalSettings();
+function getPaypalConfig(overrideSettings) {
+  const settings = overrideSettings || getPaypalSettings();
   if (!settings.clientId || !settings.clientSecret) {
     throw new Error('PayPal credentials are not configured');
   }
@@ -10,8 +10,8 @@ function getPaypalConfig() {
   return { ...settings, apiBase };
 }
 
-async function getAccessToken() {
-  const paypal = getPaypalConfig();
+async function getAccessToken(overrideSettings) {
+  const paypal = getPaypalConfig(overrideSettings);
   const credentials = Buffer.from(
     `${paypal.clientId}:${paypal.clientSecret}`
   ).toString('base64');
@@ -32,6 +32,14 @@ async function getAccessToken() {
 
   const data = await response.json();
   return data.access_token;
+}
+
+async function verifyConnection(overrideSettings) {
+  const token = await getAccessToken(overrideSettings);
+  return {
+    message: 'PayPal credentials verified successfully.',
+    tokenLength: typeof token === 'string' ? token.length : 0,
+  };
 }
 
 async function verifyWebhookSignature(headers, body) {
@@ -97,7 +105,9 @@ async function getSubscription(subscriptionId) {
 }
 
 module.exports = {
+  getPaypalConfig,
   getAccessToken,
   verifyWebhookSignature,
   getSubscription,
+  verifyConnection,
 };

@@ -1,6 +1,7 @@
 const express = require('express');
 const csurf = require('csurf');
 const config = require('../config');
+const { nanoid } = require('nanoid');
 const {
   listDonorsWithDetails,
   getDonorById,
@@ -9,10 +10,13 @@ const {
   getLatestActiveInviteForDonor,
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
+  createOrUpdateShareLink,
+  getShareLinkByDonorId,
   logEvent,
   getRecentEvents,
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
+const paypalService = require('../services/paypal');
 const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
 const plexService = require('../services/plex');
@@ -118,6 +122,56 @@ router.put(
 );
 
 router.post(
+  '/settings/:group/test',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const group = req.params.group;
+    const overrides = req.body || {};
+
+    if (!['paypal', 'wizarr', 'smtp', 'plex'].includes(group)) {
+      return res.status(404).json({
+        error: 'Unknown settings group',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    try {
+      let result;
+      if (group === 'paypal') {
+        const config = settingsStore.previewGroup('paypal', overrides);
+        const verification = await paypalService.verifyConnection(config);
+        const environment =
+          (config.apiBase || '').includes('sandbox') ? 'sandbox' : 'live';
+        result = {
+          ...verification,
+          environment,
+          message: `PayPal credentials verified against the ${environment} environment.`,
+        };
+      } else if (group === 'wizarr') {
+        const config = settingsStore.previewGroup('wizarr', overrides);
+        result = await wizarrService.verifyConnection(config);
+      } else if (group === 'smtp') {
+        const config = settingsStore.previewGroup('smtp', overrides);
+        result = await emailService.verifyConnection(config);
+      } else if (group === 'plex') {
+        const config = settingsStore.previewGroup('plex', overrides);
+        result = await plexService.verifyConnection(config);
+      }
+
+      logger.info(`Verified ${group} settings`);
+      res.json({ success: true, result, csrfToken: res.locals.csrfToken });
+    } catch (err) {
+      logger.warn(`Failed to verify ${group} settings`, err.message);
+      res.status(400).json({
+        success: false,
+        error: err.message,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+  })
+);
+
+router.post(
   '/subscribers/:id/invite',
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -145,11 +199,12 @@ router.post(
       code: inviteData.inviteCode,
       url: inviteData.inviteUrl,
       note,
+      recipientEmail: donor.email,
     });
 
     try {
       await emailService.sendInviteEmail({
-        to: donor.email,
+        to: inviteRecord.recipientEmail || donor.email,
         inviteUrl: inviteRecord.wizarrInviteUrl,
         name: donor.name,
         subscriptionId: donor.subscriptionId,
@@ -178,6 +233,48 @@ router.post(
 );
 
 router.post(
+  '/subscribers/:id/share-link',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    let shareLink = getShareLinkByDonorId(donor.id);
+    const regenerate = Boolean(req.body && req.body.regenerate);
+
+    if (!shareLink || regenerate) {
+      const token = nanoid(36);
+      const sessionToken = nanoid(48);
+      shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token,
+        sessionToken,
+      });
+      logEvent('share_link.generated', {
+        donorId: donor.id,
+        shareLinkId: shareLink.id,
+        regenerated: Boolean(shareLink && regenerate),
+      });
+      logger.info('Created shareable invite link for donor', {
+        donorId: donor.id,
+        shareLinkId: shareLink.id,
+      });
+    }
+
+    const origin = `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+    const url = `${origin}/share/${shareLink.token}`;
+
+    return res.json({
+      shareLink: { ...shareLink, url },
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
   '/subscribers/:id/email',
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -193,7 +290,7 @@ router.post(
     }
 
     await emailService.sendInviteEmail({
-      to: donor.email,
+      to: invite.recipientEmail || donor.email,
       inviteUrl: invite.wizarrInviteUrl,
       name: donor.name,
       subscriptionId: donor.subscriptionId,
