@@ -12,6 +12,7 @@ const {
   logEvent,
   markInviteEmailSent,
   updateInvitePlexDetails,
+  setDonorAccessExpirationBySubscription,
 } = require('../db');
 const plexService = require('../services/plex');
 const wizarrService = require('../services/wizarr');
@@ -90,6 +91,26 @@ function normalizeEmail(value) {
   return String(value).trim().toLowerCase();
 }
 
+function normalizeAccessExpirationTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    if (Number.isNaN(timestamp)) {
+      return null;
+    }
+    return value.toISOString();
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
+}
+
 function hasPlexLink(donor) {
   return Boolean(donor && donor.plexAccountId);
 }
@@ -120,6 +141,39 @@ function extractSubscriber(resource) {
   };
 }
 
+async function resolveAccessExpirationTimestamp(subscriptionId, resource = {}) {
+  if (!subscriptionId) {
+    return { expiresAt: null, source: 'missing-subscription' };
+  }
+
+  const billingInfo = resource.billing_info || {};
+  let nextBillingTime = billingInfo.next_billing_time;
+  let source = 'webhook';
+
+  if (!nextBillingTime) {
+    try {
+      const subscription = await paypalService.getSubscription(subscriptionId);
+      nextBillingTime =
+        subscription &&
+        subscription.billing_info &&
+        subscription.billing_info.next_billing_time;
+      source = 'api';
+    } catch (err) {
+      logger.warn('Unable to fetch subscription to determine access expiration', {
+        subscriptionId,
+        message: err.message,
+      });
+    }
+  }
+
+  const normalized = normalizeAccessExpirationTimestamp(nextBillingTime);
+  if (!normalized) {
+    return { expiresAt: null, source: source || 'unknown' };
+  }
+
+  return { expiresAt: normalized, source };
+}
+
 async function handleSubscriptionEvent(event) {
   const resource = event.resource || {};
   const subscriptionId = resource.id || resource.subscription_id;
@@ -129,7 +183,7 @@ async function handleSubscriptionEvent(event) {
     (billingInfo.last_payment && billingInfo.last_payment.time) || null;
   const subscriber = extractSubscriber(resource);
 
-  const donor = upsertDonor({
+  let donor = upsertDonor({
     subscriptionId,
     email: subscriber.email,
     name: subscriber.name,
@@ -144,12 +198,86 @@ async function handleSubscriptionEvent(event) {
   });
 
   if (event.event_type === 'BILLING.SUBSCRIPTION.CANCELLED') {
-    await handleCancellation(donor);
+    donor =
+      (await handleCancellation(donor, { subscriptionId, resource })) || donor;
+    return;
+  }
+
+  if (status === 'active') {
+    const refreshed = setDonorAccessExpirationBySubscription(
+      subscriptionId,
+      null
+    );
+    if (refreshed) {
+      donor = refreshed;
+    }
   }
 }
 
-async function handleCancellation(donor) {
-  updateDonorStatus(donor.subscriptionId, 'cancelled');
+async function handleCancellation(donor, { subscriptionId, resource }) {
+  const updatedDonor = updateDonorStatus(subscriptionId, 'cancelled');
+  if (updatedDonor) {
+    donor = updatedDonor;
+  }
+
+  const { expiresAt, source } = await resolveAccessExpirationTimestamp(
+    subscriptionId,
+    resource
+  );
+
+  let expirationSource = source || 'unknown';
+  let accessExpiresAt = expiresAt;
+  if (!accessExpiresAt) {
+    accessExpiresAt = new Date().toISOString();
+    expirationSource = `${expirationSource}-fallback-now`;
+    logger.warn('Defaulting cancellation access expiration to immediate', {
+      subscriptionId,
+    });
+  }
+
+  const donorWithExpiration = setDonorAccessExpirationBySubscription(
+    subscriptionId,
+    accessExpiresAt
+  );
+  if (donorWithExpiration) {
+    donor = donorWithExpiration;
+  }
+
+  logEvent('donor.access.expiration.scheduled', {
+    donorId: donor.id,
+    subscriptionId,
+    accessExpiresAt: donor.accessExpiresAt,
+    source: expirationSource,
+  });
+
+  if (!donor.accessExpiresAt) {
+    return donor;
+  }
+
+  const expirationDate = new Date(donor.accessExpiresAt);
+  if (Number.isNaN(expirationDate.getTime())) {
+    logger.warn('Unable to parse donor access expiration timestamp', {
+      donorId: donor.id,
+      accessExpiresAt: donor.accessExpiresAt,
+    });
+    return donor;
+  }
+
+  if (expirationDate.getTime() > Date.now()) {
+    return donor;
+  }
+
+  await revokeDonorAccess(donor);
+  setDonorAccessExpirationBySubscription(subscriptionId, null);
+  logEvent('donor.access.expiration.reached', {
+    donorId: donor.id,
+    subscriptionId,
+    source: 'webhook-immediate',
+  });
+  return donor;
+}
+
+async function revokeDonorAccess(donor) {
   if (!donor.email && !donor.plexAccountId) {
     return;
   }
@@ -241,6 +369,13 @@ async function handlePaymentEvent(event) {
   const updatedDonor = updateDonorStatus(subscriptionId, 'active', paidAt);
   if (updatedDonor) {
     donor = updatedDonor;
+  }
+  const clearedDonor = setDonorAccessExpirationBySubscription(
+    subscriptionId,
+    null
+  );
+  if (clearedDonor) {
+    donor = clearedDonor;
   }
   logEvent('paypal.payment.recorded', {
     donorId: donor.id,
@@ -384,4 +519,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
   }
 }
 
+router.revokeDonorAccess = revokeDonorAccess;
+
 module.exports = router;
+module.exports.revokeDonorAccess = revokeDonorAccess;

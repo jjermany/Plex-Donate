@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS donors (
   paypal_subscription_id TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
+  access_expires_at TEXT,
   password_hash TEXT,
   plex_account_id TEXT,
   plex_email TEXT,
@@ -158,6 +159,16 @@ function ensureDonorPlexColumns() {
   }
 }
 
+function ensureDonorAccessExpirationColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  const hasAccessExpiresAt = columns.some(
+    (column) => column.name === 'access_expires_at'
+  );
+  if (!hasAccessExpiresAt) {
+    db.exec('ALTER TABLE donors ADD COLUMN access_expires_at TEXT');
+  }
+}
+
 function ensureProspectsTableColumns() {
   const columns = db.prepare("PRAGMA table_info('prospects')").all();
   if (columns.length === 0) {
@@ -276,6 +287,7 @@ function ensureDonorSubscriptionOptional() {
         paypal_subscription_id TEXT UNIQUE,
         status TEXT NOT NULL DEFAULT 'pending',
         last_payment_at TEXT,
+        access_expires_at TEXT,
         password_hash TEXT,
         plex_account_id TEXT,
         plex_email TEXT,
@@ -283,8 +295,8 @@ function ensureDonorSubscriptionOptional() {
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
-      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email, created_at, updated_at)
-        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email, created_at, updated_at
+      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, created_at, updated_at)
+        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, created_at, updated_at
         FROM donors;
 
       DROP TABLE donors;
@@ -301,6 +313,7 @@ ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
 ensureDonorPlexColumns();
 ensureDonorSubscriptionOptional();
+ensureDonorAccessExpirationColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInvitePlexColumns();
@@ -312,6 +325,40 @@ function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
 
+function normalizeAccessExpiresAt(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    if (Number.isNaN(timestamp)) {
+      return null;
+    }
+    return value.toISOString();
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return date.toISOString();
+  }
+
+  const stringValue = String(value).trim();
+  if (!stringValue) {
+    return null;
+  }
+
+  const parsed = new Date(stringValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
 const statements = {
   getDonorBySubscriptionId: db.prepare(
     'SELECT * FROM donors WHERE paypal_subscription_id = ?'
@@ -321,8 +368,8 @@ const statements = {
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email)
-     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @passwordHash, @plexAccountId, @plexEmail)`
+    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email)
+     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -340,7 +387,26 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE paypal_subscription_id = @subscriptionId`
   ),
+  updateDonorAccessExpirationBySubscription: db.prepare(
+    `UPDATE donors
+     SET access_expires_at = @accessExpiresAt,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE paypal_subscription_id = @subscriptionId`
+  ),
+  updateDonorAccessExpirationById: db.prepare(
+    `UPDATE donors
+     SET access_expires_at = @accessExpiresAt,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   listDonors: db.prepare('SELECT * FROM donors ORDER BY created_at DESC'),
+  listDonorsWithExpiredAccess: db.prepare(
+    `SELECT * FROM donors
+     WHERE lower(status) = 'cancelled'
+       AND access_expires_at IS NOT NULL
+       AND DATETIME(access_expires_at) <= DATETIME('now')
+     ORDER BY access_expires_at ASC`
+  ),
   listInvitesForDonor: db.prepare(
     'SELECT * FROM invites WHERE donor_id = ? ORDER BY created_at DESC'
   ),
@@ -518,6 +584,7 @@ function mapDonor(row) {
     subscriptionId: row.paypal_subscription_id,
     status: row.status,
     lastPaymentAt: row.last_payment_at,
+    accessExpiresAt: row.access_expires_at,
     hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
@@ -599,12 +666,20 @@ function mapPayment(row) {
   };
 }
 
-function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
+function upsertDonor({
+  subscriptionId,
+  email,
+  name,
+  status,
+  lastPaymentAt,
+  accessExpiresAt = null,
+}) {
   if (!subscriptionId) {
     throw new Error('Subscription ID is required to upsert donor');
   }
 
   const normalizedEmail = normalizeEmail(email);
+  const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
 
   const existing = statements.getDonorBySubscriptionId.get(subscriptionId);
   if (existing) {
@@ -625,6 +700,7 @@ function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
     subscriptionId,
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
+    accessExpiresAt: normalizedAccessExpiresAt,
     passwordHash: null,
     plexAccountId: null,
     plexEmail: null,
@@ -952,6 +1028,40 @@ function clearDonorPlexIdentity(donorId) {
   return updateDonorPlexIdentity(donorId, { plexAccountId: null, plexEmail: null });
 }
 
+function setDonorAccessExpirationBySubscription(subscriptionId, accessExpiresAt = null) {
+  if (!subscriptionId) {
+    throw new Error('subscriptionId is required to update access expiration');
+  }
+
+  const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
+
+  statements.updateDonorAccessExpirationBySubscription.run({
+    subscriptionId,
+    accessExpiresAt: normalizedAccessExpiresAt,
+  });
+
+  return mapDonor(statements.getDonorBySubscriptionId.get(subscriptionId));
+}
+
+function setDonorAccessExpirationById(donorId, accessExpiresAt = null) {
+  if (!donorId) {
+    throw new Error('donorId is required to update access expiration');
+  }
+
+  const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
+
+  statements.updateDonorAccessExpirationById.run({
+    id: donorId,
+    accessExpiresAt: normalizedAccessExpiresAt,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function listDonorsWithExpiredAccess() {
+  return statements.listDonorsWithExpiredAccess.all().map(mapDonor);
+}
+
 function createProspect({ email, name, note } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const info = statements.insertProspect.run({
@@ -998,11 +1108,13 @@ function createDonor({
   subscriptionId,
   status = 'pending',
   lastPaymentAt = null,
+  accessExpiresAt = null,
   passwordHash = null,
   plexAccountId = null,
   plexEmail = null,
 } = {}) {
   const normalizedEmail = normalizeEmail(email);
+  const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
   const info = statements.insertDonor.run({
     email: normalizedEmail || '',
     name: name ? String(name).trim() : '',
@@ -1012,6 +1124,7 @@ function createDonor({
         : String(subscriptionId).trim(),
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
+    accessExpiresAt: normalizedAccessExpiresAt,
     passwordHash: passwordHash || null,
     plexAccountId: plexAccountId || null,
     plexEmail: plexEmail
@@ -1157,6 +1270,9 @@ module.exports = {
   updateDonorPassword,
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
+  setDonorAccessExpirationBySubscription,
+  setDonorAccessExpirationById,
+  listDonorsWithExpiredAccess,
   getRecentEvents,
   getAllSettings,
   getSetting,

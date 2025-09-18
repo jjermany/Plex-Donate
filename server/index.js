@@ -10,11 +10,17 @@ const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
 const SqliteSessionStore = require('./session-store');
-const { db } = require('./db');
+const {
+  db,
+  listDonorsWithExpiredAccess,
+  setDonorAccessExpirationById,
+  logEvent,
+} = require('./db');
 
 const app = express();
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 
@@ -73,6 +79,60 @@ app.use((err, req, res, next) => {
   logger.error('Unhandled error', err);
   return res.status(500).json({ error: 'Internal server error' });
 });
+
+let isProcessingAccessExpirations = false;
+
+async function processAccessExpirations() {
+  if (isProcessingAccessExpirations) {
+    return;
+  }
+
+  if (typeof webhookRouter.revokeDonorAccess !== 'function') {
+    return;
+  }
+
+  isProcessingAccessExpirations = true;
+  try {
+    const donors = listDonorsWithExpiredAccess();
+    if (!donors || donors.length === 0) {
+      return;
+    }
+
+    for (const donor of donors) {
+      try {
+        await webhookRouter.revokeDonorAccess(donor);
+        setDonorAccessExpirationById(donor.id, null);
+        logEvent('donor.access.expiration.reached', {
+          donorId: donor.id,
+          subscriptionId: donor.subscriptionId,
+          source: 'scheduled-job',
+        });
+      } catch (err) {
+        logger.warn('Failed to process donor access expiration', {
+          donorId: donor.id,
+          message: err.message,
+        });
+      }
+    }
+  } catch (err) {
+    logger.error('Access expiration sweep failed', err);
+  } finally {
+    isProcessingAccessExpirations = false;
+  }
+}
+
+function scheduleAccessExpirationJob() {
+  const run = () => {
+    processAccessExpirations().catch((err) => {
+      logger.error('Unhandled error while processing access expirations', err);
+    });
+  };
+
+  run();
+  setInterval(run, ACCESS_REVOCATION_CHECK_INTERVAL_MS);
+}
+
+scheduleAccessExpirationJob();
 
 app.listen(config.port, () => {
   logger.info(`Plex Donate server listening on port ${config.port}`);
