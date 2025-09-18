@@ -285,19 +285,44 @@ router.post(
     }
 
     const donor = authRecord.donor;
-    req.session.customerId = donor.id;
-    logger.info('Customer signed in with email/password', { donorId: donor.id });
+    const existingPlexLink =
+      req.session && req.session.plexLink && req.session.plexLink.donorId === donor.id
+        ? { ...req.session.plexLink }
+        : null;
 
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
-    const pendingPlexLink = getPendingPlexLink(req, donor);
-    return res.json(
-      buildDashboardResponse({
-        donor,
-        invite,
-        pendingPlexLink,
-        inviteLimitReached,
-      })
-    );
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      logger.error('Session is not available for customer login regeneration');
+      return res
+        .status(500)
+        .json({ error: 'Failed to sign in. Please try again shortly.' });
+    }
+
+    return req.session.regenerate((err) => {
+      if (err) {
+        logger.error('Failed to regenerate customer session', err);
+        return res
+          .status(500)
+          .json({ error: 'Failed to sign in. Please try again shortly.' });
+      }
+
+      if (existingPlexLink) {
+        req.session.plexLink = existingPlexLink;
+      }
+
+      req.session.customerId = donor.id;
+      logger.info('Customer signed in with email/password', { donorId: donor.id });
+
+      const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
+      const pendingPlexLink = getPendingPlexLink(req, donor);
+      return res.json(
+        buildDashboardResponse({
+          donor,
+          invite,
+          pendingPlexLink,
+          inviteLimitReached,
+        })
+      );
+    });
   })
 );
 
