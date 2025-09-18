@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const { nanoid } = require('nanoid');
 const { getWizarrSettings } = require('../state/settings');
 
 const INVITE_ENDPOINT_BASES = [
@@ -93,6 +94,203 @@ const AUTH_STRATEGIES = [
   },
 ];
 
+function sanitizeString(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+
+  return null;
+}
+
+function sanitizeInviteCode(value) {
+  const stringValue = sanitizeString(value);
+  if (!stringValue) {
+    return null;
+  }
+
+  return stringValue.replace(/\s+/g, '-');
+}
+
+function toFiniteNumber(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  return null;
+}
+
+function toPositiveInteger(value) {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
+    return null;
+  }
+
+  const rounded = Math.round(numeric);
+  return rounded > 0 ? rounded : null;
+}
+
+function uniqueStrings(values) {
+  const seen = new Set();
+  const results = [];
+  values
+    .map((value) => sanitizeString(value))
+    .filter(Boolean)
+    .forEach((value) => {
+      const key = value.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(value);
+      }
+    });
+  return results;
+}
+
+function collectServerValues(value) {
+  const results = [];
+  const seen = new Set();
+
+  const addValue = (candidate) => {
+    if (candidate === undefined || candidate === null) {
+      return;
+    }
+
+    if (Array.isArray(candidate)) {
+      candidate.forEach((entry) => addValue(entry));
+      return;
+    }
+
+    if (typeof candidate === 'object') {
+      const objectCandidates = [
+        candidate.identifier,
+        candidate.server,
+        candidate.serverSlug,
+        candidate.server_slug,
+        candidate.serverId,
+        candidate.server_id,
+        candidate.id,
+        candidate.value,
+        candidate.key,
+      ];
+      let added = false;
+      objectCandidates.forEach((entry) => {
+        if (entry !== undefined && entry !== null) {
+          added = true;
+          addValue(entry);
+        }
+      });
+      if (!added) {
+        const fallback =
+          candidate && typeof candidate.toString === 'function'
+            ? candidate.toString()
+            : '';
+        const fallbackValue = sanitizeString(fallback);
+        if (fallbackValue && fallbackValue !== '[object Object]') {
+          addValue(fallbackValue);
+        }
+      }
+      return;
+    }
+
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      if (/^\[.*\]$/.test(trimmed) || /^\{.*\}$/.test(trimmed)) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          addValue(parsed);
+          return;
+        } catch (err) {
+          // ignore JSON parse errors and fall back to delimiter split
+        }
+      }
+
+      const parts = trimmed
+        .split(/[,\s]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (parts.length > 1) {
+        parts.forEach((part) => addValue(part));
+        return;
+      }
+
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(trimmed);
+      }
+      return;
+    }
+
+    if (typeof candidate === 'number') {
+      if (!Number.isFinite(candidate)) {
+        return;
+      }
+      const key = `num:${candidate}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(String(candidate));
+      }
+      return;
+    }
+
+    const fallback = String(candidate).trim();
+    if (!fallback || fallback === '[object Object]') {
+      return;
+    }
+    const key = fallback.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push(fallback);
+    }
+  };
+
+  addValue(value);
+  return results;
+}
+
+function stringifyServerId(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  return null;
+}
+
 function getWizarrConfig(overrideSettings) {
   const settings = overrideSettings || getWizarrSettings();
   if (!settings.baseUrl || !settings.apiKey) {
@@ -170,13 +368,21 @@ function normalizeServerId(value) {
     return Number.isFinite(value) ? value : null;
   }
 
+  if (typeof value === 'object') {
+    const candidates = collectServerValues(value);
+    if (candidates.length === 0) {
+      return null;
+    }
+    return normalizeServerId(candidates[0]);
+  }
+
   const stringValue = String(value).trim();
-  if (!stringValue) {
+  if (!stringValue || stringValue === '[object Object]') {
     return null;
   }
 
   const numericValue = Number(stringValue);
-  if (Number.isFinite(numericValue)) {
+  if (Number.isFinite(numericValue) && String(numericValue) === stringValue) {
     return numericValue;
   }
 
@@ -184,56 +390,34 @@ function normalizeServerId(value) {
 }
 
 function parseServerIds(value) {
-  if (value === undefined || value === null || value === '') {
+  const tokens = collectServerValues(value);
+  if (tokens.length === 0) {
     return [];
   }
 
   const ids = [];
   const seen = new Set();
 
-  const addId = (candidate) => {
-    const normalized = normalizeServerId(candidate);
-    if (normalized === null || normalized === undefined) {
+  tokens.forEach((token) => {
+    if (!token) {
       return;
     }
-    const key = typeof normalized === 'number' ? `#${normalized}` : `str:${normalized}`;
+    const numericValue = Number(token);
+    const normalized =
+      Number.isFinite(numericValue) && String(numericValue) === token
+        ? numericValue
+        : token;
+    const key =
+      typeof normalized === 'number'
+        ? `#${normalized}`
+        : `str:${String(normalized).toLowerCase()}`;
     if (seen.has(key)) {
       return;
     }
     seen.add(key);
     ids.push(normalized);
-  };
+  });
 
-  if (Array.isArray(value)) {
-    value.forEach(addId);
-    return ids;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return ids;
-    }
-
-    if (/^\[.*\]$/.test(trimmed) || /^\{.*\}$/.test(trimmed)) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        return parseServerIds(parsed);
-      } catch (err) {
-        // fall through to delimiter parsing when JSON parsing fails
-      }
-    }
-
-    trimmed
-      .split(/[,\s]+/)
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .forEach(addId);
-
-    return ids;
-  }
-
-  addId(value);
   return ids;
 }
 
@@ -243,12 +427,31 @@ function extractServerIds(config) {
   }
 
   const candidates = [
+    config.server,
+    config.serverSelection,
+    config.serverSlug,
+    config.server_slug,
+    config.serverKey,
+    config.server_key,
+    config.serverIdentifier,
+    config.server_identifier,
     config.server_ids,
     config.serverIds,
     config.defaultServerIds,
     config.default_server_ids,
     config.defaultServerId,
+    config.default_server_id,
+    config.defaultServer,
+    config.default_server,
+    config.defaultServerSelection,
+    config.defaultServerSlug,
+    config.default_server_slug,
+    config.defaultServerKey,
+    config.default_server_key,
+    config.defaultServerIdentifier,
+    config.default_server_identifier,
     config.serverId,
+    config.server_id,
   ];
 
   for (const candidate of candidates) {
@@ -277,15 +480,29 @@ function extractAvailableServers(details) {
       if (!server || typeof server !== 'object') {
         return null;
       }
-      const id =
-        normalizeServerId(
-          server.id ?? server.server_id ?? server.serverId ?? server.serverID
-        );
-      if (id === null || id === undefined) {
+      const id = normalizeServerId(
+        server.id ?? server.server_id ?? server.serverId ?? server.serverID
+      );
+      const identifierCandidates = collectServerValues([
+        server.identifier,
+        server.server,
+        server.serverSlug,
+        server.server_slug,
+        server.serverKey,
+        server.server_key,
+        server.value,
+        server.key,
+        server.machine_identifier,
+        server.machineIdentifier,
+        id,
+      ]);
+      const identifier = identifierCandidates.length > 0 ? identifierCandidates[0] : null;
+      if (identifier === null && id === null) {
         return null;
       }
       return {
         id,
+        identifier: identifier || stringifyServerId(id),
         name: server.name || server.friendly_name || server.friendlyName || '',
         type: server.server_type || server.serverType || server.type || '',
       };
@@ -312,12 +529,370 @@ function formatServerOptions(servers) {
       if (type) {
         labelParts.push(type.toUpperCase());
       }
-      const label = labelParts.length > 0 ? labelParts.join(' • ') : '';
-      const idLabel = typeof server.id === 'number' ? `#${server.id}` : String(server.id);
-      return label ? `${label} (${idLabel})` : idLabel;
+      const identifier =
+        sanitizeString(server.identifier) || stringifyServerId(server.id) || '';
+      if (labelParts.length > 0) {
+        const label = labelParts.join(' • ');
+        return identifier ? `${label} (${identifier})` : label;
+      }
+      return identifier;
     })
     .filter(Boolean)
     .join(', ');
+}
+
+const SERVER_VALUE_KEYS = [
+  'server',
+  'serverSelection',
+  'selectedServer',
+  'preferredServer',
+  'targetServer',
+  'serverSlug',
+  'server_slug',
+  'serverKey',
+  'server_key',
+  'serverIdentifier',
+  'server_identifier',
+  'serverId',
+  'server_id',
+  'serverIds',
+  'server_ids',
+  'defaultServer',
+  'default_server',
+  'defaultServerSelection',
+  'default_server_selection',
+  'defaultServerSlug',
+  'default_server_slug',
+  'defaultServerKey',
+  'default_server_key',
+  'defaultServerIdentifier',
+  'default_server_identifier',
+  'defaultServerId',
+  'default_server_id',
+  'defaultServerIds',
+  'default_server_ids',
+  'identifier',
+];
+
+function collectServerPreferences(source) {
+  if (!source || typeof source !== 'object') {
+    return [];
+  }
+
+  const results = [];
+  const seen = new Set();
+
+  const addCandidate = (candidate) => {
+    collectServerValues(candidate).forEach((entry) => {
+      const value = stringifyServerId(entry);
+      if (!value) {
+        return;
+      }
+      const key = value.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push(value);
+      }
+    });
+  };
+
+  SERVER_VALUE_KEYS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(source, key)) {
+      addCandidate(source[key]);
+    }
+  });
+
+  return results;
+}
+
+function collectStringList(value) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  const results = [];
+  const seen = new Set();
+
+  const add = (candidate) => {
+    if (candidate === undefined || candidate === null) {
+      return;
+    }
+    if (Array.isArray(candidate)) {
+      candidate.forEach(add);
+      return;
+    }
+    if (typeof candidate === 'object') {
+      const objectCandidates = [
+        candidate.value,
+        candidate.name,
+        candidate.label,
+        candidate.identifier,
+        candidate.slug,
+        candidate.id,
+      ];
+      let added = false;
+      objectCandidates.forEach((entry) => {
+        if (entry !== undefined && entry !== null) {
+          added = true;
+          add(entry);
+        }
+      });
+      if (!added) {
+        const fallback =
+          candidate && typeof candidate.toString === 'function'
+            ? candidate.toString()
+            : '';
+        const fallbackValue = sanitizeString(fallback);
+        if (fallbackValue && fallbackValue !== '[object Object]') {
+          add(fallbackValue);
+        }
+      }
+      return;
+    }
+
+    const stringValue = sanitizeString(candidate);
+    if (!stringValue) {
+      return;
+    }
+
+    if (stringValue.includes(',')) {
+      stringValue
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .forEach(add);
+      return;
+    }
+
+    const key = stringValue.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push(stringValue);
+    }
+  };
+
+  add(value);
+  return results;
+}
+
+let inviteCodeFallbackCounter = 0;
+
+function generateInviteCode() {
+  try {
+    return nanoid(16);
+  } catch (err) {
+    inviteCodeFallbackCounter += 1;
+    const fallback = `${Date.now().toString(36)}${inviteCodeFallbackCounter
+      .toString(36)
+      .padStart(2, '0')}${Math.random().toString(36).slice(2, 8)}`;
+    const sanitized = fallback.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+    return sanitized || `INVITE${inviteCodeFallbackCounter}`;
+  }
+}
+
+function determineInviteCode(request) {
+  const payload = (request && typeof request === 'object' && request) || {};
+  const invitation =
+    payload.invitation && typeof payload.invitation === 'object'
+      ? payload.invitation
+      : null;
+
+  const candidates = [
+    invitation && invitation.code,
+    invitation && invitation.inviteCode,
+    invitation && invitation.desiredCode,
+    payload.code,
+    payload.inviteCode,
+    payload.desiredCode,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = sanitizeInviteCode(candidate);
+    if (normalized) {
+      return normalized.slice(0, 64);
+    }
+  }
+
+  return generateInviteCode();
+}
+
+function resolveServerContext(request, wizarr) {
+  const configuredRaw = extractServerIds(wizarr);
+  const configuredServers = uniqueStrings(
+    (configuredRaw || []).map((value) => stringifyServerId(value)).filter(Boolean)
+  );
+
+  const payload = (request && typeof request === 'object' && request) || {};
+  const invitation =
+    payload.invitation && typeof payload.invitation === 'object'
+      ? payload.invitation
+      : null;
+
+  const requestedServers = uniqueStrings([
+    ...collectServerPreferences(payload),
+    ...(invitation ? collectServerPreferences(invitation) : []),
+  ]);
+
+  const selectedServer =
+    requestedServers.length > 0
+      ? requestedServers[0]
+      : configuredServers.length > 0
+      ? configuredServers[0]
+      : null;
+
+  return { configuredServers, requestedServers, selectedServer };
+}
+
+function buildInvitationRequestBody({ request, wizarr, selectedServer }) {
+  const payload = (request && typeof request === 'object' && request) || {};
+  const invitation =
+    payload.invitation && typeof payload.invitation === 'object'
+      ? payload.invitation
+      : {};
+
+  const body = {};
+
+  const serverCandidates = uniqueStrings([
+    ...collectServerPreferences(invitation),
+    ...collectServerPreferences(payload),
+    selectedServer,
+  ]).filter(Boolean);
+
+  if (serverCandidates.length > 0) {
+    body.server = serverCandidates[0];
+  }
+
+  body.code = determineInviteCode(payload);
+
+  const maxUsesCandidates = [
+    invitation.max_uses,
+    invitation.maxUses,
+    payload.max_uses,
+    payload.maxUses,
+    invitation.userLimit,
+    invitation.user_limit,
+    payload.userLimit,
+    payload.user_limit,
+  ];
+  let maxUses = null;
+  for (const candidate of maxUsesCandidates) {
+    const numeric = toPositiveInteger(candidate);
+    if (numeric !== null) {
+      maxUses = numeric;
+      break;
+    }
+  }
+  if (maxUses === null) {
+    maxUses = 1;
+  }
+  body.max_uses = maxUses;
+
+  const durationCandidates = [
+    invitation.duration,
+    invitation.days,
+    invitation.expiresInDays,
+    payload.duration,
+    payload.days,
+    payload.expiresInDays,
+    wizarr && wizarr.defaultDurationDays,
+  ];
+  let duration = null;
+  for (const candidate of durationCandidates) {
+    const numeric = toPositiveInteger(candidate);
+    if (numeric !== null) {
+      duration = numeric;
+      break;
+    }
+  }
+  if (duration === null) {
+    duration = 7;
+  }
+  body.duration = duration;
+
+  const profileCandidates = [
+    invitation.profile,
+    invitation.profileName,
+    payload.profile,
+    payload.profileName,
+    wizarr && wizarr.defaultProfile,
+  ];
+  for (const candidate of profileCandidates) {
+    const profile = sanitizeString(candidate);
+    if (profile) {
+      body.profile = profile;
+      break;
+    }
+  }
+
+  const libraryCandidates =
+    invitation.libraries ??
+    invitation.libraryIds ??
+    payload.libraries ??
+    payload.libraryIds ??
+    (wizarr && wizarr.defaultLibraries);
+  const libraries = collectStringList(libraryCandidates);
+  if (libraries.length > 0) {
+    body.libraries = libraries;
+  }
+
+  const messageCandidates = [
+    invitation.message,
+    invitation.note,
+    payload.message,
+    payload.note,
+  ];
+  for (const candidate of messageCandidates) {
+    const message = sanitizeString(candidate);
+    if (message) {
+      body.message = message;
+      break;
+    }
+  }
+
+  const usernameCandidates = [
+    invitation.username,
+    invitation.name,
+    payload.username,
+    payload.name,
+  ];
+  for (const candidate of usernameCandidates) {
+    const username = sanitizeString(candidate);
+    if (username) {
+      body.username = username;
+      break;
+    }
+  }
+
+  const emailCandidates = [invitation.email, invitation.recipientEmail];
+  for (const candidate of emailCandidates) {
+    const email = sanitizeString(candidate);
+    if (email) {
+      body.email = email;
+      break;
+    }
+  }
+
+  const extraSources = [];
+  if (invitation.extraFields && typeof invitation.extraFields === 'object') {
+    extraSources.push(invitation.extraFields);
+  }
+  if (payload.extraFields && typeof payload.extraFields === 'object') {
+    extraSources.push(payload.extraFields);
+  }
+
+  extraSources.forEach((extra) => {
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, key)) {
+        return;
+      }
+      body[key] = value;
+    });
+  });
+
+  return body;
 }
 
 function buildRequestUrl(baseUrlString, path) {
@@ -357,17 +932,23 @@ function buildRequestUrl(baseUrlString, path) {
   return resolvedUrl.toString();
 }
 
-async function createInvite({ email, note, expiresInDays }, overrideSettings) {
+async function createInvite(requestOptions = {}, overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
-  const configuredServerIds = extractServerIds(wizarr);
-  let requestBody = {
-    email,
-    note: note || '',
-    expires_in_days: expiresInDays || wizarr.defaultDurationDays || 7,
-  };
+  const options =
+    requestOptions && typeof requestOptions === 'object' ? requestOptions : {};
+  const { configuredServers, selectedServer } = resolveServerContext(
+    options,
+    wizarr
+  );
 
-  if (configuredServerIds.length > 0) {
-    requestBody = { ...requestBody, server_ids: configuredServerIds };
+  let requestBody = buildInvitationRequestBody({
+    request: options,
+    wizarr,
+    selectedServer,
+  });
+
+  if (!requestBody.server && selectedServer) {
+    requestBody.server = selectedServer;
   }
 
   const sendRequest = (body) =>
@@ -387,14 +968,16 @@ async function createInvite({ email, note, expiresInDays }, overrideSettings) {
     const availableServers = extractAvailableServers(details);
 
     if (
-      configuredServerIds.length === 0 &&
-      (!Array.isArray(requestBody.server_ids) || requestBody.server_ids.length === 0) &&
+      configuredServers.length === 0 &&
+      (!requestBody.server || !sanitizeString(requestBody.server)) &&
       (response.status === 400 || response.status === 422)
     ) {
       if (availableServers.length === 1) {
-        const fallbackId = availableServers[0].id;
-        if (fallbackId !== undefined && fallbackId !== null) {
-          requestBody = { ...requestBody, server_ids: [fallbackId] };
+        const fallbackServer =
+          sanitizeString(availableServers[0].identifier) ||
+          stringifyServerId(availableServers[0].id);
+        if (fallbackServer) {
+          requestBody = { ...requestBody, server: fallbackServer };
           attempt = await sendRequest(requestBody);
           response = attempt.response;
           text = attempt.text;
@@ -404,7 +987,7 @@ async function createInvite({ email, note, expiresInDays }, overrideSettings) {
         const optionsLabel = formatServerOptions(availableServers);
         const messageParts = [
           'Wizarr requires selecting a server before creating invites.',
-          'Update the Wizarr settings with default server IDs.',
+          'Update the Wizarr settings with a default server selection.',
         ];
         if (optionsLabel) {
           messageParts.push(`Available servers: ${optionsLabel}.`);
@@ -477,11 +1060,35 @@ async function revokeInvite(inviteCode) {
 
 async function verifyConnection(overrideSettings) {
   const wizarr = getWizarrConfig(overrideSettings);
-  const serverIds = extractServerIds(wizarr);
-  const body = { email: '', note: 'Connection test', expires_in_days: 1 };
-  if (serverIds.length > 0) {
-    body.server_ids = serverIds;
+  const { configuredServers, selectedServer } = resolveServerContext({}, wizarr);
+  const requestPayload = {
+    code: 'connection-test',
+    maxUses: 1,
+    duration: 1,
+  };
+  let body = buildInvitationRequestBody({
+    request: requestPayload,
+    wizarr,
+    selectedServer,
+  });
+
+  if (!body.server && selectedServer) {
+    body.server = selectedServer;
   }
+
+  if (!body.server && configuredServers.length > 0) {
+    body.server = configuredServers[0];
+  }
+
+  if (!body.duration) {
+    body.duration =
+      toPositiveInteger(wizarr && wizarr.defaultDurationDays) || 1;
+  }
+
+  if (!body.max_uses) {
+    body.max_uses = 1;
+  }
+
   const { response, text } = await requestWithFallback({
     wizarr,
     method: 'POST',
