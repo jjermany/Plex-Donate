@@ -269,6 +269,24 @@ async function handleCancellation(
     eventType,
   });
 
+  if (donor.email) {
+    try {
+      await emailService.sendCancellationEmail({
+        to: donor.email,
+        name: donor.name,
+        subscriptionId,
+        paidThrough: donor.accessExpiresAt,
+      });
+      logEvent('donor.cancellation.email.sent', {
+        donorId: donor.id,
+        subscriptionId,
+        paidThrough: donor.accessExpiresAt,
+      });
+    } catch (err) {
+      logger.warn('Failed to send cancellation email', err.message);
+    }
+  }
+
   if (!donor.accessExpiresAt) {
     return donor;
   }
