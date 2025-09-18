@@ -82,9 +82,30 @@ router.post(
     if (password !== config.adminPassword) {
       return res.status(401).json({ error: 'Invalid admin password' });
     }
-    req.session.isAdmin = true;
-    logger.info('Admin logged in');
-    res.json({ success: true, csrfToken: res.locals.csrfToken });
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      logger.error('Session is not available for admin login regeneration');
+      return res.status(500).json({ error: 'Failed to establish session' });
+    }
+    return req.session.regenerate((err) => {
+      if (err) {
+        logger.error('Failed to regenerate admin session', err);
+        return res.status(500).json({ error: 'Failed to establish session' });
+      }
+
+      req.session.isAdmin = true;
+
+      let csrfToken;
+      try {
+        csrfToken = req.csrfToken();
+      } catch (tokenError) {
+        logger.error('Failed to refresh CSRF token after admin login', tokenError);
+        return res.status(500).json({ error: 'Failed to establish session' });
+      }
+
+      res.locals.csrfToken = csrfToken;
+      logger.info('Admin logged in');
+      return res.json({ success: true, csrfToken });
+    });
   })
 );
 
