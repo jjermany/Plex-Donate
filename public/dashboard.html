@@ -152,6 +152,22 @@
       .status-text.info {
         color: #c7d2fe;
       }
+      .link-inline {
+        color: #c7d2fe;
+        text-decoration: underline;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .link-inline:hover {
+        text-decoration: none;
+      }
+      .login-footnote {
+        margin: -6px 0 0;
+      }
+      .helper-text {
+        color: rgba(203, 213, 225, 0.8);
+        font-size: 0.9rem;
+      }
       form {
         display: grid;
         gap: 16px;
@@ -313,6 +329,81 @@
         text-decoration: none;
         text-align: center;
       }
+      .onboarding {
+        display: grid;
+        gap: 20px;
+        text-align: left;
+      }
+      .steps {
+        display: grid;
+        gap: 16px;
+      }
+      .step {
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 20px;
+        padding: 18px 20px;
+        background: rgba(15, 23, 42, 0.66);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease,
+          background 0.2s ease, transform 0.2s ease;
+      }
+      .step-header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .step-header > div {
+        display: grid;
+        gap: 6px;
+      }
+      .step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        background: rgba(99, 102, 241, 0.25);
+        color: #c7d2fe;
+        font-weight: 700;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+      }
+      .step-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+      .step-footnote {
+        margin-top: 12px;
+      }
+      .step[data-state='complete'] {
+        border-color: rgba(34, 197, 94, 0.45);
+        background: rgba(21, 128, 61, 0.18);
+      }
+      .step[data-state='complete'] .step-number {
+        background: rgba(34, 197, 94, 0.35);
+        color: #bbf7d0;
+      }
+      .step[data-state='current'] {
+        border-color: rgba(129, 140, 248, 0.8);
+        background: rgba(79, 70, 229, 0.2);
+        box-shadow: 0 18px 40px -28px rgba(99, 102, 241, 0.9);
+        transform: translateY(-2px);
+      }
+      .step[data-state='current'] .step-number {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #ffffff;
+      }
+      .step[data-state='upcoming'] {
+        opacity: 0.92;
+      }
+      .step[data-state='upcoming'] .step-number {
+        background: rgba(100, 116, 139, 0.25);
+        color: rgba(203, 213, 225, 0.8);
+      }
+      .password-guidance {
+        margin-top: -4px;
+      }
       .section-title {
         font-size: 1.2rem;
         font-weight: 600;
@@ -332,11 +423,12 @@
       <main class="canvas">
         <section class="surface hero">
           <span class="eyebrow">Plex Donate</span>
-          <h1>Welcome back to your streaming hub</h1>
+          <h1>You're just steps away from endless Plex adventures</h1>
           <p class="muted">
             Signed up through one of our share links? Use the account you
             created there to manage invites, keep your details current, and
-            jump back into your libraries anytime.
+            jump back into your libraries anytime. Not subscribed yet? Follow
+            the guided checklist below to unlock access to endless content.
           </p>
         </section>
 
@@ -377,6 +469,21 @@
               <p id="login-status" class="status-text"></p>
             </div>
           </form>
+          <p class="muted small login-footnote">
+            <a
+              id="forgot-password-link"
+              class="link-inline"
+              href="#"
+              aria-controls="forgot-password-help"
+              aria-expanded="false"
+              >Forgot your password?</a
+            >
+          </p>
+          <p id="forgot-password-help" class="muted small hidden helper-text">
+            Donor accounts can request a fresh invite email from your share link
+            to set a new password. Need a hand? Reach out to the server admin
+            and they'll help you get back to streaming in no time.
+          </p>
         </section>
 
         <section id="dashboard-panel" class="grid hidden">
@@ -394,6 +501,13 @@
                   data-status="pending"
                   >pending</span
                 >
+                <button
+                  id="change-password-button"
+                  class="button-secondary"
+                  type="button"
+                >
+                  Change password
+                </button>
                 <button id="logout-button" class="button-secondary" type="button">
                   Sign out
                 </button>
@@ -422,6 +536,54 @@
               <p id="subscription-note" class="status-text small">
                 Opens PayPal checkout in a new tab.
               </p>
+            </div>
+          </article>
+
+          <article id="onboarding-panel" class="surface onboarding hidden">
+            <h2 class="section-title">Unlock endless content in three steps</h2>
+            <p class="muted">
+              You're only moments away from streaming everything you love.
+              Follow the guided path below to complete your setup.
+            </p>
+            <div class="steps">
+              <div id="step-subscription" class="step" data-state="current">
+                <div class="step-header">
+                  <span class="step-number" data-step-number="1">1</span>
+                  <div>
+                    <h3 class="step-title">Start your support subscription</h3>
+                    <p id="step-subscription-note" class="muted small">
+                      Use the PayPal button above to kick off your membership.
+                    </p>
+                  </div>
+                </div>
+                <p class="step-footnote muted small">
+                  Supporting the server keeps the library growing for everyone.
+                </p>
+              </div>
+              <div id="step-plex" class="step" data-state="upcoming">
+                <div class="step-header">
+                  <span class="step-number" data-step-number="2">2</span>
+                  <div>
+                    <h3 class="step-title">Authenticate with Plex</h3>
+                    <p id="step-plex-note" class="muted small">
+                      We'll prompt you to link your Plex account once your
+                      subscription is confirmed.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div id="step-invite" class="step" data-state="upcoming">
+                <div class="step-header">
+                  <span class="step-number" data-step-number="3">3</span>
+                  <div>
+                    <h3 class="step-title">Send yourself a Plex invite</h3>
+                    <p id="step-invite-note" class="muted small">
+                      Generate your personal Wizarr invite and unlock instant
+                      access to endless content.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </article>
 
@@ -456,6 +618,49 @@
                   Save changes
                 </button>
                 <p id="profile-status" class="status-text"></p>
+              </div>
+            </form>
+          </article>
+
+          <article id="password-panel" class="surface">
+            <h2 class="section-title">Password &amp; security</h2>
+            <p id="password-guidance" class="muted small password-guidance">
+              Update your dashboard password to keep your account secure.
+            </p>
+            <form id="password-form">
+              <label id="password-current-row">
+                <span>Current password</span>
+                <input
+                  id="password-current"
+                  type="password"
+                  placeholder="••••••••"
+                  autocomplete="current-password"
+                />
+              </label>
+              <label>
+                <span>New password</span>
+                <input
+                  id="password-new"
+                  type="password"
+                  placeholder="Choose something memorable"
+                  autocomplete="new-password"
+                  required
+                />
+              </label>
+              <label>
+                <span>Confirm new password</span>
+                <input
+                  id="password-confirm"
+                  type="password"
+                  placeholder="Repeat your new password"
+                  autocomplete="new-password"
+                />
+              </label>
+              <div class="cta-actions">
+                <button id="password-save" type="submit" class="button-primary">
+                  Update password
+                </button>
+                <p id="password-status" class="status-text"></p>
               </div>
             </form>
           </article>
@@ -543,6 +748,11 @@
       const loginStatus = document.getElementById('login-status');
       const loginPassword = document.getElementById('login-password');
       const loginEmail = document.getElementById('login-email');
+      const forgotPasswordLink = document.getElementById('forgot-password-link');
+      const forgotPasswordHelp = document.getElementById('forgot-password-help');
+      const defaultForgotPasswordLinkText = forgotPasswordLink
+        ? forgotPasswordLink.textContent
+        : 'Forgot your password?';
 
       const logoutButton = document.getElementById('logout-button');
       const memberNameEl = document.getElementById('member-name');
@@ -557,6 +767,14 @@
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
       const memberStatusMessage = document.getElementById('member-status-message');
+      const changePasswordButton = document.getElementById('change-password-button');
+      const onboardingPanel = document.getElementById('onboarding-panel');
+      const stepSubscription = document.getElementById('step-subscription');
+      const stepPlex = document.getElementById('step-plex');
+      const stepInvite = document.getElementById('step-invite');
+      const stepSubscriptionNote = document.getElementById('step-subscription-note');
+      const stepPlexNote = document.getElementById('step-plex-note');
+      const stepInviteNote = document.getElementById('step-invite-note');
       const defaultSubscriptionButtonLabel = subscriptionButton
         ? subscriptionButton.textContent
         : 'Start PayPal subscription';
@@ -570,6 +788,15 @@
       const profileName = document.getElementById('profile-name');
       const profileStatus = document.getElementById('profile-status');
       const profileSave = document.getElementById('profile-save');
+      const passwordForm = document.getElementById('password-form');
+      const passwordCurrentRow = document.getElementById('password-current-row');
+      const passwordCurrent = document.getElementById('password-current');
+      const passwordNew = document.getElementById('password-new');
+      const passwordConfirm = document.getElementById('password-confirm');
+      const passwordStatus = document.getElementById('password-status');
+      const passwordSave = document.getElementById('password-save');
+      const passwordGuidance = document.getElementById('password-guidance');
+      const passwordPanel = document.getElementById('password-panel');
 
       const inviteForm = document.getElementById('invite-form');
       const inviteEmail = document.getElementById('invite-email');
@@ -766,6 +993,127 @@
         }
       }
 
+      function setStepState(stepEl, state) {
+        if (!stepEl) {
+          return;
+        }
+        const allowed = new Set(['complete', 'current', 'upcoming']);
+        const normalized = allowed.has(state) ? state : 'upcoming';
+        stepEl.dataset.state = normalized;
+        const numberEl = stepEl.querySelector('.step-number');
+        if (numberEl && numberEl.dataset && numberEl.dataset.stepNumber) {
+          if (normalized === 'complete') {
+            numberEl.textContent = '✓';
+          } else {
+            numberEl.textContent = numberEl.dataset.stepNumber;
+          }
+        }
+      }
+
+      function updateOnboarding(data, { showSubscriptionCta } = {}) {
+        if (!onboardingPanel) {
+          return;
+        }
+
+        const donor = data && data.donor ? data.donor : null;
+        const normalizedStatus = donor && donor.status
+          ? donor.status.toLowerCase()
+          : 'pending';
+        const subscriptionComplete = normalizedStatus === 'active';
+        const subscriptionStarted = Boolean(donor && donor.subscriptionId);
+        const plexLinked = Boolean(donor && donor.plexLinked);
+        const plexLinkPending = Boolean(
+          data &&
+            data.plexLink &&
+            typeof data.plexLink.pending === 'boolean' &&
+            data.plexLink.pending
+        );
+        const inviteReadyState = Boolean(
+          data && data.invite && data.invite.wizarrInviteUrl
+        );
+        const inviteLimitReached = Boolean(data && data.inviteLimitReached);
+        const allComplete = subscriptionComplete && plexLinked && inviteReadyState;
+
+        if (allComplete) {
+          onboardingPanel.classList.add('hidden');
+          return;
+        }
+
+        onboardingPanel.classList.remove('hidden');
+
+        const steps = [
+          { el: stepSubscription, complete: subscriptionComplete },
+          { el: stepPlex, complete: plexLinked },
+          { el: stepInvite, complete: inviteReadyState },
+        ];
+
+        let currentAssigned = false;
+        for (const step of steps) {
+          if (!step.el) {
+            continue;
+          }
+          if (step.complete) {
+            setStepState(step.el, 'complete');
+          } else if (!currentAssigned) {
+            setStepState(step.el, 'current');
+            currentAssigned = true;
+          } else {
+            setStepState(step.el, 'upcoming');
+          }
+        }
+
+        if (stepSubscriptionNote) {
+          if (!subscriptionStarted && showSubscriptionCta) {
+            stepSubscriptionNote.textContent =
+              'Use the PayPal button above to kick off your membership.';
+          } else if (!subscriptionStarted && !showSubscriptionCta) {
+            stepSubscriptionNote.textContent =
+              'Subscription checkout is unavailable right now. Contact the server admin for help.';
+          } else if (!subscriptionComplete) {
+            stepSubscriptionNote.textContent =
+              'We are waiting for PayPal to confirm your first payment. This usually takes just a moment.';
+          } else {
+            stepSubscriptionNote.textContent =
+              'Subscription active! You are ready for the next step.';
+          }
+        }
+
+        if (stepPlexNote) {
+          if (!subscriptionComplete) {
+            stepPlexNote.textContent =
+              'We’ll unlock Plex linking after your subscription is confirmed.';
+          } else if (plexLinked) {
+            stepPlexNote.textContent =
+              'Plex account verified—time to generate your invite!';
+          } else if (plexLinkPending) {
+            stepPlexNote.textContent =
+              'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
+          } else {
+            stepPlexNote.textContent =
+              'Watch for the Plex authentication prompt here once your access is approved.';
+          }
+        }
+
+        if (stepInviteNote) {
+          if (!subscriptionComplete) {
+            stepInviteNote.textContent =
+              'Invite generation unlocks after your subscription is active.';
+          } else if (!plexLinked) {
+            stepInviteNote.textContent =
+              'Finish Plex authentication and we’ll enable invite generation.';
+          } else if (!inviteReadyState) {
+            stepInviteNote.textContent =
+              'Use the form below to send the invite to your inbox as soon as you are verified.';
+          } else if (inviteLimitReached) {
+            stepInviteNote.textContent =
+              'Your invite is ready below. Reach out to the server admin if you need it refreshed.';
+          } else {
+            stepInviteNote.textContent =
+              'Invite ready! Grab it below whenever you set up a new device.';
+          }
+        }
+      }
+
       function renderDashboard(data) {
         state.data = data;
         showApp();
@@ -776,6 +1124,25 @@
           loginForm.reset();
           setStatusText(loginStatus, '');
           setStatusText(memberStatusMessage, '');
+          if (forgotPasswordHelp) {
+            forgotPasswordHelp.classList.add('hidden');
+          }
+          if (forgotPasswordLink) {
+            forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+            forgotPasswordLink.setAttribute('aria-expanded', 'false');
+          }
+          if (onboardingPanel) {
+            onboardingPanel.classList.add('hidden');
+          }
+          if (passwordForm) {
+            passwordForm.reset();
+          }
+          if (passwordStatus) {
+            setStatusText(passwordStatus, '');
+          }
+          if (passwordSave) {
+            passwordSave.disabled = false;
+          }
           if (wizarrListItem) {
             wizarrListItem.classList.add('hidden');
           }
@@ -834,6 +1201,7 @@
         );
 
         updateMembershipStatusMessage(donor, { showSubscriptionCta });
+        updateOnboarding(data, { showSubscriptionCta });
 
         if (subscriptionButton && subscriptionCta) {
           if (showSubscriptionCta) {
@@ -859,6 +1227,31 @@
 
         profileEmail.value = donor.email || '';
         profileName.value = donor.name || '';
+        if (passwordForm) {
+          passwordForm.reset();
+        }
+        if (passwordStatus) {
+          setStatusText(passwordStatus, '');
+        }
+        if (passwordGuidance) {
+          passwordGuidance.textContent = donor.hasPassword
+            ? 'Update your dashboard password to keep your account secure.'
+            : 'Set a password so you can return to the dashboard anytime.';
+        }
+        if (passwordCurrentRow) {
+          if (donor.hasPassword) {
+            passwordCurrentRow.classList.remove('hidden');
+          } else {
+            passwordCurrentRow.classList.add('hidden');
+          }
+        }
+        if (passwordCurrent) {
+          passwordCurrent.disabled = !donor.hasPassword;
+          passwordCurrent.required = Boolean(donor.hasPassword);
+        }
+        if (passwordSave) {
+          passwordSave.disabled = false;
+        }
         inviteEmail.value = donor.email || '';
 
         if (wizarrLink && wizarrListItem) {
@@ -1019,6 +1412,90 @@
         } catch (err) {
           showError(err.message);
         }
+      }
+
+      if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          if (!forgotPasswordHelp) {
+            return;
+          }
+          const isHidden = forgotPasswordHelp.classList.contains('hidden');
+          if (isHidden) {
+            forgotPasswordHelp.classList.remove('hidden');
+            forgotPasswordLink.setAttribute('aria-expanded', 'true');
+            forgotPasswordLink.textContent = 'Hide password help';
+          } else {
+            forgotPasswordHelp.classList.add('hidden');
+            forgotPasswordLink.setAttribute('aria-expanded', 'false');
+            forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+          }
+        });
+      }
+
+      if (changePasswordButton) {
+        changePasswordButton.addEventListener('click', () => {
+          if (passwordPanel) {
+            passwordPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          window.setTimeout(() => {
+            if (passwordNew) {
+              try {
+                passwordNew.focus();
+              } catch (err) {
+                // Ignore focus errors.
+              }
+            }
+          }, 200);
+        });
+      }
+
+      if (passwordForm) {
+        passwordForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!passwordSave) {
+            return;
+          }
+          setStatusText(passwordStatus, 'Saving…', 'info');
+          passwordSave.disabled = true;
+          const payload = {
+            currentPassword: passwordCurrent ? passwordCurrent.value : '',
+            newPassword: passwordNew ? passwordNew.value : '',
+            confirmPassword: passwordConfirm ? passwordConfirm.value : '',
+          };
+
+          try {
+            const response = await fetch('/api/customer/password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            let responseBody;
+            try {
+              responseBody = await response.json();
+            } catch (err) {
+              responseBody = {};
+            }
+            if (!response.ok) {
+              throw new Error(responseBody.error || 'Failed to update password');
+            }
+            renderDashboard(responseBody);
+            setStatusText(
+              passwordStatus,
+              'Password updated successfully.',
+              'success'
+            );
+            if (passwordForm) {
+              passwordForm.reset();
+            }
+          } catch (err) {
+            setStatusText(passwordStatus, err.message, 'error');
+          } finally {
+            if (passwordSave) {
+              passwordSave.disabled = false;
+            }
+          }
+        });
       }
 
       loginForm.addEventListener('submit', async (event) => {
