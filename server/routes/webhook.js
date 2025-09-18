@@ -197,9 +197,21 @@ async function handleSubscriptionEvent(event) {
     donorId: donor.id,
   });
 
-  if (event.event_type === 'BILLING.SUBSCRIPTION.CANCELLED') {
+  const terminationEventStatusMap = {
+    'BILLING.SUBSCRIPTION.CANCELLED': 'cancelled',
+    'BILLING.SUBSCRIPTION.EXPIRED': 'expired',
+    'BILLING.SUBSCRIPTION.SUSPENDED': 'suspended',
+  };
+
+  if (terminationEventStatusMap[event.event_type]) {
+    const terminationStatus = status || terminationEventStatusMap[event.event_type];
     donor =
-      (await handleCancellation(donor, { subscriptionId, resource })) || donor;
+      (await handleCancellation(donor, {
+        subscriptionId,
+        resource,
+        status: terminationStatus,
+        eventType: event.event_type,
+      })) || donor;
     return;
   }
 
@@ -214,8 +226,13 @@ async function handleSubscriptionEvent(event) {
   }
 }
 
-async function handleCancellation(donor, { subscriptionId, resource }) {
-  const updatedDonor = updateDonorStatus(subscriptionId, 'cancelled');
+async function handleCancellation(
+  donor,
+  { subscriptionId, resource, status: statusOverride, eventType }
+) {
+  const normalizedStatus = (statusOverride || 'cancelled').toLowerCase();
+
+  const updatedDonor = updateDonorStatus(subscriptionId, normalizedStatus);
   if (updatedDonor) {
     donor = updatedDonor;
   }
@@ -248,6 +265,8 @@ async function handleCancellation(donor, { subscriptionId, resource }) {
     subscriptionId,
     accessExpiresAt: donor.accessExpiresAt,
     source: expirationSource,
+    status: donor.status,
+    eventType,
   });
 
   if (!donor.accessExpiresAt) {
@@ -273,6 +292,8 @@ async function handleCancellation(donor, { subscriptionId, resource }) {
     donorId: donor.id,
     subscriptionId,
     source: 'webhook-immediate',
+    status: donor.status,
+    eventType,
   });
   return donor;
 }
