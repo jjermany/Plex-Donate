@@ -318,11 +318,11 @@ router.post(
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
+    const warnings = [];
     if (requiresPlexRelink(activeDonor)) {
-      return res.status(409).json({
-        error:
-          'Please re-link your Plex account to sync your email before generating a new invite.',
-      });
+      warnings.push(
+        'Your Plex account email does not match your dashboard email. The invite was processed, but consider re-linking Plex to keep them in sync.'
+      );
     }
 
     if (canReuseInvite) {
@@ -344,27 +344,33 @@ router.post(
         inviteId: invite.id,
         shareLinkId: updatedLink.id,
       });
-      return res.json(
-        buildShareResponse({
-          shareLink: updatedLink,
-          donor: activeDonor,
-          invite,
-          inviteLimitReached: true,
-        })
-      );
+      const response = buildShareResponse({
+        shareLink: updatedLink,
+        donor: activeDonor,
+        invite,
+        inviteLimitReached: true,
+      });
+      if (warnings.length > 0) {
+        response.warnings = warnings;
+      }
+      return res.json(response);
     }
 
     if (inviteLimitReached || existingInvite) {
+      const payload = buildShareResponse({
+        shareLink,
+        donor: activeDonor,
+        invite,
+        prospect: null,
+        inviteLimitReached: true,
+      });
+      if (warnings.length > 0) {
+        payload.warnings = warnings;
+      }
       return res.status(409).json({
         error:
           'An invite has already been generated for this subscription. Contact the server admin if you need help updating access.',
-        payload: buildShareResponse({
-          shareLink,
-          donor: activeDonor,
-          invite,
-          prospect: null,
-          inviteLimitReached: true,
-        }),
+        payload,
       });
     }
 
@@ -409,15 +415,17 @@ router.post(
       shareLinkId: updatedLink.id,
     });
 
-    return res.json(
-      buildShareResponse({
-        shareLink: updatedLink,
-        donor: activeDonor,
-        invite: inviteRecord,
-        prospect: null,
-        inviteLimitReached: true,
-      })
-    );
+    const response = buildShareResponse({
+      shareLink: updatedLink,
+      donor: activeDonor,
+      invite: inviteRecord,
+      prospect: null,
+      inviteLimitReached: true,
+    });
+    if (warnings.length > 0) {
+      response.warnings = warnings;
+    }
+    return res.json(response);
   })
 );
 

@@ -712,11 +712,11 @@ router.post(
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
+    const warnings = [];
     if (requiresPlexRelink(activeDonor)) {
-      return res.status(409).json({
-        error:
-          'Please re-link your Plex account so we can keep your Plex and dashboard emails in sync before generating a new invite.',
-      });
+      warnings.push(
+        'Your Plex account email does not match your dashboard email. The invite was processed, but consider re-linking Plex to keep them in sync.'
+      );
     }
 
     if (canReuseInvite) {
@@ -738,28 +738,34 @@ router.post(
       });
       const pendingPlexLink = getPendingPlexLink(req, activeDonor);
       req.customer.donor = activeDonor;
-      return res.json(
-        buildDashboardResponse({
-          donor: activeDonor,
-          invite,
-          pendingPlexLink,
-          inviteLimitReached: true,
-        })
-      );
+      const response = buildDashboardResponse({
+        donor: activeDonor,
+        invite,
+        pendingPlexLink,
+        inviteLimitReached: true,
+      });
+      if (warnings.length > 0) {
+        response.warnings = warnings;
+      }
+      return res.json(response);
     }
 
     if (inviteLimitReached || existingInvite) {
       const pendingPlexLink = getPendingPlexLink(req, activeDonor);
       req.customer.donor = activeDonor;
+      const payload = buildDashboardResponse({
+        donor: activeDonor,
+        invite,
+        pendingPlexLink,
+        inviteLimitReached: true,
+      });
+      if (warnings.length > 0) {
+        payload.warnings = warnings;
+      }
       return res.status(409).json({
         error:
           'An invite has already been generated for this subscription. Contact the server admin if you need help updating access.',
-        payload: buildDashboardResponse({
-          donor: activeDonor,
-          invite,
-          pendingPlexLink,
-          inviteLimitReached: true,
-        }),
+        payload,
       });
     }
 
@@ -817,14 +823,16 @@ router.post(
 
     const pendingPlexLink = getPendingPlexLink(req, activeDonor);
     req.customer.donor = activeDonor;
-    return res.json(
-      buildDashboardResponse({
-        donor: activeDonor,
-        invite: inviteRecord,
-        pendingPlexLink,
-        inviteLimitReached: true,
-      })
-    );
+    const response = buildDashboardResponse({
+      donor: activeDonor,
+      invite: inviteRecord,
+      pendingPlexLink,
+      inviteLimitReached: true,
+    });
+    if (warnings.length > 0) {
+      response.warnings = warnings;
+    }
+    return res.json(response);
   })
 );
 
