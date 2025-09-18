@@ -150,12 +150,15 @@ async function handleSubscriptionEvent(event) {
 
 async function handleCancellation(donor) {
   updateDonorStatus(donor.subscriptionId, 'cancelled');
-  if (!donor.email) {
+  if (!donor.email && !donor.plexAccountId) {
     return;
   }
   if (plexService.isConfigured()) {
     try {
-      const result = await plexService.revokeUserByEmail(donor.email);
+      const result = await plexService.revokeUser({
+        plexAccountId: donor.plexAccountId,
+        email: donor.email,
+      });
       if (result.success) {
         const invite = getLatestActiveInviteForDonor(donor.id);
         if (invite) {
@@ -164,6 +167,7 @@ async function handleCancellation(donor) {
         logEvent('plex.access.revoked', {
           donorId: donor.id,
           email: donor.email,
+          plexAccountId: donor.plexAccountId,
         });
       }
     } catch (err) {
@@ -274,12 +278,11 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
   }
 
   if (requiresPlexRelink(donor)) {
-    logger.info('Skipping automatic invite: Plex re-link required', {
+    logger.info('Proceeding with automatic invite despite Plex email mismatch', {
       donorId: donor.id,
       plexEmail: donor.plexEmail,
       donorEmail: donor.email,
     });
-    return;
   }
 
   const normalizedEmail = normalizeEmail(email);
