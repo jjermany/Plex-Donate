@@ -5,6 +5,7 @@ const {
   getDonorByEmailAddress,
   getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
+  getLatestInviteForDonor,
   createInvite: createInviteRecord,
   markShareLinkUsed,
   logEvent,
@@ -64,7 +65,30 @@ function requiresPlexRelink(donor) {
   return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
 }
 
-function buildShareResponse({ shareLink, donor, invite, prospect }) {
+function getInviteState(donorId) {
+  const activeInvite = getLatestActiveInviteForDonor(donorId);
+  if (activeInvite) {
+    return {
+      activeInvite,
+      latestInvite: activeInvite,
+      inviteLimitReached: true,
+    };
+  }
+  const latestInvite = getLatestInviteForDonor(donorId);
+  return {
+    activeInvite: null,
+    latestInvite: latestInvite || null,
+    inviteLimitReached: Boolean(latestInvite),
+  };
+}
+
+function buildShareResponse({
+  shareLink,
+  donor,
+  invite,
+  prospect,
+  inviteLimitReached = Boolean(invite),
+}) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
   const checkoutAvailable = isSubscriptionCheckoutConfigured(paypal);
@@ -110,6 +134,7 @@ function buildShareResponse({ shareLink, donor, invite, prospect }) {
       subscriptionUrl,
       subscriptionCheckoutAvailable: checkoutAvailable,
     },
+    inviteLimitReached: Boolean(inviteLimitReached),
   };
 }
 
@@ -163,10 +188,18 @@ router.get(
     }
 
     if (donor) {
-      const invite = getLatestActiveInviteForDonor(donor.id);
+      const { activeInvite: invite, inviteLimitReached } = getInviteState(
+        donor.id
+      );
 
       return res.json(
-        buildShareResponse({ shareLink, donor, invite, prospect: null })
+        buildShareResponse({
+          shareLink,
+          donor,
+          invite,
+          prospect: null,
+          inviteLimitReached,
+        })
       );
     }
 
@@ -236,7 +269,12 @@ router.post(
       });
     }
 
-    const invite = getLatestActiveInviteForDonor(donor.id);
+    const {
+      activeInvite: inviteFromState,
+      latestInvite: existingInvite,
+      inviteLimitReached,
+    } = getInviteState(donor.id);
+    let invite = inviteFromState;
     const canReuseInvite =
       invite &&
       invite.wizarrInviteUrl &&
@@ -307,8 +345,27 @@ router.post(
         shareLinkId: updatedLink.id,
       });
       return res.json(
-        buildShareResponse({ shareLink: updatedLink, donor: activeDonor, invite })
+        buildShareResponse({
+          shareLink: updatedLink,
+          donor: activeDonor,
+          invite,
+          inviteLimitReached: true,
+        })
       );
+    }
+
+    if (inviteLimitReached || existingInvite) {
+      return res.status(409).json({
+        error:
+          'An invite has already been generated for this subscription. Contact the server admin if you need help updating access.',
+        payload: buildShareResponse({
+          shareLink,
+          donor: activeDonor,
+          invite,
+          prospect: null,
+          inviteLimitReached: true,
+        }),
+      });
     }
 
     let inviteData;
@@ -358,6 +415,7 @@ router.post(
         donor: activeDonor,
         invite: inviteRecord,
         prospect: null,
+        inviteLimitReached: true,
       })
     );
   })
@@ -568,7 +626,9 @@ router.post(
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
 
       const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
-      const invite = getLatestActiveInviteForDonor(activeDonor.id);
+      const { activeInvite: invite, inviteLimitReached } = getInviteState(
+        activeDonor.id
+      );
 
       logEvent('share.account.password_set', {
         donorId: activeDonor.id,
@@ -581,6 +641,7 @@ router.post(
           donor: activeDonor,
           invite,
           prospect: null,
+          inviteLimitReached,
         })
       );
     }
@@ -626,7 +687,9 @@ router.post(
       clearLastUsed: true,
     });
     const updatedLink = markShareLinkUsed(reassignedLink.id) || reassignedLink;
-    const invite = getLatestActiveInviteForDonor(activeDonor.id);
+    const { activeInvite: invite, inviteLimitReached } = getInviteState(
+      activeDonor.id
+    );
 
     if (prospect) {
       markProspectConverted(prospect.id, activeDonor.id);
@@ -644,6 +707,7 @@ router.post(
         donor: activeDonor,
         invite,
         prospect: null,
+        inviteLimitReached,
       })
     );
   })

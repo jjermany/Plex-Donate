@@ -432,11 +432,11 @@
       <main class="canvas">
         <header class="surface hero">
           <span class="eyebrow">Start here</span>
-          <h1>Set up your membership or refresh your invite.</h1>
+          <h1>Set up your membership or review your invite.</h1>
           <p class="lead">
             New supporters can create their login below and we’ll walk you
             through the rest. Already part of the community? Save your details
-            and generate a fresh Wizarr invite in just a few clicks.
+            and generate your Wizarr invite in just a few clicks.
           </p>
           <div class="hero-badges">
             <span class="chip">Plex · Wizarr ready</span>
@@ -487,7 +487,7 @@
             <ul class="support-list">
               <li>Create or update your account with the email you want to use for streaming.</li>
               <li>Share your PayPal subscription ID when you have it and we'll link everything up.</li>
-              <li>Generate a Wizarr invite anytime to unlock Plex and the rest of our library.</li>
+              <li>Generate your Wizarr invite once to unlock Plex and the rest of our library.</li>
             </ul>
             <div class="cta">
               <h3>Already subscribed?</h3>
@@ -567,7 +567,7 @@
           <h2>Step 2 · Claim your Plex access</h2>
           <p class="muted" id="invite-description">
             Choose the email you want to use for streaming access and we will
-            generate a fresh Wizarr invite as soon as your membership is ready.
+            generate your Wizarr invite as soon as your membership is ready.
           </p>
           <form id="invite-form">
             <label>
@@ -733,8 +733,19 @@
         }
       }
 
-      function renderInvite(invite) {
-        if (state.isProspect) {
+      function renderInvite(invite, limitReached) {
+        const limitHit = Boolean(limitReached);
+        const isProspect = Boolean(state.isProspect);
+
+        if (inviteForm) {
+          if (limitHit || isProspect) {
+            inviteForm.classList.add('hidden');
+          } else {
+            inviteForm.classList.remove('hidden');
+          }
+        }
+
+        if (isProspect) {
           inviteReady.classList.add('hidden');
           inviteLinkEl.removeAttribute('href');
           inviteLinkEl.textContent = '';
@@ -742,7 +753,9 @@
           inviteCreatedEl.textContent = '';
           inviteDescription.textContent =
             'Finish the quick account setup above to unlock invite generation.';
-          generateButton.textContent = 'Generate my invite';
+          if (generateButton) {
+            generateButton.textContent = 'Generate my invite';
+          }
           return;
         }
 
@@ -752,9 +765,14 @@
           inviteLinkEl.textContent = '';
           inviteEmailEl.textContent = '';
           inviteCreatedEl.textContent = '';
-          inviteDescription.textContent =
-            'Choose the email you want to use for streaming access and we will generate a fresh Wizarr invite instantly.';
-          generateButton.textContent = 'Generate my invite';
+          inviteDescription.textContent = limitHit
+            ? 'An invite has already been created for this subscription. Contact the server admin if you need help getting back in.'
+            : 'Choose the email you want to use for streaming access and we will generate your Wizarr invite instantly.';
+          if (generateButton) {
+            generateButton.textContent = limitHit
+              ? 'Invite already created'
+              : 'Generate my invite';
+          }
           return;
         }
 
@@ -770,9 +788,14 @@
         } else {
           inviteCreatedEl.textContent = '';
         }
-        inviteDescription.textContent =
-          'Invite ready! Feel free to regenerate with a new email whenever you need to.';
-        generateButton.textContent = 'Generate another invite';
+        inviteDescription.textContent = limitHit
+          ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
+          : 'Invite ready! Use the link below to finish connecting your access.';
+        if (generateButton) {
+          generateButton.textContent = limitHit
+            ? 'Invite already created'
+            : 'Generate another invite';
+        }
       }
 
       function render(data) {
@@ -807,6 +830,8 @@
             (isProspect || !donor || !donor.subscriptionId || !isActive)
         );
         state.isProspect = isProspect;
+        const limitReached = Boolean(data.inviteLimitReached);
+        state.inviteLimitReached = limitReached;
 
         if (donorNameEl) {
           if (isProspect) {
@@ -865,7 +890,7 @@
 
         const severeStatuses = new Set(['cancelled', 'suspended', 'expired']);
         const hasSevereIssue = !isProspect && severeStatuses.has(normalizedStatus);
-        const inviteLocked = isProspect || !isActive;
+        const inviteLocked = isProspect || !isActive || limitReached;
 
         if (generateButton) {
           generateButton.dataset.blocked = inviteLocked ? 'true' : 'false';
@@ -903,7 +928,11 @@
         }
 
         if (inviteLocked) {
-          if (isProspect) {
+          if (limitReached) {
+            actionStatus.textContent =
+              'An invite has already been generated for this subscription. Contact the server admin if you need the link refreshed.';
+            actionStatus.className = 'status-text info';
+          } else if (isProspect) {
             actionStatus.textContent =
               'Finish setting up your account to unlock invite generation.';
             actionStatus.className = 'status-text info';
@@ -1013,9 +1042,9 @@
           accountConfirmInput.value = '';
         }
 
-        renderInvite(invite);
+        renderInvite(invite, limitReached);
 
-        if (!isActive) {
+        if (!isActive && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
             ? 'Once your donation is active we will unlock invite generation.'
             : 'Invite generation unlocks once your subscription is active.';
@@ -1282,7 +1311,11 @@
 
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (!state.token || generateButton.dataset.blocked === 'true') {
+        if (
+          !state.token ||
+          generateButton.dataset.blocked === 'true' ||
+          state.inviteLimitReached
+        ) {
           return;
         }
         const email = (emailInput.value || '').trim();
@@ -1303,6 +1336,7 @@
         actionStatus.textContent = 'Generating invite…';
         actionStatus.className = 'status-text info';
 
+        let responseData = null;
         try {
           const response = await fetch(`/api/share/${encodeURIComponent(state.token)}`, {
             method: 'POST',
@@ -1314,7 +1348,11 @@
             }),
           });
           const payload = await response.json();
+          responseData = payload;
           if (!response.ok) {
+            if (payload && payload.payload) {
+              render(payload.payload);
+            }
             throw new Error(payload.error || 'Failed to create invite');
           }
           render(payload);
@@ -1325,7 +1363,11 @@
           actionStatus.textContent = err.message;
           actionStatus.className = 'status-text error';
         } finally {
-          if (generateButton.dataset.blocked !== 'true') {
+          const limitHit = Boolean(
+            (responseData && responseData.inviteLimitReached) ||
+              state.inviteLimitReached
+          );
+          if (!limitHit && generateButton.dataset.blocked !== 'true') {
             generateButton.disabled = false;
           }
         }

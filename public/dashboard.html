@@ -410,6 +410,11 @@
                 <span id="member-last-payment"></span>
               </div>
             </div>
+            <p
+              id="member-status-message"
+              class="status-text small"
+              aria-live="polite"
+            ></p>
             <div id="subscription-cta" class="subscription-cta hidden">
               <button id="subscription-button" class="button-primary" type="button">
                 Start PayPal subscription
@@ -456,10 +461,10 @@
           </article>
 
           <article class="surface">
-            <h2 class="section-title">Generate a fresh invite</h2>
+            <h2 class="section-title">Your invite link</h2>
             <p class="muted" id="invite-description">
-              Need access on a new device or sharing with another profile? Create
-              a new Wizarr invite instantly.
+              Generate your Wizarr invite once and keep the link handy for
+              future devices.
             </p>
             <form id="invite-form">
               <label>
@@ -502,7 +507,7 @@
               active. Save the links below for quick access.
             </p>
             <ul>
-              <li>
+              <li id="wizarr-list-item" class="hidden">
                 <a id="wizarr-link" href="#" target="_blank" rel="noopener"
                   >Open Wizarr</a
                 >
@@ -550,6 +555,8 @@
       const memberLastPayment = document.getElementById('member-last-payment');
       const subscriptionCta = document.getElementById('subscription-cta');
       const subscriptionButton = document.getElementById('subscription-button');
+      const subscriptionNote = document.getElementById('subscription-note');
+      const memberStatusMessage = document.getElementById('member-status-message');
       const defaultSubscriptionButtonLabel = subscriptionButton
         ? subscriptionButton.textContent
         : 'Start PayPal subscription';
@@ -576,6 +583,7 @@
       const inviteDescription = document.getElementById('invite-description');
 
       const wizarrLink = document.getElementById('wizarr-link');
+      const wizarrListItem = document.getElementById('wizarr-list-item');
 
       function showLoading() {
         loadingPanel.classList.remove('hidden');
@@ -631,16 +639,110 @@
         }
       }
 
-      function renderInvite(invite) {
+      function getWizarrPortalUrl(data) {
+        if (!data || !data.wizarr) {
+          return '';
+        }
+        const portal =
+          typeof data.wizarr.portalUrl === 'string'
+            ? data.wizarr.portalUrl.trim()
+            : '';
+        return portal;
+      }
+
+      function updateMembershipStatusMessage(donor, { showSubscriptionCta }) {
+        if (!memberStatusMessage) {
+          return;
+        }
+
+        const normalizedStatus = (donor && donor.status
+          ? donor.status
+          : 'pending'
+        ).toLowerCase();
+        const lastPayment = donor && donor.lastPaymentAt ? formatDate(donor.lastPaymentAt) : '';
+
+        let tone = 'info';
+        let message = '';
+
+        switch (normalizedStatus) {
+          case 'active':
+            tone = 'success';
+            message = lastPayment
+              ? `Your subscription is active. Last payment recorded ${lastPayment}.`
+              : 'Your subscription is active and invites are unlocked.';
+            break;
+          case 'pending':
+            tone = 'info';
+            if (showSubscriptionCta) {
+              message = 'Start your PayPal subscription to activate your membership.';
+            } else if (donor && donor.subscriptionId) {
+              message =
+                'We are waiting for PayPal to confirm your first payment. Check PayPal for any required steps.';
+            } else {
+              message = 'Add a subscription using the button below to finish setting up your membership.';
+            }
+            break;
+          case 'cancelled':
+            tone = 'error';
+            message =
+              'Your PayPal subscription was canceled. Start a new subscription to regain access.';
+            break;
+          case 'suspended':
+            tone = 'error';
+            message =
+              'Your PayPal subscription is suspended. Update your billing details in PayPal to resume access.';
+            break;
+          case 'expired':
+            tone = 'error';
+            message =
+              'Your PayPal subscription expired. Start a new subscription to continue access.';
+            break;
+          case 'past_due':
+            tone = 'error';
+            message =
+              'Your subscription payment is past due. Update your PayPal billing information to avoid interruptions.';
+            break;
+          default:
+            tone = 'info';
+            message =
+              'Your subscription status is being updated. Contact the server admin if this looks wrong.';
+            break;
+        }
+
+        setStatusText(memberStatusMessage, message, tone);
+        memberStatusMessage.classList.add('small');
+      }
+
+      function renderInvite(invite, limitReached) {
+        const limitHit = Boolean(limitReached);
+
+        if (inviteStatus) {
+          setStatusText(inviteStatus, '');
+        }
+
+        if (inviteForm) {
+          if (limitHit) {
+            inviteForm.classList.add('hidden');
+          } else {
+            inviteForm.classList.remove('hidden');
+          }
+        }
+
         if (!invite || !invite.wizarrInviteUrl) {
           inviteReady.classList.add('hidden');
           inviteLinkEl.removeAttribute('href');
           inviteLinkEl.textContent = '';
           inviteEmailDisplay.textContent = '';
           inviteCreated.textContent = '';
-          inviteDescription.textContent =
-            'Need access on a new device or sharing with another profile? Create a new Wizarr invite instantly.';
-          inviteSubmit.textContent = 'Generate invite';
+          inviteDescription.textContent = limitHit
+            ? 'An invite has already been created for this subscription. Contact the server admin if you need it refreshed.'
+            : 'Generate your Wizarr invite once and keep the link handy for future devices.';
+          if (inviteSubmit) {
+            inviteSubmit.textContent = limitHit
+              ? 'Invite already created'
+              : 'Generate invite';
+            inviteSubmit.disabled = limitHit;
+          }
           return;
         }
 
@@ -653,9 +755,15 @@
         inviteCreated.textContent = invite.createdAt
           ? `Created ${formatDate(invite.createdAt)}`
           : '';
-        inviteDescription.textContent =
-          'Invite ready! If you need a new one just generate another below.';
-        inviteSubmit.textContent = 'Generate another invite';
+        inviteDescription.textContent = limitHit
+          ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
+          : 'Invite ready! Use the link below whenever you set up a new device.';
+        if (inviteSubmit) {
+          inviteSubmit.textContent = limitHit
+            ? 'Invite already created'
+            : 'Generate another invite';
+          inviteSubmit.disabled = limitHit;
+        }
       }
 
       function renderDashboard(data) {
@@ -667,6 +775,10 @@
           dashboardPanel.classList.add('hidden');
           loginForm.reset();
           setStatusText(loginStatus, '');
+          setStatusText(memberStatusMessage, '');
+          if (wizarrListItem) {
+            wizarrListItem.classList.add('hidden');
+          }
           return;
         }
 
@@ -721,6 +833,8 @@
             (!donor.subscriptionId || normalizedStatus !== 'active')
         );
 
+        updateMembershipStatusMessage(donor, { showSubscriptionCta });
+
         if (subscriptionButton && subscriptionCta) {
           if (showSubscriptionCta) {
             subscriptionCta.classList.remove('hidden');
@@ -747,39 +861,28 @@
         profileName.value = donor.name || '';
         inviteEmail.value = donor.email || '';
 
-        if (wizarrLink) {
-          const wizarrUrl = (() => {
-            if (!data || !data.wizarr) {
-              return '';
-            }
-            const portalUrl =
-              typeof data.wizarr.portalUrl === 'string'
-                ? data.wizarr.portalUrl.trim()
-                : '';
-            if (portalUrl) {
-              return portalUrl;
-            }
-            return typeof data.wizarr.baseUrl === 'string'
-              ? data.wizarr.baseUrl.trim()
-              : '';
-          })();
-
-          if (wizarrUrl) {
-            wizarrLink.href = wizarrUrl;
+        if (wizarrLink && wizarrListItem) {
+          const wizarrPortalUrl = getWizarrPortalUrl(data);
+          if (wizarrPortalUrl) {
+            wizarrLink.href = wizarrPortalUrl;
             wizarrLink.textContent = 'Open Wizarr';
             wizarrLink.target = '_blank';
             wizarrLink.rel = 'noopener';
+            wizarrListItem.classList.remove('hidden');
           } else {
             wizarrLink.removeAttribute('href');
             wizarrLink.removeAttribute('target');
             wizarrLink.removeAttribute('rel');
-            wizarrLink.textContent = 'Wizarr link coming soon';
+            wizarrLink.textContent = 'Open Wizarr';
+            wizarrListItem.classList.add('hidden');
           }
         }
 
-        renderInvite(data.invite);
+        const limitReached = Boolean(data.inviteLimitReached);
 
-        const inviteBlocked = normalizedStatus !== 'active';
+        renderInvite(data.invite, limitReached);
+
+        const inviteBlocked = normalizedStatus !== 'active' || limitReached;
         if (inviteSubmit) {
           inviteSubmit.disabled = inviteBlocked;
         }
@@ -790,7 +893,7 @@
           inviteNote.disabled = inviteBlocked;
         }
 
-        if (inviteBlocked) {
+        if (inviteBlocked && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
             ? 'Start your PayPal subscription to unlock invite generation.'
             : 'Invite generation unlocks once your subscription is active.';
@@ -1008,11 +1111,16 @@
 
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-        if (inviteSubmit.disabled) {
+        if (
+          inviteSubmit.disabled ||
+          (inviteForm && inviteForm.classList.contains('hidden')) ||
+          (state.data && state.data.inviteLimitReached)
+        ) {
           return;
         }
         setStatusText(inviteStatus, 'Generating invite…', 'info');
         inviteSubmit.disabled = true;
+        let responseData = null;
         try {
           const response = await fetch('/api/customer/invite', {
             method: 'POST',
@@ -1023,7 +1131,11 @@
             }),
           });
           const payload = await response.json();
+          responseData = payload;
           if (!response.ok) {
+            if (payload && payload.payload) {
+              renderDashboard(payload.payload);
+            }
             throw new Error(payload.error || 'Failed to generate invite');
           }
           setStatusText(
@@ -1036,7 +1148,13 @@
         } catch (err) {
           setStatusText(inviteStatus, err.message, 'error');
         } finally {
-          inviteSubmit.disabled = false;
+          const limitHit = Boolean(
+            (responseData && responseData.inviteLimitReached) ||
+              (state.data && state.data.inviteLimitReached)
+          );
+          if (!limitHit) {
+            inviteSubmit.disabled = false;
+          }
         }
       });
 
