@@ -729,6 +729,31 @@
             </div>
           </section>
 
+          <section class="panel" id="share-links-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+              <div>
+                <h2 style="margin:0 0 4px;">Invite page links</h2>
+                <p class="muted-text" style="margin:0;">
+                  Review active share URLs and remove any that are no longer needed.
+                </p>
+              </div>
+            </div>
+            <div style="overflow-x:auto;">
+              <table id="share-links-table">
+                <thead>
+                  <tr>
+                    <th>Link</th>
+                    <th>Owner</th>
+                    <th>Created</th>
+                    <th>Last used</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
           <section class="panel">
             <h2 style="margin-top:0;">Recent activity</h2>
             <ul id="events-list" class="events-list"></ul>
@@ -958,12 +983,29 @@
       </tr>
     </template>
 
+    <template id="share-link-row">
+      <tr>
+        <td class="col-link"></td>
+        <td class="col-owner"></td>
+        <td class="col-created"></td>
+        <td class="col-last-used"></td>
+        <td>
+          <div class="actions">
+            <button data-action="copy" class="secondary">Copy link</button>
+            <button data-action="remove" class="danger secondary">Remove</button>
+          </div>
+        </td>
+      </tr>
+    </template>
+
     <script>
       const loginPanel = document.getElementById('login-panel');
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
+      const shareLinksPanel = document.getElementById('share-links-panel');
+      const shareLinksTable = document.querySelector('#share-links-table tbody');
       const eventsList = document.getElementById('events-list');
       const refreshButton = document.getElementById('refresh-button');
       const settingsPanel = document.getElementById('settings-panel');
@@ -998,6 +1040,7 @@
       let state = {
         authenticated: false,
         donors: [],
+        shareLinks: [],
         events: [],
         prospectShare: null,
         settings: null,
@@ -1063,6 +1106,17 @@
           .replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;');
+      }
+
+      function formatDateTime(value) {
+        if (!value) {
+          return '—';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return String(value);
+        }
+        return date.toLocaleString();
       }
 
       function getPublicBaseUrl() {
@@ -1239,6 +1293,7 @@
 
       function render() {
         renderProspectSharePanel();
+        renderShareLinks();
         if (state.authenticated) {
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
@@ -1543,6 +1598,9 @@
 
           renderProspectSharePanel();
 
+          await refreshShareLinks();
+          renderShareLinks();
+
           const shareUrl = buildShareUrl(shareLink);
           let copied = false;
           if (shareUrl && navigator.clipboard && navigator.clipboard.writeText) {
@@ -1801,27 +1859,42 @@
             }
           })();
           li.innerHTML = `<time>${new Date(event.createdAt).toLocaleString()}</time><strong>${event.eventType}</strong><pre class="event-payload">${payload}</pre>`;
-          eventsList.appendChild(li);
-        });
-      }
+        eventsList.appendChild(li);
+      });
+    }
 
-      async function loadDashboardData() {
-        try {
-          const donorsResponse = await api('/api/admin/subscribers');
-          state.donors = donorsResponse.donors || [];
-        } catch (err) {
-          console.error(err);
-        }
-        try {
-          const eventsResponse = await api('/api/admin/events');
-          state.events = eventsResponse.events || [];
-        } catch (err) {
-          console.error(err);
-        }
-        await loadSettings();
-        await loadPaypalPlan();
-        render();
+    async function refreshShareLinks() {
+      if (!state.authenticated) {
+        state.shareLinks = [];
+        return;
       }
+      try {
+        const response = await api('/api/admin/share-links');
+        state.shareLinks = response.shareLinks || [];
+      } catch (err) {
+        console.error(err);
+        state.shareLinks = [];
+      }
+    }
+
+    async function loadDashboardData() {
+      try {
+        const donorsResponse = await api('/api/admin/subscribers');
+        state.donors = donorsResponse.donors || [];
+      } catch (err) {
+        console.error(err);
+      }
+      try {
+        const eventsResponse = await api('/api/admin/events');
+        state.events = eventsResponse.events || [];
+      } catch (err) {
+        console.error(err);
+      }
+      await loadSettings();
+      await loadPaypalPlan();
+      await refreshShareLinks();
+      render();
+    }
 
       async function checkSession() {
         try {
@@ -1843,6 +1916,106 @@
         } catch (err) {
           console.error(err);
         }
+      }
+
+      function renderShareLinks() {
+        if (!shareLinksPanel || !shareLinksTable) {
+          return;
+        }
+
+        const links = Array.isArray(state.shareLinks) ? state.shareLinks : [];
+
+        if (!state.authenticated) {
+          shareLinksPanel.classList.add('hidden');
+          shareLinksTable.innerHTML = '';
+          return;
+        }
+
+        shareLinksPanel.classList.remove('hidden');
+        shareLinksTable.innerHTML = '';
+
+        if (links.length === 0) {
+          const row = document.createElement('tr');
+          const cell = document.createElement('td');
+          cell.colSpan = 5;
+          cell.textContent = 'No invite page links yet.';
+          cell.style.color = 'var(--text-muted-soft)';
+          row.appendChild(cell);
+          shareLinksTable.appendChild(row);
+          return;
+        }
+
+        const template = document.getElementById('share-link-row');
+        if (!template) {
+          return;
+        }
+
+        links.forEach((link) => {
+          const clone = template.content.cloneNode(true);
+          const row = clone.querySelector('tr');
+          row.dataset.id = link.id;
+          const linkCell = clone.querySelector('.col-link');
+          const ownerCell = clone.querySelector('.col-owner');
+          const createdCell = clone.querySelector('.col-created');
+          const lastUsedCell = clone.querySelector('.col-last-used');
+
+          const shareUrl = buildShareUrl(link);
+          if (shareUrl) {
+            linkCell.innerHTML = `<a href="${shareUrl}" target="_blank" rel="noopener">${escapeHtml(
+              shareUrl
+            )}</a>`;
+          } else {
+            linkCell.textContent = 'Pending link configuration';
+          }
+
+          const ownerName = (() => {
+            if (link.donor) {
+              return link.donor.name || link.donor.email || 'Subscriber';
+            }
+            if (link.prospect) {
+              return link.prospect.name || link.prospect.email || 'Prospect';
+            }
+            return 'Unknown';
+          })();
+
+          const ownerMeta = [];
+          const typeLabel = link.donor
+            ? 'Subscriber'
+            : link.prospect
+            ? 'Prospect'
+            : 'Unassigned';
+          ownerMeta.push(escapeHtml(typeLabel));
+          if (link.donor && link.donor.email) {
+            ownerMeta.push(escapeHtml(link.donor.email));
+          } else if (link.prospect && link.prospect.email) {
+            ownerMeta.push(escapeHtml(link.prospect.email));
+          }
+          if (link.donor && link.donor.subscriptionId) {
+            ownerMeta.push(
+              escapeHtml(`Sub ID: ${link.donor.subscriptionId}`)
+            );
+          }
+          if (link.donor && link.donor.status) {
+            ownerMeta.push(
+              escapeHtml(
+                `Status: ${link.donor.status.replace(/_/g, ' ')}`
+              )
+            );
+          }
+
+          ownerCell.innerHTML = `<strong>${escapeHtml(
+            ownerName
+          )}</strong><br /><span class="subtle-text">${ownerMeta.join(
+            ' • '
+          )}</span>`;
+
+          createdCell.textContent = formatDateTime(link.createdAt);
+          lastUsedCell.textContent = link.lastUsedAt
+            ? formatDateTime(link.lastUsedAt)
+            : '—';
+
+          shareLinksTable.appendChild(clone);
+        });
       }
 
       document.getElementById('login-form').addEventListener('submit', async (event) => {
@@ -1874,6 +2047,7 @@
         } finally {
           state.authenticated = false;
           state.donors = [];
+          state.shareLinks = [];
           state.events = [];
           state.settings = null;
           state.paypalPlan = null;
@@ -2172,6 +2346,70 @@
           button.disabled = false;
         }
       });
+
+      if (shareLinksTable) {
+        shareLinksTable.addEventListener('click', async (event) => {
+          const button = event.target.closest('button[data-action]');
+          if (!button) {
+            return;
+          }
+          const row = event.target.closest('tr');
+          const linkId = row && row.dataset.id;
+          if (!linkId) {
+            return;
+          }
+          const action = button.dataset.action;
+          const links = Array.isArray(state.shareLinks) ? state.shareLinks : [];
+          const link = links.find((item) => String(item.id) === String(linkId));
+          if (!link) {
+            alert('Unable to locate this invite link.');
+            return;
+          }
+
+          if (action === 'copy') {
+            const shareUrl = buildShareUrl(link);
+            if (!shareUrl) {
+              alert('This invite link does not have a shareable URL yet.');
+              return;
+            }
+            let copied = false;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              try {
+                await navigator.clipboard.writeText(shareUrl);
+                copied = true;
+              } catch (err) {
+                console.warn('Clipboard copy failed', err);
+              }
+            }
+            if (copied) {
+              alert('Invite link copied to clipboard.');
+            } else {
+              window.prompt('Copy this invite page URL:', shareUrl);
+            }
+            return;
+          }
+
+          if (action === 'remove') {
+            const confirmation = confirm(
+              'Remove this invite link? Anyone with the URL will lose access.'
+            );
+            if (!confirmation) {
+              return;
+            }
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              await api(`/api/admin/share-links/${linkId}`, { method: 'DELETE' });
+              await refreshShareLinks();
+              renderShareLinks();
+            } catch (err) {
+              alert(err.message);
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+          }
+        });
+      }
 
       registerServiceWorker();
       checkSession();

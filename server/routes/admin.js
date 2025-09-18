@@ -12,11 +12,14 @@ const {
   markPlexRevoked,
   createOrUpdateShareLink,
   getShareLinkByDonorId,
+  getShareLinkById,
   createProspect,
   updateProspect,
   getProspectById,
   getShareLinkByProspectId,
   deleteDonorById,
+  listShareLinks,
+  deleteShareLinkById,
   logEvent,
   getRecentEvents,
 } = require('../db');
@@ -101,6 +104,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const donors = listDonorsWithDetails();
     res.json({ donors, csrfToken: res.locals.csrfToken });
+  })
+);
+
+router.get(
+  '/share-links',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const shareLinks = listShareLinks();
+    res.json({ shareLinks, csrfToken: res.locals.csrfToken });
   })
 );
 
@@ -555,6 +567,49 @@ router.post(
       shareLink: { ...shareLink, url },
       csrfToken: res.locals.csrfToken,
     });
+  })
+);
+
+router.delete(
+  '/share-links/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const linkId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(linkId) || linkId <= 0) {
+      return res.status(400).json({
+        error: 'Invalid share link ID',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const shareLink = getShareLinkById(linkId);
+    if (!shareLink) {
+      return res.status(404).json({
+        error: 'Share link not found',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const removed = deleteShareLinkById(linkId);
+    if (!removed) {
+      return res.status(500).json({
+        error: 'Failed to remove share link',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    logEvent('share_link.deleted', {
+      shareLinkId: shareLink.id,
+      donorId: shareLink.donorId || null,
+      prospectId: shareLink.prospectId || null,
+    });
+    logger.info('Deleted shareable invite link', {
+      shareLinkId: shareLink.id,
+      donorId: shareLink.donorId || null,
+      prospectId: shareLink.prospectId || null,
+    });
+
+    return res.json({ success: true, csrfToken: res.locals.csrfToken });
   })
 );
 

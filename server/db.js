@@ -358,6 +358,19 @@ const statements = {
     'SELECT * FROM invite_links WHERE token = ?'
   ),
   getInviteLinkById: db.prepare('SELECT * FROM invite_links WHERE id = ?'),
+  listInviteLinks: db.prepare(`
+    SELECT invite_links.*, 
+           donors.email AS donor_email,
+           donors.name AS donor_name,
+           donors.paypal_subscription_id AS donor_subscription_id,
+           donors.status AS donor_status,
+           prospects.email AS prospect_email,
+           prospects.name AS prospect_name
+      FROM invite_links
+      LEFT JOIN donors ON donors.id = invite_links.donor_id
+      LEFT JOIN prospects ON prospects.id = invite_links.prospect_id
+     ORDER BY invite_links.created_at DESC
+  `),
   insertInviteLink: db.prepare(
     `INSERT INTO invite_links (donor_id, prospect_id, token, session_token)
      VALUES (@donorId, @prospectId, @token, @sessionToken)`
@@ -372,6 +385,7 @@ const statements = {
          last_used_at = NULL
      WHERE id = @id`
   ),
+  deleteInviteLinkById: db.prepare('DELETE FROM invite_links WHERE id = ?'),
   assignInviteLinkOwner: db.prepare(
     `UPDATE invite_links
      SET donor_id = @donorId,
@@ -678,6 +692,33 @@ function listDonorsWithDetails() {
   }));
 }
 
+function listShareLinks() {
+  return statements.listInviteLinks.all().map((row) => {
+    const shareLink = ensureShareLinkHasSessionToken(mapInviteLink(row));
+    const donor = row.donor_id
+      ? {
+          id: row.donor_id,
+          email: row.donor_email || '',
+          name: row.donor_name || '',
+          subscriptionId: row.donor_subscription_id || '',
+          status: row.donor_status || '',
+        }
+      : null;
+    const prospect = row.prospect_id
+      ? {
+          id: row.prospect_id,
+          email: row.prospect_email || '',
+          name: row.prospect_name || '',
+        }
+      : null;
+    return {
+      ...shareLink,
+      donor,
+      prospect,
+    };
+  });
+}
+
 function createInvite({
   donorId,
   code,
@@ -792,6 +833,12 @@ function getShareLinkByProspectId(prospectId) {
 function getShareLinkByToken(token) {
   return ensureShareLinkHasSessionToken(
     mapInviteLink(statements.getInviteLinkByToken.get(token))
+  );
+}
+
+function getShareLinkById(linkId) {
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkById.get(linkId))
   );
 }
 
@@ -989,6 +1036,15 @@ function deleteDonorById(donorId) {
   return result.changes > 0;
 }
 
+function deleteShareLinkById(linkId) {
+  if (!linkId) {
+    return false;
+  }
+
+  const result = statements.deleteInviteLinkById.run(linkId);
+  return result.changes > 0;
+}
+
 function getRecentEvents(limit = 50) {
   return statements.listEvents.all(limit).map((row) => ({
     id: row.id,
@@ -1070,6 +1126,7 @@ module.exports = {
   getProspectById,
   markProspectConverted,
   listDonorsWithDetails,
+  listShareLinks,
   createInvite,
   markInviteEmailSent,
   revokeInvite,
@@ -1079,6 +1136,8 @@ module.exports = {
   getShareLinkByDonorId,
   getShareLinkByProspectId,
   getShareLinkByToken,
+  getShareLinkById,
+  deleteShareLinkById,
   assignShareLinkToDonor,
   markShareLinkUsed,
   recordPayment,
