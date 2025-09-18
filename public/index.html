@@ -801,7 +801,10 @@
               <div class="plan-management-header">
                 <div>
                   <h4>Subscription plan management</h4>
-                  <p>Generate a PayPal billing plan using the price and currency above.</p>
+                  <p>
+                    Manage your PayPal billing plan from the PayPal dashboard. Once a
+                    plan ID is saved, details will appear below.
+                  </p>
                 </div>
                 <div class="plan-management-actions">
                   <a
@@ -813,9 +816,6 @@
                     hidden
                     >Open in PayPal</a
                   >
-                  <button type="button" class="secondary" data-action="generate-plan">
-                    Generate plan
-                  </button>
                 </div>
               </div>
               <div class="plan-management-body empty" id="paypal-plan-body">
@@ -1782,13 +1782,16 @@
 
       function renderEvents() {
         eventsList.innerHTML = '';
-        if (state.events.length === 0) {
+        const eventsToShow = Array.isArray(state.events)
+          ? state.events.slice(0, 8)
+          : [];
+        if (eventsToShow.length === 0) {
           const li = document.createElement('li');
           li.textContent = 'No events yet.';
           eventsList.appendChild(li);
           return;
         }
-        state.events.forEach((event) => {
+        eventsToShow.forEach((event) => {
           const li = document.createElement('li');
           const payload = (() => {
             try {
@@ -2088,44 +2091,6 @@
             return;
           }
 
-          if (action === 'generate-plan') {
-            if (group !== 'paypal') {
-              return;
-            }
-            const payload = getFormPayload(form);
-            const previousDisabledState = button.disabled;
-            try {
-              button.disabled = true;
-              setFormStatus(form, 'Generating PayPal subscription plan…');
-              state.paypalPlanLoading = true;
-              state.paypalPlanError = '';
-              renderPaypalPlan();
-              const response = await api('/api/admin/settings/paypal/plan', {
-                method: 'POST',
-                body: payload,
-              });
-              if (!state.settings) {
-                state.settings = {};
-              }
-              state.settings.paypal = response.settings || state.settings.paypal || {};
-              state.paypalPlan = response.plan || null;
-              state.paypalProduct = response.product || null;
-              state.paypalPlanManageUrl = response.manageUrl || '';
-              state.paypalPlanError = '';
-              state.paypalPlanLoading = false;
-              renderSettings();
-              setFormStatus(form, 'PayPal subscription plan generated!', 'success');
-              scheduleStatusClear(form);
-            } catch (err) {
-              state.paypalPlanLoading = false;
-              state.paypalPlanError =
-                err.message || 'Failed to generate PayPal plan.';
-              renderPaypalPlan();
-              setFormStatus(form, state.paypalPlanError, 'error');
-            } finally {
-              button.disabled = previousDisabledState;
-            }
-          }
         });
       });
 
