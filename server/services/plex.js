@@ -49,14 +49,55 @@ async function listUsers() {
 }
 
 async function revokeUserByEmail(email) {
+  return revokeUser({ email });
+}
+
+function normalize(value) {
+  if (value == null) {
+    return '';
+  }
+  return String(value).trim().toLowerCase();
+}
+
+function matchesAccountId(user, accountId) {
+  const normalized = normalize(accountId);
+  if (!normalized) {
+    return false;
+  }
+  const candidates = [
+    user.id,
+    user.uuid,
+    user.userID,
+    user.machineIdentifier,
+    user.account && user.account.id,
+  ];
+  return candidates.some((candidate) => normalize(candidate) === normalized);
+}
+
+function matchesEmail(user, email) {
+  const normalized = normalize(email);
+  if (!normalized) {
+    return false;
+  }
+  const candidates = [user.email, user.username, user.title, user.account && user.account.email];
+  return candidates.some((candidate) => normalize(candidate) === normalized);
+}
+
+async function revokeUser({ plexAccountId, email }) {
   if (!isConfigured()) {
     return { skipped: true, reason: 'Plex integration disabled' };
   }
+
   const users = await listUsers();
-  const target = users.find((user) => {
-    const normalizedEmail = (user.email || user.username || '').toLowerCase();
-    return normalizedEmail === email.toLowerCase();
-  });
+  let target = null;
+
+  if (plexAccountId) {
+    target = users.find((user) => matchesAccountId(user, plexAccountId));
+  }
+
+  if (!target && email) {
+    target = users.find((user) => matchesEmail(user, email));
+  }
 
   if (!target) {
     return { success: false, reason: 'User not found on Plex server' };
@@ -116,6 +157,7 @@ module.exports = {
   getPlexConfig,
   isConfigured,
   listUsers,
+  revokeUser,
   revokeUserByEmail,
   verifyConnection,
 };
