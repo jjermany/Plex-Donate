@@ -1,5 +1,5 @@
-const CACHE_NAME = 'plex-donate-cache-v1';
-const CORE_ASSETS = ['/', '/index.html', '/share.html', '/manifest.webmanifest'];
+const CACHE_NAME = 'plex-donate-cache-v2';
+const CORE_ASSETS = ['/', '/index.html', '/dashboard.html', '/share.html', '/manifest.webmanifest'];
 const OPTIONAL_ASSETS = ['/icons/icon-round-android.png', '/icons/icon-square-ios.png'];
 
 self.addEventListener('install', (event) => {
@@ -61,7 +61,12 @@ async function handleHtmlRequest(request) {
     if (cached) {
       return cached;
     }
-    const fallbackPath = request.url.includes('/share/') ? '/share.html' : '/index.html';
+    let fallbackPath = '/index.html';
+    if (request.url.includes('/dashboard')) {
+      fallbackPath = '/dashboard.html';
+    } else if (request.url.includes('/share/')) {
+      fallbackPath = '/share.html';
+    }
     const fallback = await caches.match(fallbackPath);
     return fallback || Response.error();
   }
