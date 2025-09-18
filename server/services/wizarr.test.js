@@ -94,7 +94,9 @@ function createFetchMock(responses) {
   return fn;
 }
 
-test('createInvite normalizes overlapping api segments and builds invite url from portal', async (t) => {
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+test('createInvite normalizes overlapping api segments and maps invite fields', async (t) => {
   const fetchMock = createFetchMock([
     {
       status: 201,
@@ -111,18 +113,32 @@ test('createInvite normalizes overlapping api segments and builds invite url fro
   t.after(restoreModules);
 
   const result = await createInvite(
-    { email: 'user@example.com', note: 'hi', expiresInDays: 5 },
+    { code: 'REQUESTED', note: 'hi', expiresInDays: 5 },
     { baseUrl: 'https://host/wizarr/api', apiKey: 'key', defaultDurationDays: 7 }
   );
 
   assert.equal(fetchMock.calls.length, 1);
   assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/v1/invitations');
   const requestBody = JSON.parse(fetchMock.calls[0].options.body);
-  assert.equal(requestBody.email, 'user@example.com');
-  assert.equal(requestBody.expires_in_days, 5);
+  assert.equal(requestBody.code, 'REQUESTED');
+  assert.equal(requestBody.unlimited, false);
+  assert.equal(requestBody.max_uses, 1);
+  const now = Date.now();
+  const durationAtMs = Date.parse(requestBody.durationAt);
+  const expiresAtMs = Date.parse(requestBody.expiresAt);
+  assert.ok(Number.isFinite(durationAtMs));
+  assert.ok(Number.isFinite(expiresAtMs));
+  assert.equal(Math.round((durationAtMs - now) / MS_PER_DAY), 7);
+  assert.equal(Math.round((expiresAtMs - now) / MS_PER_DAY), 5);
+  assert.equal(Math.round((durationAtMs - expiresAtMs) / MS_PER_DAY), 2);
+  assert.equal(requestBody.message, 'hi');
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'duration'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'email'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'expires_in_days'));
   assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'server_ids'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'server'));
   assert.equal(result.inviteCode, 'abc123');
-  assert.equal(result.inviteUrl, 'https://host/wizarr/invite/abc123');
+  assert.equal(result.inviteUrl, 'https://host/wizarr/j/abc123');
 });
 
 test('createInvite uses invite URL returned by Wizarr when available', async (t) => {
@@ -151,7 +167,35 @@ test('createInvite uses invite URL returned by Wizarr when available', async (t)
   assert.equal(result.inviteUrl, 'https://invite.test/provided');
 });
 
-test('createInvite includes configured server ids when provided', async (t) => {
+test('createInvite falls back to requested code when Wizarr omits response fields', async (t) => {
+  const fetchMock = createFetchMock([
+    {
+      status: 201,
+      body: {},
+    },
+  ]);
+
+  if (fetchCacheEntry) {
+    fetchCacheEntry.exports = fetchMock;
+  }
+  delete require.cache[wizarrModulePath];
+  const { createInvite } = require(wizarrModulePath);
+
+  t.after(restoreModules);
+
+  const result = await createInvite(
+    { code: 'KNOWN-CODE', note: 'hi' },
+    { baseUrl: 'https://host/wizarr/api', apiKey: 'key', defaultDurationDays: 7 }
+  );
+
+  assert.equal(fetchMock.calls.length, 1);
+  const requestBody = JSON.parse(fetchMock.calls[0].options.body);
+  assert.equal(requestBody.code, 'KNOWN-CODE');
+  assert.equal(result.inviteCode, 'KNOWN-CODE');
+  assert.equal(result.inviteUrl, 'https://host/wizarr/j/KNOWN-CODE');
+});
+
+test('createInvite includes configured server selection when provided', async (t) => {
   const fetchMock = createFetchMock([
     {
       status: 201,
@@ -168,7 +212,7 @@ test('createInvite includes configured server ids when provided', async (t) => {
   t.after(restoreModules);
 
   const result = await createInvite(
-    { email: 'user@example.com', note: 'hi', expiresInDays: 5 },
+    { code: 'CHOSEN', note: 'hi', expiresInDays: 5 },
     {
       baseUrl: 'https://host/wizarr/api',
       apiKey: 'key',
@@ -179,9 +223,10 @@ test('createInvite includes configured server ids when provided', async (t) => {
 
   assert.equal(fetchMock.calls.length, 1);
   const requestBody = JSON.parse(fetchMock.calls[0].options.body);
+  assert.equal(requestBody.server, '1');
   assert.deepEqual(requestBody.server_ids, [1, 2]);
   assert.equal(result.inviteCode, 'withserver');
-  assert.equal(result.inviteUrl, 'https://host/wizarr/invite/withserver');
+  assert.equal(result.inviteUrl, 'https://host/wizarr/j/withserver');
 });
 
 test('createInvite retries with single available server when none configured', async (t) => {
@@ -190,7 +235,14 @@ test('createInvite retries with single available server when none configured', a
       status: 400,
       body: {
         error: 'Server selection is required.',
-        available_servers: [{ id: 3, name: 'Primary Plex', server_type: 'plex' }],
+        available_servers: [
+          {
+            identifier: 'plex-main',
+            id: 3,
+            name: 'Primary Plex',
+            server_type: 'plex',
+          },
+        ],
       },
     },
     {
@@ -208,17 +260,19 @@ test('createInvite retries with single available server when none configured', a
   t.after(restoreModules);
 
   const result = await createInvite(
-    { email: 'user@example.com', note: 'hi', expiresInDays: 5 },
+    { note: 'hi', expiresInDays: 5 },
     { baseUrl: 'https://host/wizarr/api', apiKey: 'key', defaultDurationDays: 7 }
   );
 
   assert.equal(fetchMock.calls.length, 2);
   const firstRequest = JSON.parse(fetchMock.calls[0].options.body);
-  assert.ok(!Object.prototype.hasOwnProperty.call(firstRequest, 'server_ids'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(firstRequest, 'server'));
   const secondRequest = JSON.parse(fetchMock.calls[1].options.body);
-  assert.deepEqual(secondRequest.server_ids, [3]);
+  assert.equal(secondRequest.server, 'plex-main');
+  assert.ok(Array.isArray(secondRequest.server_ids));
+  assert.ok(secondRequest.server_ids.includes('plex-main'));
   assert.equal(result.inviteCode, 'auto');
-  assert.equal(result.inviteUrl, 'https://host/wizarr/invite/auto');
+  assert.equal(result.inviteUrl, 'https://host/wizarr/j/auto');
 });
 
 test('createInvite surfaces server selection guidance when multiple servers exist', async (t) => {
@@ -228,8 +282,8 @@ test('createInvite surfaces server selection guidance when multiple servers exis
       body: {
         error: 'Server selection is required.',
         available_servers: [
-          { id: 1, name: 'My Plex', server_type: 'plex' },
-          { id: 2, name: 'Alt Jelly', server_type: 'jellyfin' },
+          { identifier: 'plex-main', name: 'My Plex', server_type: 'plex' },
+          { identifier: 'jelly-alt', name: 'Alt Jelly', server_type: 'jellyfin' },
         ],
       },
     },
@@ -252,7 +306,7 @@ test('createInvite surfaces server selection guidance when multiple servers exis
     (err) => {
       assert.match(
         err.message,
-        /Update the Wizarr settings with default server IDs. Available servers: My Plex/i
+        /Update the Wizarr settings with a default server selection. Available servers: My Plex/i
       );
       assert.equal(err.status, 400);
       assert.ok(Array.isArray(err.availableServers));
@@ -289,7 +343,7 @@ test('createInvite falls back to legacy invite endpoints when necessary', async 
   assert.equal(fetchMock.calls[1].url, 'https://host/wizarr/api/v1/invites');
   assert.equal(fetchMock.calls[2].url, 'https://host/wizarr/api/invites');
   assert.equal(result.inviteCode, 'legacy');
-  assert.equal(result.inviteUrl, 'https://host/wizarr/invite/legacy');
+  assert.equal(result.inviteUrl, 'https://host/wizarr/j/legacy');
 });
 
 test('verifyConnection uses normalized invite endpoint', async (t) => {
@@ -317,11 +371,22 @@ test('verifyConnection uses normalized invite endpoint', async (t) => {
   assert.equal(fetchMock.calls.length, 1);
   assert.equal(fetchMock.calls[0].url, 'https://host/wizarr/api/v1/invitations');
   const requestBody = JSON.parse(fetchMock.calls[0].options.body);
-  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'server_ids'));
+  assert.equal(requestBody.code, 'connection-test');
+  assert.equal(requestBody.unlimited, false);
+  const now = Date.now();
+  const durationAtMs = Date.parse(requestBody.durationAt);
+  const expiresAtMs = Date.parse(requestBody.expiresAt);
+  assert.ok(Number.isFinite(durationAtMs));
+  assert.ok(Number.isFinite(expiresAtMs));
+  assert.equal(Math.round((durationAtMs - now) / MS_PER_DAY), 1);
+  assert.equal(Math.round((expiresAtMs - now) / MS_PER_DAY), 1);
+  assert.equal(requestBody.max_uses, 1);
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'duration'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(requestBody, 'server'));
   assert.equal(result.status, 400);
 });
 
-test('verifyConnection includes configured server ids in request body', async (t) => {
+test('verifyConnection includes configured server selection in request body', async (t) => {
   const fetchMock = createFetchMock([
     {
       status: 422,
@@ -346,7 +411,17 @@ test('verifyConnection includes configured server ids in request body', async (t
 
   assert.equal(fetchMock.calls.length, 1);
   const requestBody = JSON.parse(fetchMock.calls[0].options.body);
+  assert.equal(requestBody.server, '5');
   assert.deepEqual(requestBody.server_ids, [5]);
+  assert.equal(requestBody.unlimited, false);
+  assert.equal(requestBody.max_uses, 1);
+  const now = Date.now();
+  const durationAtMs = Date.parse(requestBody.durationAt);
+  const expiresAtMs = Date.parse(requestBody.expiresAt);
+  assert.ok(Number.isFinite(durationAtMs));
+  assert.ok(Number.isFinite(expiresAtMs));
+  assert.equal(Math.round((durationAtMs - now) / MS_PER_DAY), 1);
+  assert.equal(Math.round((expiresAtMs - now) / MS_PER_DAY), 1);
 });
 
 test('revokeInvite uses normalized invite endpoint', async (t) => {
