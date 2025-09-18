@@ -15,6 +15,7 @@ const {
   getProspectById,
   assignShareLinkToDonor,
   markProspectConverted,
+  updateInvitePlexDetails,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -47,6 +48,20 @@ function isValidEmail(email) {
     return false;
   }
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+}
+
+function hasPlexLink(donor) {
+  return Boolean(donor && donor.plexAccountId);
+}
+
+function requiresPlexRelink(donor) {
+  if (!donor || !donor.plexAccountId) {
+    return false;
+  }
+  if (!donor.plexEmail || !donor.email) {
+    return false;
+  }
+  return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
 }
 
 function buildShareResponse({ shareLink, donor, invite, prospect }) {
@@ -242,6 +257,13 @@ router.post(
     }
     const note = providedNote || defaultNoteParts.join(' ');
 
+    if (!hasPlexLink(donor)) {
+      return res.status(409).json({
+        error:
+          'Link your Plex account from the dashboard before generating a new invite.',
+      });
+    }
+
     let activeDonor = donor;
     const updates = {};
     if (
@@ -258,7 +280,26 @@ router.post(
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
+    if (requiresPlexRelink(activeDonor)) {
+      return res.status(409).json({
+        error:
+          'Please re-link your Plex account to sync your email before generating a new invite.',
+      });
+    }
+
     if (canReuseInvite) {
+      if (
+        activeDonor.plexAccountId &&
+        (!invite.plexAccountId ||
+          invite.plexAccountId !== activeDonor.plexAccountId ||
+          normalizeEmail(invite.plexEmail) !==
+            normalizeEmail(activeDonor.plexEmail))
+      ) {
+        invite = updateInvitePlexDetails(invite.id, {
+          plexAccountId: activeDonor.plexAccountId,
+          plexEmail: activeDonor.plexEmail,
+        });
+      }
       const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
       logEvent('invite.share.reused', {
         donorId: donor.id,
@@ -279,6 +320,12 @@ router.post(
           req.body && Number.isFinite(Number(req.body.expiresInDays))
             ? Number(req.body.expiresInDays)
             : undefined,
+        extraFields: {
+          plex_account_id: activeDonor.plexAccountId || undefined,
+          plexAccountId: activeDonor.plexAccountId || undefined,
+          plex_email: activeDonor.plexEmail || undefined,
+          plexEmail: activeDonor.plexEmail || undefined,
+        },
       });
     } catch (err) {
       logger.warn('Failed to create invite via share link', err.message);
@@ -293,6 +340,8 @@ router.post(
       url: inviteData.inviteUrl,
       recipientEmail: requestedEmail,
       note,
+      plexAccountId: activeDonor.plexAccountId,
+      plexEmail: activeDonor.plexEmail,
     });
 
     const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;

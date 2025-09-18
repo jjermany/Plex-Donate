@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS donors (
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
   password_hash TEXT,
+  plex_account_id TEXT,
+  plex_email TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -52,6 +54,8 @@ CREATE TABLE IF NOT EXISTS invites (
   email_sent_at TEXT,
   revoked_at TEXT,
   plex_revoked_at TEXT,
+  plex_account_id TEXT,
+  plex_email TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
@@ -140,6 +144,20 @@ function ensureDonorPasswordColumn() {
   }
 }
 
+function ensureDonorPlexColumns() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  const hasPlexAccountId = columns.some(
+    (column) => column.name === 'plex_account_id'
+  );
+  if (!hasPlexAccountId) {
+    db.exec('ALTER TABLE donors ADD COLUMN plex_account_id TEXT');
+  }
+  const hasPlexEmail = columns.some((column) => column.name === 'plex_email');
+  if (!hasPlexEmail) {
+    db.exec('ALTER TABLE donors ADD COLUMN plex_email TEXT');
+  }
+}
+
 function ensureProspectsTableColumns() {
   const columns = db.prepare("PRAGMA table_info('prospects')").all();
   if (columns.length === 0) {
@@ -154,6 +172,20 @@ function ensureProspectsTableColumns() {
   );
   if (!hasConvertedDonorId) {
     db.exec('ALTER TABLE prospects ADD COLUMN converted_donor_id INTEGER');
+  }
+}
+
+function ensureInvitePlexColumns() {
+  const columns = db.prepare("PRAGMA table_info('invites')").all();
+  const hasPlexAccountId = columns.some(
+    (column) => column.name === 'plex_account_id'
+  );
+  if (!hasPlexAccountId) {
+    db.exec('ALTER TABLE invites ADD COLUMN plex_account_id TEXT');
+  }
+  const hasPlexEmail = columns.some((column) => column.name === 'plex_email');
+  if (!hasPlexEmail) {
+    db.exec('ALTER TABLE invites ADD COLUMN plex_email TEXT');
   }
 }
 
@@ -245,12 +277,14 @@ function ensureDonorSubscriptionOptional() {
         status TEXT NOT NULL DEFAULT 'pending',
         last_payment_at TEXT,
         password_hash TEXT,
+        plex_account_id TEXT,
+        plex_email TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
-      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at)
-        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, created_at, updated_at
+      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email, created_at, updated_at)
+        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email, created_at, updated_at
         FROM donors;
 
       DROP TABLE donors;
@@ -265,9 +299,11 @@ function ensureDonorSubscriptionOptional() {
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
+ensureDonorPlexColumns();
 ensureDonorSubscriptionOptional();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
+ensureInvitePlexColumns();
 
 function normalizeEmail(email) {
   if (!email) {
@@ -285,8 +321,8 @@ const statements = {
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, password_hash)
-     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @passwordHash)`
+    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, password_hash, plex_account_id, plex_email)
+     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @passwordHash, @plexAccountId, @plexEmail)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -354,8 +390,8 @@ const statements = {
      WHERE id = ?`
   ),
   insertInvite: db.prepare(
-    `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, recipient_email, email_sent_at)
-     VALUES (@donorId, @code, @url, @note, @recipientEmail, @emailSentAt)`
+    `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, recipient_email, email_sent_at, plex_account_id, plex_email)
+     VALUES (@donorId, @code, @url, @note, @recipientEmail, @emailSentAt, @plexAccountId, @plexEmail)`
   ),
   updateInviteEmailSent: db.prepare(
     `UPDATE invites
@@ -371,6 +407,12 @@ const statements = {
     `UPDATE invites
      SET plex_revoked_at = CURRENT_TIMESTAMP
      WHERE id = ? AND plex_revoked_at IS NULL`
+  ),
+  updateInvitePlexIdentity: db.prepare(
+    `UPDATE invites
+     SET plex_account_id = @plexAccountId,
+         plex_email = @plexEmail
+     WHERE id = @id`
   ),
   getInviteById: db.prepare('SELECT * FROM invites WHERE id = ?'),
   getLatestActiveInviteForDonor: db.prepare(
@@ -412,6 +454,13 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  updateDonorPlexIdentity: db.prepare(
+    `UPDATE donors
+     SET plex_account_id = @plexAccountId,
+         plex_email = @plexEmail,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   insertProspect: db.prepare(
     `INSERT INTO prospects (email, name, note)
      VALUES (@email, @name, @note)`
@@ -450,6 +499,8 @@ function mapDonor(row) {
     status: row.status,
     lastPaymentAt: row.last_payment_at,
     hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
+    plexAccountId: row.plex_account_id,
+    plexEmail: row.plex_email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -467,6 +518,8 @@ function mapInvite(row) {
     emailSentAt: row.email_sent_at,
     revokedAt: row.revoked_at,
     plexRevokedAt: row.plex_revoked_at,
+    plexAccountId: row.plex_account_id,
+    plexEmail: row.plex_email,
     createdAt: row.created_at,
   };
 }
@@ -553,6 +606,8 @@ function upsertDonor({ subscriptionId, email, name, status, lastPaymentAt }) {
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
     passwordHash: null,
+    plexAccountId: null,
+    plexEmail: null,
   };
   const info = statements.insertDonor.run(newDonor);
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
@@ -630,6 +685,8 @@ function createInvite({
   note = '',
   recipientEmail = null,
   emailSentAt = null,
+  plexAccountId = null,
+  plexEmail = null,
 }) {
   if (!donorId) {
     throw new Error('donorId is required to create invite');
@@ -641,8 +698,24 @@ function createInvite({
     note,
     recipientEmail,
     emailSentAt,
+    plexAccountId: plexAccountId || null,
+    plexEmail: plexEmail || null,
   });
   return mapInvite(statements.getInviteById.get(info.lastInsertRowid));
+}
+
+function updateInvitePlexDetails(inviteId, { plexAccountId = null, plexEmail = null } = {}) {
+  if (!inviteId) {
+    throw new Error('inviteId is required to update invite');
+  }
+
+  statements.updateInvitePlexIdentity.run({
+    id: inviteId,
+    plexAccountId: plexAccountId || null,
+    plexEmail: plexEmail || null,
+  });
+
+  return mapInvite(statements.getInviteById.get(inviteId));
 }
 
 function markInviteEmailSent(inviteId) {
@@ -801,6 +874,27 @@ function updateDonorPassword(donorId, passwordHash) {
   return mapDonor(statements.getDonorById.get(donorId));
 }
 
+function updateDonorPlexIdentity(donorId, { plexAccountId, plexEmail } = {}) {
+  if (!donorId) {
+    throw new Error('donorId is required to update Plex identity');
+  }
+
+  statements.updateDonorPlexIdentity.run({
+    id: donorId,
+    plexAccountId: plexAccountId || null,
+    plexEmail:
+      plexEmail == null || plexEmail === ''
+        ? null
+        : normalizeEmail(typeof plexEmail === 'string' ? plexEmail : String(plexEmail)),
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function clearDonorPlexIdentity(donorId) {
+  return updateDonorPlexIdentity(donorId, { plexAccountId: null, plexEmail: null });
+}
+
 function createProspect({ email, name, note } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const info = statements.insertProspect.run({
@@ -848,6 +942,8 @@ function createDonor({
   status = 'pending',
   lastPaymentAt = null,
   passwordHash = null,
+  plexAccountId = null,
+  plexEmail = null,
 } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const info = statements.insertDonor.run({
@@ -860,6 +956,10 @@ function createDonor({
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
     passwordHash: passwordHash || null,
+    plexAccountId: plexAccountId || null,
+    plexEmail: plexEmail
+      ? normalizeEmail(typeof plexEmail === 'string' ? plexEmail : String(plexEmail))
+      : null,
   });
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
 }
@@ -985,8 +1085,11 @@ module.exports = {
   logEvent,
   updateDonorContact,
   updateDonorPassword,
+  updateDonorPlexIdentity,
+  clearDonorPlexIdentity,
   getRecentEvents,
   getAllSettings,
   getSetting,
   saveSettings,
+  updateInvitePlexDetails,
 };

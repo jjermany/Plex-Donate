@@ -7,6 +7,9 @@ const {
   updateDonorContact,
   getDonorAuthByEmail,
   updateDonorSubscriptionId,
+  updateDonorPlexIdentity,
+  clearDonorPlexIdentity,
+  updateInvitePlexDetails,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -19,8 +22,11 @@ const {
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
 } = require('../utils/paypal');
+const plexOAuth = require('../services/plex-oauth');
 
 const router = express.Router();
+
+const PLEX_LINK_EXPIRY_GRACE_MS = 60 * 1000;
 
 function asyncHandler(handler) {
   return (req, res, next) => {
@@ -41,7 +47,68 @@ function isValidEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 }
 
-function buildDashboardResponse({ donor, invite }) {
+function hasPlexLink(donor) {
+  return Boolean(donor && donor.plexAccountId);
+}
+
+function plexEmailsMatch(donor) {
+  if (!donor || !donor.plexAccountId) {
+    return false;
+  }
+  const plexEmail = normalizeEmail(donor.plexEmail);
+  const contactEmail = normalizeEmail(donor.email);
+  if (!plexEmail || !contactEmail) {
+    return true;
+  }
+  return plexEmail === contactEmail;
+}
+
+function requiresPlexRelink(donor) {
+  if (!donor || !donor.plexAccountId) {
+    return false;
+  }
+  if (!donor.plexEmail || !donor.email) {
+    return false;
+  }
+  return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
+}
+
+function getActivePlexLinkSession(req, donor) {
+  if (!req.session || !req.session.plexLink) {
+    return null;
+  }
+  const link = req.session.plexLink;
+  if (!link || !donor || link.donorId !== donor.id) {
+    return null;
+  }
+  if (link.expiresAt) {
+    const expiresAtMs = Date.parse(link.expiresAt);
+    if (
+      Number.isFinite(expiresAtMs) &&
+      Date.now() > expiresAtMs + PLEX_LINK_EXPIRY_GRACE_MS
+    ) {
+      delete req.session.plexLink;
+      return null;
+    }
+  }
+  return link;
+}
+
+function getPendingPlexLink(req, donor) {
+  const link = getActivePlexLinkSession(req, donor);
+  if (!link) {
+    return null;
+  }
+  return {
+    code: link.code || '',
+    authUrl: link.authUrl || '',
+    expiresAt: link.expiresAt || null,
+    pollIntervalMs:
+      link.pollIntervalMs || plexOAuth.DEFAULT_POLL_INTERVAL_MS,
+  };
+}
+
+function buildDashboardResponse({ donor, invite, pendingPlexLink = null }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
   const checkoutAvailable = isSubscriptionCheckoutConfigured(paypal);
@@ -67,6 +134,11 @@ function buildDashboardResponse({ donor, invite }) {
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
           hasPassword: Boolean(donor.hasPassword),
+          plexAccountId: donor.plexAccountId || '',
+          plexEmail: donor.plexEmail || '',
+          plexLinked: hasPlexLink(donor),
+          plexEmailMatches: donor.plexAccountId ? plexEmailsMatch(donor) : true,
+          plexRequiresRelink: requiresPlexRelink(donor),
         }
       : null,
     invite: invite || null,
@@ -82,6 +154,17 @@ function buildDashboardResponse({ donor, invite }) {
       baseUrl: wizarrBaseUrl,
       portalUrl: wizarrPortalUrl,
     },
+    plexLink: pendingPlexLink
+      ? {
+          pending: true,
+          code: pendingPlexLink.code || '',
+          authUrl: pendingPlexLink.authUrl || '',
+          expiresAt: pendingPlexLink.expiresAt || null,
+          pollIntervalMs:
+            pendingPlexLink.pollIntervalMs ||
+            plexOAuth.DEFAULT_POLL_INTERVAL_MS,
+        }
+      : { pending: false },
   };
 }
 
@@ -122,7 +205,10 @@ router.get(
       return res.json({ authenticated: false });
     }
     const invite = getLatestActiveInviteForDonor(donor.id);
-    return res.json(buildDashboardResponse({ donor, invite }));
+    const pendingPlexLink = getPendingPlexLink(req, donor);
+    return res.json(
+      buildDashboardResponse({ donor, invite, pendingPlexLink })
+    );
   })
 );
 
@@ -174,7 +260,10 @@ router.post(
     logger.info('Customer signed in with email/password', { donorId: donor.id });
 
     const invite = getLatestActiveInviteForDonor(donor.id);
-    return res.json(buildDashboardResponse({ donor, invite }));
+    const pendingPlexLink = getPendingPlexLink(req, donor);
+    return res.json(
+      buildDashboardResponse({ donor, invite, pendingPlexLink })
+    );
   })
 );
 
@@ -289,7 +378,201 @@ router.post(
     });
 
     const invite = getLatestActiveInviteForDonor(donor.id);
-    return res.json(buildDashboardResponse({ donor: updatedDonor, invite }));
+    const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
+    req.customer.donor = updatedDonor;
+    return res.json(
+      buildDashboardResponse({
+        donor: updatedDonor,
+        invite,
+        pendingPlexLink,
+      })
+    );
+  })
+);
+
+router.post(
+  '/plex/link/start',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+
+    try {
+      const pin = await plexOAuth.requestPin({});
+      if (!pin.pinId || !pin.code) {
+        throw new Error('Plex did not return a valid PIN');
+      }
+
+      req.session.plexLink = {
+        donorId: donor.id,
+        pinId: pin.pinId,
+        clientIdentifier: pin.clientIdentifier,
+        code: pin.code,
+        authUrl: pin.authUrl,
+        expiresAt: pin.expiresAt,
+        pollIntervalMs: pin.pollIntervalMs || plexOAuth.DEFAULT_POLL_INTERVAL_MS,
+        createdAt: new Date().toISOString(),
+      };
+
+      logEvent('plex.link.started', {
+        donorId: donor.id,
+        pinId: pin.pinId,
+      });
+
+      const invite = getLatestActiveInviteForDonor(donor.id);
+      const pendingPlexLink = getPendingPlexLink(req, donor);
+
+      return res.json(
+        buildDashboardResponse({ donor, invite, pendingPlexLink })
+      );
+    } catch (err) {
+      logger.warn('Failed to start Plex OAuth link', err.message);
+      return res.status(502).json({
+        error: 'Failed to start Plex authentication. Try again shortly.',
+      });
+    }
+  })
+);
+
+router.get(
+  '/plex/link/status',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    const sessionLink = getActivePlexLinkSession(req, donor);
+
+    if (!sessionLink) {
+      const invite = getLatestActiveInviteForDonor(donor.id);
+      return res.json(
+        buildDashboardResponse({ donor, invite, pendingPlexLink: null })
+      );
+    }
+
+    try {
+      const poll = await plexOAuth.pollPin({
+        pinId: sessionLink.pinId,
+        clientIdentifier: sessionLink.clientIdentifier,
+      });
+
+      if (poll.expiresAt) {
+        req.session.plexLink.expiresAt = poll.expiresAt;
+      }
+
+      if (!poll.authToken) {
+        if (poll.expired) {
+          delete req.session.plexLink;
+          const invite = getLatestActiveInviteForDonor(donor.id);
+          return res.status(410).json({
+            error: 'Plex authentication expired. Start the link again.',
+            payload: buildDashboardResponse({
+              donor,
+              invite,
+              pendingPlexLink: null,
+            }),
+          });
+        }
+
+        const invite = getLatestActiveInviteForDonor(donor.id);
+        const pendingPlexLink = getPendingPlexLink(req, donor);
+        return res.json(
+          buildDashboardResponse({ donor, invite, pendingPlexLink })
+        );
+      }
+
+      const identity = await plexOAuth.fetchIdentity({
+        authToken: poll.authToken,
+        clientIdentifier: sessionLink.clientIdentifier,
+      });
+
+      delete req.session.plexLink;
+
+      const updatedDonor = updateDonorPlexIdentity(donor.id, {
+        plexAccountId: identity.plexAccountId,
+        plexEmail: identity.plexEmail,
+      });
+
+      let invite = getLatestActiveInviteForDonor(donor.id);
+      if (invite) {
+        invite = updateInvitePlexDetails(invite.id, {
+          plexAccountId: identity.plexAccountId,
+          plexEmail: identity.plexEmail,
+        });
+      }
+
+      logEvent('plex.link.completed', {
+        donorId: donor.id,
+        plexAccountId: identity.plexAccountId,
+        plexEmail: identity.plexEmail,
+      });
+
+      req.customer.donor = updatedDonor;
+
+      return res.json(
+        buildDashboardResponse({
+          donor: updatedDonor,
+          invite,
+          pendingPlexLink: null,
+        })
+      );
+    } catch (err) {
+      logger.warn('Failed to complete Plex OAuth link', err.message);
+      delete req.session.plexLink;
+      const invite = getLatestActiveInviteForDonor(donor.id);
+      return res.status(502).json({
+        error: 'Failed to verify Plex authentication. Start the link again.',
+        payload: buildDashboardResponse({
+          donor,
+          invite,
+          pendingPlexLink: null,
+        }),
+      });
+    }
+  })
+);
+
+router.post(
+  '/plex/link/cancel',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    if (req.session && req.session.plexLink) {
+      delete req.session.plexLink;
+    }
+    const invite = getLatestActiveInviteForDonor(donor.id);
+    return res.json(
+      buildDashboardResponse({ donor, invite, pendingPlexLink: null })
+    );
+  })
+);
+
+router.post(
+  '/plex/unlink',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    const updatedDonor = clearDonorPlexIdentity(donor.id);
+    if (req.session && req.session.plexLink) {
+      delete req.session.plexLink;
+    }
+
+    let invite = getLatestActiveInviteForDonor(donor.id);
+    if (invite) {
+      invite = updateInvitePlexDetails(invite.id, {
+        plexAccountId: updatedDonor.plexAccountId,
+        plexEmail: updatedDonor.plexEmail,
+      });
+    }
+
+    logEvent('plex.link.cleared', { donorId: donor.id });
+
+    req.customer.donor = updatedDonor;
+
+    return res.json(
+      buildDashboardResponse({
+        donor: updatedDonor,
+        invite,
+        pendingPlexLink: null,
+      })
+    );
   })
 );
 
@@ -322,7 +605,13 @@ router.post(
       });
     }
 
-    const invite = getLatestActiveInviteForDonor(donor.id);
+    if (!hasPlexLink(donor)) {
+      return res.status(409).json({
+        error: 'Link your Plex account before generating a new invite.',
+      });
+    }
+
+    let invite = getLatestActiveInviteForDonor(donor.id);
     const canReuseInvite =
       invite &&
       invite.wizarrInviteUrl &&
@@ -343,13 +632,38 @@ router.post(
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
+    if (requiresPlexRelink(activeDonor)) {
+      return res.status(409).json({
+        error:
+          'Please re-link your Plex account so we can keep your Plex and dashboard emails in sync before generating a new invite.',
+      });
+    }
+
     if (canReuseInvite) {
+      if (
+        activeDonor.plexAccountId &&
+        (!invite.plexAccountId ||
+          invite.plexAccountId !== activeDonor.plexAccountId ||
+          normalizeEmail(invite.plexEmail) !==
+            normalizeEmail(activeDonor.plexEmail))
+      ) {
+        invite = updateInvitePlexDetails(invite.id, {
+          plexAccountId: activeDonor.plexAccountId,
+          plexEmail: activeDonor.plexEmail,
+        });
+      }
       logEvent('invite.customer.reused', {
         donorId: donor.id,
         inviteId: invite.id,
       });
+      const pendingPlexLink = getPendingPlexLink(req, activeDonor);
+      req.customer.donor = activeDonor;
       return res.json(
-        buildDashboardResponse({ donor: activeDonor, invite })
+        buildDashboardResponse({
+          donor: activeDonor,
+          invite,
+          pendingPlexLink,
+        })
       );
     }
 
@@ -375,6 +689,12 @@ router.post(
           req.body && Number.isFinite(Number(req.body.expiresInDays))
             ? Number(req.body.expiresInDays)
             : undefined,
+        extraFields: {
+          plex_account_id: activeDonor.plexAccountId || undefined,
+          plexAccountId: activeDonor.plexAccountId || undefined,
+          plex_email: activeDonor.plexEmail || undefined,
+          plexEmail: activeDonor.plexEmail || undefined,
+        },
       });
     } catch (err) {
       logger.warn('Failed to create invite via customer dashboard', err.message);
@@ -390,6 +710,8 @@ router.post(
       url: inviteData.inviteUrl,
       recipientEmail: requestedEmail,
       note,
+      plexAccountId: activeDonor.plexAccountId,
+      plexEmail: activeDonor.plexEmail,
     });
 
     logEvent('invite.customer.generated', {
@@ -397,8 +719,14 @@ router.post(
       inviteId: inviteRecord.id,
     });
 
+    const pendingPlexLink = getPendingPlexLink(req, activeDonor);
+    req.customer.donor = activeDonor;
     return res.json(
-      buildDashboardResponse({ donor: activeDonor, invite: inviteRecord })
+      buildDashboardResponse({
+        donor: activeDonor,
+        invite: inviteRecord,
+        pendingPlexLink,
+      })
     );
   })
 );

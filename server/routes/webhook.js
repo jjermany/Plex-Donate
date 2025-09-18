@@ -11,6 +11,7 @@ const {
   recordPayment,
   logEvent,
   markInviteEmailSent,
+  updateInvitePlexDetails,
 } = require('../db');
 const plexService = require('../services/plex');
 const wizarrService = require('../services/wizarr');
@@ -87,6 +88,20 @@ function normalizeEmail(value) {
     return '';
   }
   return String(value).trim().toLowerCase();
+}
+
+function hasPlexLink(donor) {
+  return Boolean(donor && donor.plexAccountId);
+}
+
+function requiresPlexRelink(donor) {
+  if (!donor || !donor.plexAccountId) {
+    return false;
+  }
+  if (!donor.plexEmail || !donor.email) {
+    return false;
+  }
+  return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
 }
 
 function extractSubscriber(resource) {
@@ -251,6 +266,22 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     return;
   }
 
+  if (!hasPlexLink(donor)) {
+    logger.info('Skipping automatic invite: Plex account not linked', {
+      donorId: donor.id,
+    });
+    return;
+  }
+
+  if (requiresPlexRelink(donor)) {
+    logger.info('Skipping automatic invite: Plex re-link required', {
+      donorId: donor.id,
+      plexEmail: donor.plexEmail,
+      donorEmail: donor.email,
+    });
+    return;
+  }
+
   const normalizedEmail = normalizeEmail(email);
   const existingInvite = getLatestActiveInviteForDonor(donor.id);
   const existingInviteUsable =
@@ -262,18 +293,30 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     normalizeEmail(existingInvite.recipientEmail) === normalizedEmail;
 
   if (existingInviteUsable && existingInviteMatches) {
-    if (!existingInvite.emailSentAt) {
+    let invite = existingInvite;
+    if (
+      donor.plexAccountId &&
+      (!invite.plexAccountId ||
+        invite.plexAccountId !== donor.plexAccountId ||
+        normalizeEmail(invite.plexEmail) !== normalizeEmail(donor.plexEmail))
+    ) {
+      invite = updateInvitePlexDetails(invite.id, {
+        plexAccountId: donor.plexAccountId,
+        plexEmail: donor.plexEmail,
+      });
+    }
+    if (!invite.emailSentAt) {
       try {
         await emailService.sendInviteEmail({
           to: email,
-          inviteUrl: existingInvite.wizarrInviteUrl,
+          inviteUrl: invite.wizarrInviteUrl,
           name: donor.name,
           subscriptionId: donor.subscriptionId,
         });
-        markInviteEmailSent(existingInvite.id);
+        invite = markInviteEmailSent(invite.id);
         logEvent('invite.auto.email_sent', {
           donorId: donor.id,
-          inviteId: existingInvite.id,
+          inviteId: invite.id,
           source: 'payment-webhook',
         });
       } catch (err) {
@@ -293,6 +336,12 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     const inviteData = await wizarrService.createInvite({
       email,
       note,
+      extraFields: {
+        plex_account_id: donor.plexAccountId || undefined,
+        plexAccountId: donor.plexAccountId || undefined,
+        plex_email: donor.plexEmail || undefined,
+        plexEmail: donor.plexEmail || undefined,
+      },
     });
 
     const inviteRecord = createInviteRecord({
@@ -301,6 +350,8 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       url: inviteData.inviteUrl,
       recipientEmail: email,
       note,
+      plexAccountId: donor.plexAccountId,
+      plexEmail: donor.plexEmail,
     });
 
     logEvent('invite.auto.generated', {
