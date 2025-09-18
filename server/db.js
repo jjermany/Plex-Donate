@@ -402,7 +402,7 @@ const statements = {
   listDonors: db.prepare('SELECT * FROM donors ORDER BY created_at DESC'),
   listDonorsWithExpiredAccess: db.prepare(
     `SELECT * FROM donors
-     WHERE lower(status) = 'cancelled'
+     WHERE lower(status) IN ('cancelled', 'expired', 'suspended')
        AND access_expires_at IS NOT NULL
        AND DATETIME(access_expires_at) <= DATETIME('now')
      ORDER BY access_expires_at ASC`
