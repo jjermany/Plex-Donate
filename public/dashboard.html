@@ -708,15 +708,10 @@
           <article class="surface">
             <h2 class="section-title">Streaming libraries</h2>
             <p class="muted">
-              Jump into your Plex and Wizarr libraries once your invite is
-              active. Save the links below for quick access.
+              Jump into your Plex library once your invite is active. Save the
+              link below for quick access.
             </p>
             <ul>
-              <li id="wizarr-list-item" class="hidden">
-                <a id="wizarr-link" href="#" target="_blank" rel="noopener"
-                  >Open Wizarr</a
-                >
-              </li>
               <li>
                 <a href="https://app.plex.tv/" target="_blank" rel="noopener"
                   >Launch Plex</a
@@ -809,9 +804,6 @@
       const inviteCreated = document.getElementById('invite-created');
       const inviteDescription = document.getElementById('invite-description');
 
-      const wizarrLink = document.getElementById('wizarr-link');
-      const wizarrListItem = document.getElementById('wizarr-list-item');
-
       function showLoading() {
         loadingPanel.classList.remove('hidden');
         errorPanel.classList.add('hidden');
@@ -864,17 +856,6 @@
         if (statusClass) {
           el.classList.add(statusClass);
         }
-      }
-
-      function getWizarrPortalUrl(data) {
-        if (!data || !data.wizarr) {
-          return '';
-        }
-        const portal =
-          typeof data.wizarr.portalUrl === 'string'
-            ? data.wizarr.portalUrl.trim()
-            : '';
-        return portal;
       }
 
       function updateMembershipStatusMessage(donor, { showSubscriptionCta }) {
@@ -1143,9 +1124,6 @@
           if (passwordSave) {
             passwordSave.disabled = false;
           }
-          if (wizarrListItem) {
-            wizarrListItem.classList.add('hidden');
-          }
           return;
         }
 
@@ -1253,23 +1231,6 @@
           passwordSave.disabled = false;
         }
         inviteEmail.value = donor.email || '';
-
-        if (wizarrLink && wizarrListItem) {
-          const wizarrPortalUrl = getWizarrPortalUrl(data);
-          if (wizarrPortalUrl) {
-            wizarrLink.href = wizarrPortalUrl;
-            wizarrLink.textContent = 'Open Wizarr';
-            wizarrLink.target = '_blank';
-            wizarrLink.rel = 'noopener';
-            wizarrListItem.classList.remove('hidden');
-          } else {
-            wizarrLink.removeAttribute('href');
-            wizarrLink.removeAttribute('target');
-            wizarrLink.removeAttribute('rel');
-            wizarrLink.textContent = 'Open Wizarr';
-            wizarrListItem.classList.add('hidden');
-          }
-        }
 
         const limitReached = Boolean(data.inviteLimitReached);
 
