@@ -1037,6 +1037,75 @@
       }
 
       let csrfToken = null;
+      const SESSION_TOKEN_QUERY_PARAM = 'session';
+      let sessionToken = null;
+
+      function normalizeSessionToken(token) {
+        if (typeof token !== 'string') {
+          return null;
+        }
+        const trimmed = token.trim();
+        return trimmed ? trimmed : null;
+      }
+
+      function applySessionTokenToUrl(token) {
+        try {
+          const url = new URL(window.location.href);
+          if (token) {
+            url.searchParams.set(SESSION_TOKEN_QUERY_PARAM, token);
+          } else {
+            url.searchParams.delete(SESSION_TOKEN_QUERY_PARAM);
+          }
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+        } catch (err) {
+          // Ignore URL update errors.
+        }
+      }
+
+      function setSessionToken(token) {
+        const normalized = normalizeSessionToken(token);
+        if (normalized === sessionToken) {
+          return;
+        }
+        sessionToken = normalized;
+        applySessionTokenToUrl(sessionToken);
+      }
+
+      (function initializeSessionTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const existing = url.searchParams.get(SESSION_TOKEN_QUERY_PARAM);
+          if (existing) {
+            setSessionToken(existing);
+          }
+        } catch (err) {
+          sessionToken = null;
+        }
+      })();
+
+      function withSessionToken(path) {
+        if (!sessionToken) {
+          return path;
+        }
+        try {
+          const url = new URL(path, window.location.origin);
+          url.searchParams.set(SESSION_TOKEN_QUERY_PARAM, sessionToken);
+          return url.toString();
+        } catch (err) {
+          return path;
+        }
+      }
+
+      function updateSessionTokenFromResponse(data) {
+        if (!data || typeof data !== 'object') {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(data, 'sessionToken')) {
+          setSessionToken(data.sessionToken);
+        }
+      }
+
       let state = {
         authenticated: false,
         donors: [],
@@ -1051,7 +1120,38 @@
         paypalPlanLoading: false,
       };
 
+      const AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
+      let autoRefreshTimerId = null;
+      let dashboardDataPromise = null;
+
       const statusClearTimers = new WeakMap();
+
+      function stopDashboardAutoRefresh() {
+        if (autoRefreshTimerId) {
+          window.clearInterval(autoRefreshTimerId);
+          autoRefreshTimerId = null;
+        }
+      }
+
+      async function autoRefreshDashboardData() {
+        if (!state.authenticated) {
+          stopDashboardAutoRefresh();
+          return;
+        }
+        try {
+          await loadDashboardData();
+        } catch (err) {
+          console.error('Automatic dashboard refresh failed', err);
+        }
+      }
+
+      function startDashboardAutoRefresh() {
+        stopDashboardAutoRefresh();
+        autoRefreshTimerId = window.setInterval(
+          autoRefreshDashboardData,
+          AUTO_REFRESH_INTERVAL_MS
+        );
+      }
 
       function storeThemePreference(theme) {
         try {
@@ -1265,8 +1365,12 @@
         if (csrfToken && opts.method && opts.method !== 'GET') {
           opts.headers['X-CSRF-Token'] = csrfToken;
         }
+        if (sessionToken) {
+          opts.headers['X-Session-Token'] = sessionToken;
+        }
 
-        const response = await fetch(path, opts);
+        const requestUrl = withSessionToken(path);
+        const response = await fetch(requestUrl, opts);
         const contentType = response.headers.get('content-type') || '';
         const data = contentType.includes('application/json')
           ? await response.json()
@@ -1276,9 +1380,13 @@
           csrfToken = data.csrfToken;
         }
 
+        updateSessionTokenFromResponse(data);
+
         if (response.status === 401) {
           state.authenticated = false;
           state.settings = null;
+          stopDashboardAutoRefresh();
+          setSessionToken(null);
           render();
           throw new Error('Authentication required');
         }
@@ -1878,22 +1986,52 @@
     }
 
     async function loadDashboardData() {
-      try {
-        const donorsResponse = await api('/api/admin/subscribers');
-        state.donors = donorsResponse.donors || [];
-      } catch (err) {
-        console.error(err);
+      if (dashboardDataPromise) {
+        return dashboardDataPromise;
+      }
+
+      dashboardDataPromise = (async () => {
+        try {
+          try {
+            const donorsResponse = await api('/api/admin/subscribers');
+            state.donors = donorsResponse.donors || [];
+          } catch (err) {
+            console.error(err);
+          }
+          try {
+            const eventsResponse = await api('/api/admin/events');
+            state.events = eventsResponse.events || [];
+          } catch (err) {
+            console.error(err);
+          }
+          await loadSettings();
+          await loadPaypalPlan();
+          await refreshShareLinks();
+        } finally {
+          try {
+            render();
+          } finally {
+            dashboardDataPromise = null;
+          }
+        }
+      })();
+
+      return dashboardDataPromise;
+    }
+
+    async function handleManualRefresh() {
+      if (refreshButton) {
+        refreshButton.disabled = true;
       }
       try {
-        const eventsResponse = await api('/api/admin/events');
-        state.events = eventsResponse.events || [];
+        await loadDashboardData();
       } catch (err) {
         console.error(err);
+      } finally {
+        if (refreshButton) {
+          refreshButton.disabled = false;
+        }
       }
-      await loadSettings();
-      await loadPaypalPlan();
-      await refreshShareLinks();
-      render();
     }
 
       async function checkSession() {
@@ -1903,7 +2041,9 @@
           state.authenticated = data.authenticated;
           if (state.authenticated) {
             await loadDashboardData();
+            startDashboardAutoRefresh();
           } else {
+            stopDashboardAutoRefresh();
             state.settings = null;
             state.paypalPlan = null;
             state.paypalProduct = null;
@@ -2035,6 +2175,7 @@
           state.authenticated = true;
           document.getElementById('password').value = '';
           await loadDashboardData();
+          startDashboardAutoRefresh();
           statusMessage.textContent = '';
         } catch (err) {
           statusMessage.textContent = err.message;
@@ -2045,6 +2186,8 @@
         try {
           await api('/api/admin/logout', { method: 'POST' });
         } finally {
+          stopDashboardAutoRefresh();
+          setSessionToken(null);
           state.authenticated = false;
           state.donors = [];
           state.shareLinks = [];
@@ -2060,7 +2203,7 @@
         }
       });
 
-      refreshButton.addEventListener('click', loadDashboardData);
+      refreshButton.addEventListener('click', handleManualRefresh);
 
       if (prospectShareForm) {
         prospectShareForm.addEventListener('submit', async (event) => {

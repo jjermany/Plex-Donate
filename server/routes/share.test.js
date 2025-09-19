@@ -39,6 +39,7 @@ function startServer(app) {
         origin: `http://127.0.0.1:${port}`,
         close: () => new Promise((closeResolve) => server.close(closeResolve)),
         cookieJar: [],
+        sessionToken: null,
       });
     });
   });
@@ -54,7 +55,13 @@ async function requestJson(server, method, path, { headers = {}, body } = {}) {
     init.headers.Cookie = server.cookieJar.join('; ');
   }
 
-  const response = await fetch(`${server.origin}${path}`, init);
+  const url = new URL(path, server.origin);
+  if (server.sessionToken) {
+    url.searchParams.set('session', server.sessionToken);
+    init.headers['x-session-token'] = server.sessionToken;
+  }
+
+  const response = await fetch(url.toString(), init);
   const setCookies =
     typeof response.headers.getSetCookie === 'function'
       ? response.headers.getSetCookie()
@@ -88,6 +95,12 @@ async function requestJson(server, method, path, { headers = {}, body } = {}) {
   const payload = contentType.includes('application/json')
     ? await response.json()
     : await response.text();
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    if (Object.prototype.hasOwnProperty.call(payload, 'sessionToken')) {
+      const token = payload.sessionToken;
+      server.sessionToken = typeof token === 'string' && token ? token : null;
+    }
+  }
   return { status: response.status, body: payload };
 }
 

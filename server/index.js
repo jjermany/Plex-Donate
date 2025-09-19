@@ -19,7 +19,7 @@ const {
 
 const app = express();
 
-const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const SESSION_TTL_MS = 1000 * 60 * 15;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
@@ -37,6 +37,7 @@ app.use(
     resave: false,
     saveUninitialized: false,
     store: sessionStore,
+    rolling: true,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',

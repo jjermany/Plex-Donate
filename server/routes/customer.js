@@ -24,6 +24,10 @@ const {
   buildSubscriberDetails,
 } = require('../utils/paypal');
 const plexOAuth = require('../services/plex-oauth');
+const {
+  ensureSessionToken,
+  hasValidSessionToken,
+} = require('../utils/session-tokens');
 
 const router = express.Router();
 
@@ -36,6 +40,31 @@ function asyncHandler(handler) {
 }
 
 router.use(express.json());
+router.use((req, res, next) => {
+  res.locals.sessionToken = undefined;
+
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      let sessionToken = res.locals.sessionToken;
+      if (sessionToken === undefined) {
+        if (req.session && req.session.customerId && hasValidSessionToken(req)) {
+          sessionToken = ensureSessionToken(req);
+        } else {
+          sessionToken = null;
+        }
+      }
+
+      if (body.sessionToken === undefined) {
+        body.sessionToken = sessionToken;
+      }
+    }
+
+    return originalJson(body);
+  };
+
+  next();
+});
 
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
@@ -217,6 +246,9 @@ function requireCustomer(req, res, next) {
   if (!donor) {
     return res.status(401).json({ error: 'Authentication required' });
   }
+  if (!hasValidSessionToken(req)) {
+    return res.status(401).json({ error: 'Invalid session token' });
+  }
   req.customer = { donor };
   return next();
 }
@@ -226,8 +258,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const donor = getAuthenticatedDonor(req);
     if (!donor) {
+      res.locals.sessionToken = null;
       return res.json({ authenticated: false });
     }
+    res.locals.sessionToken = ensureSessionToken(req);
     const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
     const pendingPlexLink = getPendingPlexLink(req, donor);
     return res.json(
@@ -312,6 +346,8 @@ router.post(
       req.session.customerId = donor.id;
       logger.info('Customer signed in with email/password', { donorId: donor.id });
 
+      res.locals.sessionToken = ensureSessionToken(req);
+
       const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
       const pendingPlexLink = getPendingPlexLink(req, donor);
       return res.json(
@@ -332,6 +368,7 @@ router.post(
     if (req.session) {
       delete req.session.customerId;
     }
+    res.locals.sessionToken = null;
     res.json({ success: true });
   })
 );

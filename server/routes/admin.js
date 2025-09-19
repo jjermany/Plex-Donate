@@ -33,6 +33,10 @@ const settingsStore = require('../state/settings');
 
 const router = express.Router();
 const csrfProtection = csurf();
+const {
+  ensureSessionToken,
+  hasValidSessionToken,
+} = require('../utils/session-tokens');
 
 function asyncHandler(handler) {
   return (req, res, next) => {
@@ -62,10 +66,41 @@ router.use(express.json());
 router.use(csrfProtection);
 router.use((req, res, next) => {
   res.locals.csrfToken = req.csrfToken();
+  res.locals.sessionToken = undefined;
+
+  const originalJson = res.json.bind(res);
+  res.json = (body) => {
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      if (res.locals.csrfToken && body.csrfToken === undefined) {
+        body.csrfToken = res.locals.csrfToken;
+      }
+
+      let sessionToken = res.locals.sessionToken;
+      if (sessionToken === undefined) {
+        if (req.session && req.session.isAdmin && hasValidSessionToken(req)) {
+          sessionToken = ensureSessionToken(req);
+        } else {
+          sessionToken = null;
+        }
+      }
+
+      if (body.sessionToken === undefined) {
+        body.sessionToken = sessionToken;
+      }
+    }
+
+    return originalJson(body);
+  };
+
   next();
 });
 
 router.get('/session', (req, res) => {
+  if (req.session && req.session.isAdmin) {
+    res.locals.sessionToken = ensureSessionToken(req);
+  } else {
+    res.locals.sessionToken = null;
+  }
   res.json({
     authenticated: Boolean(req.session && req.session.isAdmin),
     csrfToken: res.locals.csrfToken,
@@ -94,6 +129,8 @@ router.post(
 
       req.session.isAdmin = true;
 
+      res.locals.sessionToken = ensureSessionToken(req);
+
       let csrfToken;
       try {
         csrfToken = req.csrfToken();
@@ -113,6 +150,7 @@ router.post(
   '/logout',
   requireAdmin,
   asyncHandler(async (req, res) => {
+    res.locals.sessionToken = null;
     req.session.destroy(() => {
       res.json({ success: true, csrfToken: res.locals.csrfToken });
     });
