@@ -19,6 +19,7 @@ class FetchAgent {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
     this.cookies = new Map();
+    this.sessionToken = null;
   }
 
   getCookieValue(name) {
@@ -70,6 +71,12 @@ class FetchAgent {
       requestHeaders.cookie = cookieHeader;
     }
 
+    const url = new URL(path, this.baseUrl);
+    if (this.sessionToken) {
+      url.searchParams.set('session', this.sessionToken);
+      requestHeaders['x-session-token'] = this.sessionToken;
+    }
+
     let requestBody = body;
     if (
       requestBody &&
@@ -84,7 +91,7 @@ class FetchAgent {
       }
     }
 
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const response = await fetch(url.toString(), {
       method,
       headers: requestHeaders,
       body: requestBody,
@@ -105,6 +112,20 @@ class FetchAgent {
       response.cookieHeaders = rawHeaders;
     } else {
       response.cookieHeaders = [];
+    }
+
+    try {
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const clone = response.clone();
+        const data = await clone.json();
+        if (data && Object.prototype.hasOwnProperty.call(data, 'sessionToken')) {
+          const token = data.sessionToken;
+          this.sessionToken = typeof token === 'string' && token ? token : null;
+        }
+      }
+    } catch (err) {
+      // Ignore JSON parsing errors for session token updates.
     }
 
     return response;
