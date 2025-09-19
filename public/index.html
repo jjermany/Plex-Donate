@@ -285,6 +285,113 @@
         gap: 8px;
       }
 
+      .action-menu {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        max-width: 220px;
+      }
+
+      .action-menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+      }
+
+      .action-menu-toggle::after {
+        content: '';
+        border-style: solid;
+        border-width: 5px 5px 0 5px;
+        border-color: currentColor transparent transparent transparent;
+        transition: transform 0.2s ease;
+      }
+
+      .action-menu.open .action-menu-toggle::after {
+        transform: rotate(180deg);
+      }
+
+      .action-menu-panel {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        display: none;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px;
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        border-radius: 12px;
+        box-shadow: var(--panel-shadow);
+        width: min(260px, calc(100vw - 48px));
+        z-index: 20;
+        backdrop-filter: blur(12px);
+      }
+
+      .action-menu.open .action-menu-panel {
+        display: flex;
+      }
+
+      .action-menu-panel .menu-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        background: transparent;
+        color: var(--text-primary);
+        border-radius: 10px;
+        padding: 10px 12px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.95rem;
+        box-shadow: none;
+        transform: none;
+      }
+
+      .action-menu-panel .menu-item:hover:not(:disabled) {
+        background: var(--table-hover);
+        box-shadow: none;
+        transform: none;
+      }
+
+      .action-menu-panel .menu-item:focus-visible {
+        outline: 2px solid var(--button-primary-bg);
+        outline-offset: 2px;
+      }
+
+      .action-menu-panel .menu-item:disabled {
+        opacity: 0.55;
+      }
+
+      .action-menu-panel .menu-item.danger {
+        color: var(--status-danger-color);
+      }
+
+      .action-menu-panel .menu-item.danger:hover:not(:disabled) {
+        background: var(--status-danger-bg);
+        color: var(--status-danger-color);
+      }
+
+      .link-open-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        max-width: 240px;
+      }
+
+      @media (max-width: 600px) {
+        .action-menu {
+          max-width: none;
+        }
+
+        .link-open-button {
+          max-width: none;
+        }
+      }
+
       #status-message {
         margin-top: 12px;
         color: var(--status-message-color);
@@ -970,14 +1077,61 @@
         <td><span class="status-pill"></span></td>
         <td class="col-last-payment"></td>
         <td class="col-invite"></td>
-        <td>
-          <div class="actions">
-            <button data-action="invite">Generate invite</button>
-            <button data-action="share" class="secondary">Copy invite page link</button>
-            <button data-action="share-generate" class="secondary">Generate invite page link</button>
-            <button data-action="resend" class="secondary">Resend email</button>
-            <button data-action="revoke" class="danger">Revoke</button>
-            <button data-action="remove" class="danger secondary">Remove</button>
+        <td class="col-actions">
+          <div class="action-menu">
+            <button type="button" class="action-menu-toggle secondary" data-menu-toggle>
+              Actions
+            </button>
+            <div class="action-menu-panel" role="menu" hidden aria-hidden="true">
+              <button
+                type="button"
+                class="menu-item"
+                data-action="invite"
+                role="menuitem"
+              >
+                Generate invite
+              </button>
+              <button
+                type="button"
+                class="menu-item"
+                data-action="share"
+                role="menuitem"
+              >
+                Copy invite page link
+              </button>
+              <button
+                type="button"
+                class="menu-item"
+                data-action="share-generate"
+                role="menuitem"
+              >
+                Generate invite page link
+              </button>
+              <button
+                type="button"
+                class="menu-item"
+                data-action="resend"
+                role="menuitem"
+              >
+                Resend email
+              </button>
+              <button
+                type="button"
+                class="menu-item danger"
+                data-action="revoke"
+                role="menuitem"
+              >
+                Revoke invite
+              </button>
+              <button
+                type="button"
+                class="menu-item danger"
+                data-action="remove"
+                role="menuitem"
+              >
+                Remove subscriber
+              </button>
+            </div>
           </div>
         </td>
       </tr>
@@ -1039,6 +1193,71 @@
       let csrfToken = null;
       const SESSION_TOKEN_QUERY_PARAM = 'session';
       let sessionToken = null;
+
+      let openSubscriberActionMenu = null;
+
+      function closeSubscriberActionMenu(menu, options = {}) {
+        const targetMenu = menu || openSubscriberActionMenu;
+        if (!targetMenu) {
+          return;
+        }
+        const { focusToggle = false } = options;
+        targetMenu.classList.remove('open');
+        const panel = targetMenu.querySelector('.action-menu-panel');
+        if (panel) {
+          panel.hidden = true;
+          panel.setAttribute('aria-hidden', 'true');
+        }
+        const toggle = targetMenu.querySelector('[data-menu-toggle]');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', 'false');
+          if (focusToggle) {
+            toggle.focus();
+          }
+        }
+        if (openSubscriberActionMenu === targetMenu) {
+          openSubscriberActionMenu = null;
+        }
+      }
+
+      function openSubscriberActionMenuFor(menu) {
+        if (!menu) {
+          return;
+        }
+        if (openSubscriberActionMenu && openSubscriberActionMenu !== menu) {
+          closeSubscriberActionMenu(openSubscriberActionMenu);
+        }
+        menu.classList.add('open');
+        const panel = menu.querySelector('.action-menu-panel');
+        if (panel) {
+          panel.hidden = false;
+          panel.setAttribute('aria-hidden', 'false');
+        }
+        const toggle = menu.querySelector('[data-menu-toggle]');
+        if (toggle) {
+          toggle.setAttribute('aria-expanded', 'true');
+        }
+        openSubscriberActionMenu = menu;
+        window.requestAnimationFrame(() => {
+          const firstItem = menu.querySelector(
+            '.action-menu-panel button[data-action]:not(:disabled)'
+          );
+          if (firstItem) {
+            firstItem.focus();
+          }
+        });
+      }
+
+      function toggleSubscriberActionMenu(menu) {
+        if (!menu) {
+          return;
+        }
+        if (menu.classList.contains('open')) {
+          closeSubscriberActionMenu(menu, { focusToggle: true });
+        } else {
+          openSubscriberActionMenuFor(menu);
+        }
+      }
 
       function normalizeSessionToken(token) {
         if (typeof token !== 'string') {
@@ -1805,6 +2024,7 @@
       }
 
       function renderSubscribers() {
+        closeSubscriberActionMenu();
         subscribersTable.innerHTML = '';
         if (state.donors.length === 0) {
           const row = document.createElement('tr');
@@ -1826,6 +2046,32 @@
           const statusPill = clone.querySelector('.status-pill');
           const lastPaymentCell = clone.querySelector('.col-last-payment');
           const inviteCell = clone.querySelector('.col-invite');
+          const actionMenu = clone.querySelector('.action-menu');
+          const actionMenuToggle = clone.querySelector('[data-menu-toggle]');
+          const actionMenuPanel = clone.querySelector('.action-menu-panel');
+
+          if (actionMenu) {
+            actionMenu.classList.remove('open');
+          }
+
+          if (actionMenuToggle && actionMenuPanel) {
+            const baseId = row.dataset.id
+              ? `donor-${row.dataset.id}`
+              : donor.subscriptionId
+              ? `subscription-${donor.subscriptionId}`
+              : `donor-${Math.random().toString(36).slice(2)}`;
+            const sanitizedId = String(baseId).replace(/[^a-zA-Z0-9_-]/g, '-');
+            const toggleId = `subscriber-actions-toggle-${sanitizedId}`;
+            const panelId = `subscriber-actions-panel-${sanitizedId}`;
+            actionMenuToggle.id = toggleId;
+            actionMenuToggle.setAttribute('aria-controls', panelId);
+            actionMenuToggle.setAttribute('aria-haspopup', 'menu');
+            actionMenuToggle.setAttribute('aria-expanded', 'false');
+            actionMenuPanel.id = panelId;
+            actionMenuPanel.setAttribute('aria-labelledby', toggleId);
+            actionMenuPanel.setAttribute('aria-hidden', 'true');
+            actionMenuPanel.hidden = true;
+          }
 
           subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:var(--text-muted-soft);font-size:0.85rem;">${donor.email || '—'}<br/>Sub ID: ${donor.subscriptionId}</span>`;
 
@@ -2100,10 +2346,15 @@
           const lastUsedCell = clone.querySelector('.col-last-used');
 
           const shareUrl = buildShareUrl(link);
+          linkCell.innerHTML = '';
           if (shareUrl) {
-            linkCell.innerHTML = `<a href="${shareUrl}" target="_blank" rel="noopener">${escapeHtml(
-              shareUrl
-            )}</a>`;
+            const openButton = document.createElement('button');
+            openButton.type = 'button';
+            openButton.className = 'secondary link-open-button';
+            openButton.dataset.action = 'open';
+            openButton.textContent = 'Open invite page';
+            openButton.title = shareUrl;
+            linkCell.appendChild(openButton);
           } else {
             linkCell.textContent = 'Pending link configuration';
           }
@@ -2412,12 +2663,23 @@
       });
 
       subscribersTable.addEventListener('click', async (event) => {
+        const toggle = event.target.closest('[data-menu-toggle]');
+        if (toggle) {
+          const menu = toggle.closest('.action-menu');
+          toggleSubscriberActionMenu(menu);
+          return;
+        }
+
         const button = event.target.closest('button[data-action]');
         if (!button) return;
         const row = event.target.closest('tr');
         const donorId = row && row.dataset.id;
         if (!donorId) return;
         const action = button.dataset.action;
+        const menu = button.closest('.action-menu');
+        if (menu) {
+          closeSubscriberActionMenu(menu);
+        }
         button.disabled = true;
         try {
           if (action === 'invite') {
@@ -2509,6 +2771,21 @@
             return;
           }
 
+          if (action === 'open') {
+            const shareUrl = buildShareUrl(link);
+            if (!shareUrl) {
+              alert('This invite link does not have a shareable URL yet.');
+              return;
+            }
+            const newWindow = window.open(shareUrl, '_blank', 'noopener');
+            if (newWindow) {
+              newWindow.opener = null;
+            } else {
+              window.location.href = shareUrl;
+            }
+            return;
+          }
+
           if (action === 'copy') {
             const shareUrl = buildShareUrl(link);
             if (!shareUrl) {
@@ -2553,6 +2830,32 @@
           }
         });
       }
+
+      document.addEventListener('click', (event) => {
+        if (!openSubscriberActionMenu) {
+          return;
+        }
+        if (event.target.closest('.action-menu') === openSubscriberActionMenu) {
+          return;
+        }
+        closeSubscriberActionMenu();
+      });
+
+      document.addEventListener('focusin', (event) => {
+        if (!openSubscriberActionMenu) {
+          return;
+        }
+        if (event.target.closest('.action-menu') === openSubscriberActionMenu) {
+          return;
+        }
+        closeSubscriberActionMenu();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && openSubscriberActionMenu) {
+          closeSubscriberActionMenu(null, { focusToggle: true });
+        }
+      });
 
       registerServiceWorker();
       checkSession();
