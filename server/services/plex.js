@@ -1,8 +1,8 @@
 const fetch = require('node-fetch');
 const { getPlexSettings } = require('../state/settings');
 
-const HOME_USERS_ENDPOINTS = ['/api/v2/home/users', '/api/home/users'];
-const homeUsersPathCache = new Map();
+const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users'];
+const userListPathCache = new Map();
 
 function getPlexConfig(overrideSettings) {
   if (overrideSettings && typeof overrideSettings === 'object') {
@@ -68,13 +68,13 @@ function getCacheKey(plex) {
 
 async function fetchUsersList(plex) {
   const cacheKey = getCacheKey(plex);
-  const preferredPath = cacheKey ? homeUsersPathCache.get(cacheKey) : null;
+  const preferredPath = cacheKey ? userListPathCache.get(cacheKey) : null;
   const endpoints = preferredPath
     ? [
         preferredPath,
-        ...HOME_USERS_ENDPOINTS.filter((path) => path !== preferredPath),
+        ...USER_LIST_ENDPOINTS.filter((path) => path !== preferredPath),
       ]
-    : HOME_USERS_ENDPOINTS;
+    : USER_LIST_ENDPOINTS;
 
   const attemptedNotFound = [];
 
@@ -99,7 +99,7 @@ async function fetchUsersList(plex) {
         attemptedNotFound.push(basePath);
       }
       if (preferredPath === basePath && cacheKey) {
-        homeUsersPathCache.delete(cacheKey);
+        userListPathCache.delete(cacheKey);
       }
       continue;
     }
@@ -117,7 +117,7 @@ async function fetchUsersList(plex) {
     const users = data.users || data;
 
     if (cacheKey) {
-      homeUsersPathCache.set(cacheKey, basePath);
+      userListPathCache.set(cacheKey, basePath);
     }
 
     return { users, basePath };
@@ -131,7 +131,7 @@ async function fetchUsersList(plex) {
             .slice(0, -1)
             .join(', ')} and ${attemptedNotFound[attemptedNotFound.length - 1]}`;
     throw new Error(
-      `Plex returned 404 (Not Found) for the supported home users endpoints (${formattedPaths}). Confirm the base URL is correct and that the server supports the Plex home users API.`
+      `Plex returned 404 (Not Found) for the supported user list endpoints (${formattedPaths}). Confirm the base URL is correct and that the server supports the Plex accounts or home users API.`
     );
   }
 
