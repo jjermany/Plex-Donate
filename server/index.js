@@ -19,6 +19,7 @@ const {
 
 const app = express();
 
+const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const SESSION_TTL_MS = 1000 * 60 * 15;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 
@@ -33,6 +34,7 @@ app.set('trust proxy', 1);
 
 app.use(
   session({
+    name: SESSION_COOKIE_NAME,
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
