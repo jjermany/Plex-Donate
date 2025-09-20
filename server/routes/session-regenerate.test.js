@@ -15,6 +15,8 @@ const customerRouter = require('./customer');
 const { createDonor } = require('../db');
 const { hashPassword } = require('../utils/passwords');
 
+const SESSION_COOKIE_NAME = 'plex-donate.sid';
+
 class FetchAgent {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
@@ -145,6 +147,7 @@ function createTestServer() {
   app.use(express.json());
   app.use(
     session({
+      name: SESSION_COOKIE_NAME,
       secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
@@ -217,7 +220,7 @@ test('admin login regenerates the session and refreshes the CSRF token', async (
   const initialToken = sessionBody.csrfToken;
   assert.ok(initialToken);
 
-  const initialCookie = agent.getCookieValue('connect.sid');
+  const initialCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
   assert.ok(initialCookie);
 
   const loginResponse = await agent.post('/api/admin/login', {
@@ -229,7 +232,7 @@ test('admin login regenerates the session and refreshes the CSRF token', async (
   assert.ok(loginBody.csrfToken);
   assert.notEqual(loginBody.csrfToken, initialToken);
 
-  const refreshedCookie = agent.getCookieValue('connect.sid');
+  const refreshedCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
   assert.ok(refreshedCookie);
   assert.notEqual(refreshedCookie, initialCookie);
 
@@ -282,7 +285,7 @@ test('customer login regenerates the session and preserves Plex link data', asyn
   assert.equal(setupBody.preserved, 'legacy-data');
   assert.ok(setupBody.sessionId);
 
-  const initialCookie = agent.getCookieValue('connect.sid');
+  const initialCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
   assert.ok(initialCookie);
 
   const loginResponse = await agent.post('/api/customer/login', {
@@ -296,7 +299,7 @@ test('customer login regenerates the session and preserves Plex link data', asyn
   assert.equal(loginBody.plexLink && loginBody.plexLink.pending, true);
   assert.equal(loginBody.plexLink.code, 'CODE123');
 
-  const refreshedCookie = agent.getCookieValue('connect.sid');
+  const refreshedCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
   assert.ok(refreshedCookie);
   assert.notEqual(refreshedCookie, initialCookie);
 
