@@ -17,12 +17,14 @@ const {
   createOrUpdateShareLink,
   getShareLinkByToken,
   getProspectById,
+  assignShareLinkToDonor,
 } = require('../db');
 const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const SqliteSessionStore = require('../session-store');
 const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
+const { hashPassword } = require('../utils/passwords');
 
 function createApp() {
   const app = express();
@@ -365,6 +367,91 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     }
   });
 
+  await t.test('share link blocks checkout until the account is ready', async (t) => {
+    resetDatabase();
+    settingsStore.updateGroup('paypal', {
+      planId: 'P-TEST',
+      clientId: 'client',
+      clientSecret: 'secret',
+    });
+
+    const app = createApp();
+    const server = await startServer(app);
+
+    const mock = t.mock.method(paypalService, 'createSubscription', async () => ({
+      subscriptionId: 'I-READY',
+      approvalUrl: 'https://paypal.example/ready',
+    }));
+
+    try {
+      const prospect = createProspect({
+        email: 'ready@example.com',
+        name: 'Ready Prospect',
+      });
+      const shareLink = createOrUpdateShareLink({
+        prospectId: prospect.id,
+        token: 'ready-token',
+        sessionToken: 'ready-session',
+      });
+
+      const viewResponse = await requestJson(server, 'GET', `/share/${shareLink.token}`);
+      assert.equal(viewResponse.status, 200);
+      assert.equal(viewResponse.body.donor, null);
+
+      const blocked = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/paypal-checkout`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: { sessionToken: shareLink.sessionToken },
+        }
+      );
+
+      assert.equal(blocked.status, 403);
+      assert.ok(blocked.body.error.includes('Create your account'));
+      assert.equal(mock.mock.callCount(), 0);
+
+      const passwordHash = await hashPassword('AccountPass123!');
+      const donor = createDonor({
+        email: prospect.email,
+        name: prospect.name,
+        status: 'pending',
+        passwordHash,
+      });
+      assignShareLinkToDonor(shareLink.id, donor.id);
+
+      const refreshedLink = getShareLinkByToken(shareLink.token);
+      const refreshedView = await requestJson(
+        server,
+        'GET',
+        `/share/${shareLink.token}`
+      );
+      assert.equal(refreshedView.status, 200);
+      assert.ok(refreshedView.body.donor);
+      assert.equal(refreshedView.body.donor.id, donor.id);
+      assert.equal(refreshedView.body.donor.hasPassword, true);
+
+      const allowed = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/paypal-checkout`,
+        {
+          headers: { Authorization: `Bearer ${refreshedLink.sessionToken}` },
+          body: { sessionToken: refreshedLink.sessionToken },
+        }
+      );
+
+      assert.equal(allowed.status, 200);
+      assert.equal(allowed.body.subscriptionId, 'I-READY');
+      assert.equal(allowed.body.approvalUrl, 'https://paypal.example/ready');
+      assert.equal(mock.mock.callCount(), 1);
+    } finally {
+      mock.mock.restore();
+      await server.close();
+    }
+  });
+
   await t.test('share link can create PayPal checkout approval URL', async (t) => {
     resetDatabase();
     settingsStore.updateGroup('paypal', {
@@ -382,10 +469,12 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     }));
 
     try {
+      const passwordHash = await hashPassword('CheckoutPass123!');
       const donor = createDonor({
         email: 'checkout@example.com',
         name: 'Checkout Donor',
         status: 'pending',
+        passwordHash,
       });
       const shareLink = createOrUpdateShareLink({
         donorId: donor.id,

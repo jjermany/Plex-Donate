@@ -1,11 +1,13 @@
 # PWA Icons
 
-Place progressive web app icon images in this directory.
+Place progressive web app icon images in this directory when ready.
 
 Required files referenced by the manifest:
 
-- `icon-round-android.png` (192×192)
-- `icon-square-ios.png` (512×512)
+- 192×192 PNG for Android round icon
+- 512×512 PNG for iOS square icon
 
-Use platform-specific artwork that matches these aspect ratios so launchers display
-the correct shape on each device. Add the PNG assets before building for production.
+Until branded artwork is available, the application serves inline transparent
+placeholders so the PWA install flow still works. Replace the data URI entries
+in `public/manifest.webmanifest` and the `<link rel="apple-touch-icon">` tags
+once the production-ready assets are ready.

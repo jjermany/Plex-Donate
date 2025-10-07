@@ -459,6 +459,18 @@ router.post(
       prospect = getProspectById(shareLink.prospectId);
     }
 
+    if (!donor) {
+      return res.status(403).json({
+        error: 'Create your account before starting PayPal checkout.',
+      });
+    }
+
+    if (!donor.hasPassword) {
+      return res.status(403).json({
+        error: 'Set up your dashboard password before starting PayPal checkout.',
+      });
+    }
+
     const overrides =
       req.body && typeof req.body === 'object'
         ? {
@@ -571,6 +583,9 @@ router.post(
         ? req.body.paypalSubscriptionId
         : '';
     const subscriptionInput = subscriptionInputRaw ? subscriptionInputRaw.trim() : '';
+    const normalizedSubscriptionId = subscriptionInput
+      ? subscriptionInput.toUpperCase()
+      : '';
 
     if (!normalizedEmail) {
       return res.status(400).json({ error: 'Email is required to set up your account.' });
@@ -624,11 +639,15 @@ router.post(
         activeDonor = updateDonorContact(donor.id, updates);
       }
 
+      const existingSubscription = (activeDonor.subscriptionId || '').trim();
       if (
-        subscriptionInput &&
-        subscriptionInput !== (activeDonor.subscriptionId || '').trim()
+        normalizedSubscriptionId &&
+        normalizedSubscriptionId !== existingSubscription.toUpperCase()
       ) {
-        activeDonor = updateDonorSubscriptionId(activeDonor.id, subscriptionInput);
+        activeDonor = updateDonorSubscriptionId(
+          activeDonor.id,
+          normalizedSubscriptionId
+        );
       }
 
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
@@ -656,8 +675,10 @@ router.post(
 
     // Prospect promotion flow
     let activeDonor = null;
-    if (subscriptionInput) {
-      activeDonor = getDonorBySubscriptionId(subscriptionInput);
+    if (normalizedSubscriptionId) {
+      activeDonor =
+        getDonorBySubscriptionId(normalizedSubscriptionId) ||
+        getDonorBySubscriptionId(subscriptionInput);
     }
     if (!activeDonor) {
       activeDonor = getDonorByEmailAddress(normalizedEmail);
@@ -674,18 +695,22 @@ router.post(
       if (Object.keys(updates).length > 0) {
         activeDonor = updateDonorContact(activeDonor.id, updates);
       }
+      const existingSubscription = (activeDonor.subscriptionId || '').trim();
       if (
-        subscriptionInput &&
-        subscriptionInput !== (activeDonor.subscriptionId || '').trim()
+        normalizedSubscriptionId &&
+        normalizedSubscriptionId !== existingSubscription.toUpperCase()
       ) {
-        activeDonor = updateDonorSubscriptionId(activeDonor.id, subscriptionInput);
+        activeDonor = updateDonorSubscriptionId(
+          activeDonor.id,
+          normalizedSubscriptionId
+        );
       }
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
     } else {
       activeDonor = createDonor({
         email: normalizedEmail,
         name: providedName,
-        subscriptionId: subscriptionInput || null,
+        subscriptionId: normalizedSubscriptionId || null,
         passwordHash: hashedPassword,
         status: 'pending',
       });

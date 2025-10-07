@@ -328,3 +328,41 @@ test('customer login regenerates the session and preserves Plex link data', asyn
   assert.equal(finalSessionBody.authenticated, false);
 });
 
+test('customer can link an existing subscription from the profile form', async (t) => {
+  const agent = await startServer(t);
+
+  const password = 'LinkPass123!';
+  const passwordHash = await hashPassword(password);
+  const donorEmail = `linker-${Date.now()}@example.com`;
+  const donor = createDonor({
+    email: donorEmail,
+    name: 'Link Donor',
+    status: 'pending',
+    passwordHash,
+  });
+
+  const loginResponse = await agent.post('/api/customer/login', {
+    body: { email: donor.email, password },
+  });
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(loginBody.authenticated, true);
+  assert.equal(loginBody.donor.subscriptionId, null);
+
+  const subscriptionId = 'I-LINK123456';
+  const updateResponse = await agent.post('/api/customer/profile', {
+    body: {
+      email: donor.email,
+      name: donor.name,
+      subscriptionId,
+    },
+  });
+  const updateBody = await updateResponse.json();
+  assert.equal(
+    updateResponse.status,
+    200,
+    updateBody && updateBody.error ? updateBody.error : 'Profile update should succeed'
+  );
+  assert.equal(updateBody.donor.subscriptionId, subscriptionId);
+});
+

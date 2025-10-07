@@ -77,6 +77,24 @@ function isValidEmail(email) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 }
 
+function normalizeSubscriptionId(subscriptionId) {
+  if (typeof subscriptionId !== 'string') {
+    return '';
+  }
+  return subscriptionId.trim();
+}
+
+function isValidSubscriptionId(subscriptionId) {
+  const normalized = normalizeSubscriptionId(subscriptionId);
+  if (!normalized) {
+    return false;
+  }
+  if (normalized.length < 3 || normalized.length > 128) {
+    return false;
+  }
+  return /^[a-z0-9-]+$/i.test(normalized);
+}
+
 function hasPlexLink(donor) {
   return Boolean(donor && donor.plexAccountId);
 }
@@ -450,6 +468,16 @@ router.post(
     const name = req.body && typeof req.body.name === 'string'
       ? req.body.name.trim()
       : '';
+    const subscriptionInputRaw =
+      req.body && typeof req.body.subscriptionId === 'string'
+        ? req.body.subscriptionId
+        : req.body && typeof req.body.paypalSubscriptionId === 'string'
+        ? req.body.paypalSubscriptionId
+        : '';
+    const subscriptionInput = normalizeSubscriptionId(subscriptionInputRaw);
+    const normalizedSubscriptionInput = subscriptionInput
+      ? subscriptionInput.toUpperCase()
+      : '';
 
     if (!email) {
       return res.status(400).json({
@@ -463,17 +491,54 @@ router.post(
       });
     }
 
+    if (subscriptionInput && !isValidSubscriptionId(subscriptionInput)) {
+      return res.status(400).json({
+        error: 'Enter a valid PayPal subscription ID (format like I-XXXX).',
+      });
+    }
+
     const updates = { email, name };
-    const updatedDonor = updateDonorContact(donor.id, updates);
+    let updatedDonor = updateDonorContact(donor.id, updates);
+    const existingSubscription = normalizeSubscriptionId(
+      updatedDonor.subscriptionId || ''
+    );
+    const normalizedExisting = existingSubscription
+      ? existingSubscription.toUpperCase()
+      : '';
+    let subscriptionLinked = false;
+
+    if (
+      normalizedSubscriptionInput &&
+      normalizedSubscriptionInput !== normalizedExisting
+    ) {
+      updatedDonor = updateDonorSubscriptionId(
+        updatedDonor.id,
+        normalizedSubscriptionInput
+      );
+      subscriptionLinked = true;
+      logEvent('customer.subscription.linked', {
+        donorId: donor.id,
+        subscriptionId: updatedDonor.subscriptionId,
+        context: 'customer-dashboard',
+      });
+    }
+
+    const profileUpdates = {
+      email: updatedDonor.email,
+      name: updatedDonor.name,
+    };
+    if (subscriptionLinked) {
+      profileUpdates.subscriptionId = updatedDonor.subscriptionId;
+    }
+
     logEvent('customer.profile.updated', {
       donorId: donor.id,
-      updates: {
-        email: updatedDonor.email,
-        name: updatedDonor.name,
-      },
+      updates: profileUpdates,
     });
 
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
+    const { activeInvite: invite, inviteLimitReached } = getInviteState(
+      updatedDonor.id
+    );
     const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
     req.customer.donor = updatedDonor;
     return res.json(

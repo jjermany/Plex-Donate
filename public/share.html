@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050818" />
+    <meta name="application-name" content="Plex Donate" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Plex Donate" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAED0lEQVR4nO3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4DcC8AAB2WfxiAAAAABJRU5ErkJggg==" />
     <title>Plex Donate Invite</title>
     <style>
       :root {
@@ -362,6 +368,11 @@
       .status-text.info {
         color: #bae6fd;
       }
+      .helper-text {
+        color: rgba(203, 213, 225, 0.85);
+        font-size: 0.9rem;
+        margin: 0;
+      }
       .invite-ready {
         margin-top: 24px;
         padding: 20px;
@@ -536,6 +547,10 @@
                 autocomplete="off"
                 inputmode="text"
               />
+              <p class="helper-text">
+                Already subscribed? Paste your PayPal subscription ID so we can link it
+                automatically.
+              </p>
             </label>
             <label>
               <span>Password</span>
@@ -800,9 +815,10 @@
 
       function render(data) {
         state.data = data;
-        if (data.shareLink && data.shareLink.sessionToken) {
-          state.sessionToken = data.shareLink.sessionToken;
-        }
+        state.sessionToken =
+          data && data.shareLink && data.shareLink.sessionToken
+            ? data.shareLink.sessionToken
+            : '';
         loadingPanel.classList.add('hidden');
         errorPanel.classList.add('hidden');
         content.classList.remove('hidden');
@@ -825,9 +841,12 @@
           : 'pending'
         ).toLowerCase();
         const isActive = normalizedStatus === 'active';
+        const accountReady = Boolean(donor && donor.hasPassword);
+        const hasSubscriptionId = Boolean(donor && donor.subscriptionId);
         const showSubscriptionCta = Boolean(
           checkoutAvailable &&
-            (isProspect || !donor || !donor.subscriptionId || !isActive)
+            accountReady &&
+            (!hasSubscriptionId || !isActive)
         );
         state.isProspect = isProspect;
         const limitReached = Boolean(data.inviteLimitReached);
@@ -857,19 +876,19 @@
         if (accountDescription) {
           if (isProspect) {
             accountDescription.textContent =
-              'Step one: create your login so we can prepare your subscription.';
+              'Step one: create your login so we can connect your subscription details.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
-          } else if (donor && donor.hasPassword) {
+          } else if (accountReady) {
             accountDescription.textContent =
-              'Update your login details or set a new password for the dashboard.';
+              'Update your login details or add your PayPal subscription ID below to keep everything synced.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Update account';
             }
           } else {
             accountDescription.textContent =
-              'Create your login so you can access the dashboard anytime.';
+              'Create your login so you can access the dashboard anytime and unlock subscription checkout.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
@@ -904,19 +923,7 @@
         }
 
         if (subscriptionActions) {
-          if (showSubscriptionCta) {
-            subscriptionActions.classList.remove('hidden');
-            if (subscriptionButton) {
-              subscriptionButton.disabled = false;
-              subscriptionButton.dataset.available = 'true';
-              subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            }
-            setStatusText(
-              subscriptionHint,
-              'Opens PayPal checkout in a new tab.',
-              'info'
-            );
-          } else {
+          if (!checkoutAvailable) {
             subscriptionActions.classList.add('hidden');
             if (subscriptionButton) {
               subscriptionButton.disabled = true;
@@ -924,6 +931,36 @@
               subscriptionButton.textContent = defaultSubscriptionButtonLabel;
             }
             setStatusText(subscriptionHint, '', null);
+          } else {
+            subscriptionActions.classList.remove('hidden');
+            let hintMessage = '';
+            let hintTone = 'info';
+            if (showSubscriptionCta) {
+              if (subscriptionButton) {
+                subscriptionButton.disabled = false;
+                subscriptionButton.dataset.available = 'true';
+                subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+              }
+              hintMessage = 'Opens PayPal checkout in a new tab.';
+            } else {
+              if (subscriptionButton) {
+                subscriptionButton.disabled = true;
+                subscriptionButton.dataset.available = 'false';
+                subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+              }
+              if (!accountReady) {
+                hintMessage =
+                  'Create or update your account above to unlock PayPal checkout.';
+              } else if (!isActive && hasSubscriptionId) {
+                hintMessage =
+                  'We are waiting for PayPal to confirm your subscription. This usually updates shortly.';
+              } else {
+                hintMessage =
+                  'Your subscription is already active—no checkout needed.';
+                hintTone = 'success';
+              }
+            }
+            setStatusText(subscriptionHint, hintMessage, hintTone);
           }
         }
 
@@ -935,6 +972,10 @@
           } else if (isProspect) {
             actionStatus.textContent =
               'Finish setting up your account to unlock invite generation.';
+            actionStatus.className = 'status-text info';
+          } else if (!accountReady) {
+            actionStatus.textContent =
+              'Create your dashboard password above to unlock invite generation.';
             actionStatus.className = 'status-text info';
           } else if (hasSevereIssue) {
             actionStatus.textContent =
@@ -1098,6 +1139,24 @@
 
         const donor = state.data && state.data.donor;
         const prospect = state.data && state.data.prospect;
+
+        if (!donor) {
+          setStatusText(
+            subscriptionHint,
+            'Create your account above to unlock PayPal checkout.',
+            'error'
+          );
+          return;
+        }
+
+        if (!donor.hasPassword) {
+          setStatusText(
+            subscriptionHint,
+            'Set up your dashboard password above to unlock PayPal checkout.',
+            'error'
+          );
+          return;
+        }
 
         const emailSource = (accountEmailInput && accountEmailInput.value.trim())
           || (donor && donor.email)
