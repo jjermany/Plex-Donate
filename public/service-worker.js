@@ -1,6 +1,17 @@
 const CACHE_NAME = 'plex-donate-cache-v2';
 const CORE_ASSETS = ['/', '/index.html', '/dashboard.html', '/share.html', '/manifest.webmanifest'];
-const OPTIONAL_ASSETS = [];
+const OPTIONAL_ASSETS = [
+  '/icons/plex-donate-android-any-144.png',
+  '/icons/plex-donate-android-any-192.png',
+  '/icons/plex-donate-android-any-512.png',
+  '/icons/plex-donate-android-maskable-192.png',
+  '/icons/plex-donate-android-maskable-512.png',
+  '/icons/plex-donate-ios-120.png',
+  '/icons/plex-donate-ios-152.png',
+  '/icons/plex-donate-ios-167.png',
+  '/icons/plex-donate-ios-180.png',
+  '/icons/plex-donate-ios-1024.png'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
