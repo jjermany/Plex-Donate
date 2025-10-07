@@ -168,6 +168,13 @@
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
+        #account-form {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        #account-form #account-subscription-row,
+        #account-form .form-actions {
+          grid-column: 1 / -1;
+        }
       }
       .muted {
         color: rgba(203, 213, 225, 0.8);
@@ -293,6 +300,9 @@
       form {
         margin-top: 20px;
       }
+      #account-form {
+        align-items: start;
+      }
       label {
         display: grid;
         gap: 6px;
@@ -310,6 +320,8 @@
         font-size: 1rem;
         color: #e2e8f0;
         transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        font-family: inherit;
+        line-height: 1.45;
       }
       input[type='email']:focus,
       input[type='text']:focus,
@@ -317,6 +329,9 @@
         outline: none;
         border-color: rgba(165, 180, 252, 0.8);
         box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+      }
+      input::placeholder {
+        color: rgba(148, 163, 184, 0.9);
       }
       button {
         appearance: none;
