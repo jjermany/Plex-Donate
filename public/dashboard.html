@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050818" />
+    <meta name="application-name" content="Plex Donate" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Plex Donate" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAYAAAD0eNT6AAAED0lEQVR4nO3BMQEAAADCoPVPbQdvoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA4DcC8AAB2WfxiAAAAABJRU5ErkJggg==" />
     <title>Plex Donate Dashboard</title>
     <style>
       :root {
@@ -613,6 +619,21 @@
                   autocomplete="name"
                 />
               </label>
+              <label>
+                <span>PayPal subscription ID</span>
+                <input
+                  id="profile-subscription"
+                  type="text"
+                  placeholder="Starts with I-..."
+                  autocomplete="off"
+                  inputmode="text"
+                  spellcheck="false"
+                />
+                <p class="helper-text">
+                  Already supporting the server? Paste your PayPal subscription ID to
+                  link it to this account.
+                </p>
+              </label>
               <div class="cta-actions">
                 <button id="profile-save" type="submit" class="button-primary">
                   Save changes
@@ -867,6 +888,7 @@
       const profileForm = document.getElementById('profile-form');
       const profileEmail = document.getElementById('profile-email');
       const profileName = document.getElementById('profile-name');
+      const profileSubscription = document.getElementById('profile-subscription');
       const profileStatus = document.getElementById('profile-status');
       const profileSave = document.getElementById('profile-save');
       const passwordForm = document.getElementById('password-form');
@@ -967,13 +989,17 @@
             break;
           case 'pending':
             tone = 'info';
-            if (showSubscriptionCta) {
-              message = 'Start your PayPal subscription to activate your membership.';
-            } else if (donor && donor.subscriptionId) {
+            if (!donor || !donor.subscriptionId) {
+              if (showSubscriptionCta) {
+                message =
+                  'Start your PayPal subscription above or paste an existing subscription ID below to activate your membership.';
+              } else {
+                message =
+                  'Already subscribed? Add your PayPal subscription ID below so we can link it to your account.';
+              }
+            } else {
               message =
                 'We are waiting for PayPal to confirm your first payment. Check PayPal for any required steps.';
-            } else {
-              message = 'Add a subscription using the button below to finish setting up your membership.';
             }
             break;
           case 'cancelled':
@@ -1130,12 +1156,14 @@
         }
 
         if (stepSubscriptionNote) {
-          if (!subscriptionStarted && showSubscriptionCta) {
-            stepSubscriptionNote.textContent =
-              'Use the PayPal button above to kick off your membership.';
-          } else if (!subscriptionStarted && !showSubscriptionCta) {
-            stepSubscriptionNote.textContent =
-              'Subscription checkout is unavailable right now. Contact the server admin for help.';
+          if (!subscriptionStarted) {
+            if (showSubscriptionCta) {
+              stepSubscriptionNote.textContent =
+                'Use the PayPal button above or paste your subscription ID below to kick off your membership.';
+            } else {
+              stepSubscriptionNote.textContent =
+                'Paste your PayPal subscription ID below once you have it and we will link your membership automatically.';
+            }
           } else if (!subscriptionComplete) {
             stepSubscriptionNote.textContent =
               'We are waiting for PayPal to confirm your first payment. This usually takes just a moment.';
@@ -1209,6 +1237,9 @@
           }
           if (passwordSave) {
             passwordSave.disabled = false;
+          }
+          if (profileSubscription) {
+            profileSubscription.value = '';
           }
           return;
         }
@@ -1291,6 +1322,9 @@
 
         profileEmail.value = donor.email || '';
         profileName.value = donor.name || '';
+        if (profileSubscription) {
+          profileSubscription.value = donor.subscriptionId || '';
+        }
         if (passwordForm) {
           passwordForm.reset();
         }
@@ -1624,6 +1658,9 @@
             body: JSON.stringify({
               email: profileEmail.value.trim(),
               name: profileName.value.trim(),
+              subscriptionId: profileSubscription
+                ? profileSubscription.value.trim()
+                : '',
             }),
           });
           const payload = await response.json();
