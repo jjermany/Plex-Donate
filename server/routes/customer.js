@@ -111,7 +111,7 @@ function mapPaypalSubscriptionStatus(status) {
     case 'approval_pending':
       return 'pending';
     case 'approved':
-      return 'active';
+      return 'approved';
     case 'active':
     case 'suspended':
     case 'cancelled':
