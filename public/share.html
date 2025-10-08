@@ -521,11 +521,31 @@
             <p class="muted">
               Follow these steps in order to activate your library access.
             </p>
+            <p class="muted">
+              <strong>
+                Before continuing, create or recover your Plex account at
+                <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
+                  >plex.tv</a
+                > so you can link it here—checkout stays disabled until Plex is ready.
+              </strong>
+            </p>
             <ul class="support-list">
-              <li>Create or update your account with the email you'll use for streaming.</li>
-              <li>Complete the Plex authentication prompt to link your Plex identity.</li>
-              <li>Start your PayPal donation or paste your subscription ID so we can verify billing.</li>
-              <li>Generate your Wizarr invite once your donation is active to unlock Plex and the rest of our library.</li>
+              <li>
+                Start by creating or recovering your Plex account and saving your Plex Donate
+                login with the same streaming email.
+              </li>
+              <li>
+                Complete the Plex authentication prompt to link that Plex identity—this unlocks
+                the subscription checkout.
+              </li>
+              <li>
+                Once Plex is linked, start your PayPal donation or paste your subscription ID so
+                we can verify billing.
+              </li>
+              <li>
+                Generate your Wizarr invite once your donation is active to unlock Plex and the
+                rest of our library.
+              </li>
             </ul>
             <div class="cta">
               <h3>Already subscribed?</h3>
@@ -541,7 +561,8 @@
         <section class="surface" id="account-panel">
           <h2>Step 1 · Create your account</h2>
           <p id="account-description" class="muted">
-            We'll tailor the next steps once we know who you are.
+            Make sure you've created or recovered your Plex account, then save your Plex Donate
+            login with the same email so we can guide you through linking.
           </p>
           <form id="account-form" class="grid">
             <label>
@@ -608,10 +629,9 @@
         <section class="surface" id="invite-panel">
           <h2>Step 2 · Link Plex & claim your access</h2>
           <p class="muted" id="invite-description">
-            Once your Plex account is linked and your donation is active, you
-            can generate a fresh Wizarr invite every month. Choose the email you
-            want to use for streaming access and we'll highlight when the next
-            link unlocks.
+            After Plex is linked and your donation is confirmed, you can generate a fresh Wizarr
+            invite every month. Choose the email you want to use for streaming access and we'll
+            highlight when the next link unlocks.
           </p>
           <form id="invite-form">
             <label>
@@ -1012,13 +1032,13 @@
         if (accountDescription) {
           if (isProspect) {
             accountDescription.textContent =
-              'Step one: create your login so you can link Plex and connect your subscription details.';
+              'Step one: create or recover your Plex account, then save your Plex Donate login so you can link Plex before subscribing.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
           } else if (accountReady && !plexLinked) {
             accountDescription.textContent =
-              'Great! Stay signed in and complete the Plex authentication prompt to move on to checkout.';
+              'Great! Stay signed in and complete the Plex authentication prompt first—checkout unlocks only after Plex is linked.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Update account';
             }
@@ -1030,7 +1050,7 @@
             }
           } else {
             accountDescription.textContent =
-              'Create your login so you can access the dashboard anytime and unlock subscription checkout.';
+              'Create or recover your Plex account, then save your Plex Donate login so you can access the dashboard and link Plex before checkout.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
