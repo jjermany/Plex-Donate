@@ -34,7 +34,7 @@ cp .env.example .env   # adjust only the core app settings
 npm run dev            # run locally with nodemon
 ```
 
-After the server is running visit `http://localhost:3000`, sign in with the admin password from `.env`, and fill in the integration credentials directly from the dashboard.
+After the server is running visit `http://localhost:3000`, sign in with the admin username and password, and fill in the integration credentials directly from the dashboard. The default username is `admin`. On first start Plex Donate generates a secure temporary password and prints it to the server log so you can sign in and change it from the dashboard.
 
 ### Environment variables
 
@@ -46,10 +46,12 @@ Only the core application settings live in `.env` now:
 | `PORT` | Port the Express server listens on. |
 | `SESSION_SECRET` | (Optional) Override the generated admin session secret for the dashboard. |
 | `SESSION_COOKIE_SECURE` | Set to `true` to mark the admin session cookie as secure (requires HTTPS). Defaults to `false`. |
-| `ADMIN_PASSWORD` | Password required to access the admin dashboard. |
+| `ADMIN_USERNAME` | (Optional) Username for the admin dashboard. Defaults to `admin`. |
 | `DATABASE_FILE` | Location of the SQLite database file. |
 
 When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections.
+
+After signing in you can manage the admin username and password directly from the dashboard using the **Admin account** panel. Password updates require at least 12 characters.
 
 ### Configure integrations
 

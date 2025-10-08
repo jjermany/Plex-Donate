@@ -225,6 +225,163 @@
         backdrop-filter: blur(14px);
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .login-panel {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .login-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+            circle at top right,
+            rgba(99, 102, 241, 0.25),
+            transparent 55%
+          ),
+          radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.2), transparent 60%);
+        pointer-events: none;
+        opacity: 0.85;
+      }
+
+      .login-panel > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .login-panel h2 {
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .login-description {
+        margin-top: 0;
+        margin-bottom: 20px;
+        color: var(--text-muted);
+      }
+
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .input-shell {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(56, 189, 248, 0.18));
+        padding: 6px 18px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 22px 40px -26px rgba(79, 70, 229, 0.65);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      }
+
+      :root[data-theme='dark'] .input-shell {
+        border-color: rgba(129, 140, 248, 0.45);
+        background: linear-gradient(135deg, rgba(79, 70, 229, 0.38), rgba(14, 165, 233, 0.22));
+        box-shadow: 0 22px 44px -28px rgba(15, 23, 42, 0.85);
+      }
+
+      .input-shell:focus-within {
+        border-color: rgba(79, 70, 229, 0.85);
+        box-shadow: 0 26px 48px -24px rgba(79, 70, 229, 0.75);
+        transform: translateY(-1px);
+      }
+
+      .input-shell .input-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.22);
+        color: var(--text-muted);
+        font-size: 1rem;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+
+      :root[data-theme='dark'] .input-shell .input-icon {
+        background: rgba(15, 23, 42, 0.6);
+        color: #cbd5f5;
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.35);
+      }
+
+      .input-shell input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: inherit;
+        padding: 10px 0;
+        font-size: 1.05rem;
+        font-weight: 500;
+        outline: none;
+      }
+
+      .input-shell input::placeholder {
+        color: var(--text-muted-soft);
+        font-weight: 400;
+      }
+
+      .input-shell button {
+        margin-left: auto;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        border-radius: 10px;
+        background: rgba(15, 23, 42, 0.08);
+        color: var(--text-muted);
+        transition: background 0.2s ease, color 0.2s ease;
+      }
+
+      :root[data-theme='dark'] .input-shell button {
+        background: rgba(148, 163, 184, 0.18);
+        color: #e2e8f0;
+      }
+
+      .input-shell button:hover:not(:disabled) {
+        background: rgba(79, 70, 229, 0.18);
+        color: var(--button-primary-color);
+      }
+
+      .login-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .login-actions button {
+        width: 100%;
+      }
+
+      .form-status-text {
+        margin: 16px 0 0;
+        color: var(--form-status);
+      }
+
+      .form-status-text.error {
+        color: var(--form-status-error);
+      }
+
+      .form-status-text.success {
+        color: var(--form-status-success);
+      }
+
       label {
         display: block;
         font-weight: 600;
@@ -489,13 +646,26 @@
       .settings-form input[type='url'],
       .settings-form input[type='number'],
       .settings-form input[type='email'] {
-        border-radius: 8px;
-        border: 1px solid var(--input-border);
-        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        padding: 12px 14px;
         font-size: 0.95rem;
         box-sizing: border-box;
         background: var(--input-background);
         color: var(--text-primary);
+        box-shadow: 0 18px 36px -28px rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(12px);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        outline: none;
+      }
+
+      .settings-form input[type='text']:focus,
+      .settings-form input[type='password']:focus,
+      .settings-form input[type='url']:focus,
+      .settings-form input[type='number']:focus,
+      .settings-form input[type='email']:focus {
+        border-color: rgba(79, 70, 229, 0.8);
+        box-shadow: 0 22px 44px -28px rgba(79, 70, 229, 0.65);
       }
 
       .settings-form label span.help {
@@ -757,18 +927,88 @@
         </div>
       </header>
 
-      <section id="login-panel" class="panel">
-        <h2>Admin Sign in</h2>
-        <p>Enter the admin password defined in your <code>.env</code> file.</p>
-        <form id="login-form">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-          <button type="submit" style="margin-top: 16px;">Sign in</button>
+      <section id="login-panel" class="panel login-panel">
+        <h2>Admin sign in</h2>
+        <p class="login-description" id="login-help">
+          Use the admin username and password configured for Plex Donate. The default username is
+          <code>admin</code>. On first run a temporary password is written to your server logs.
+        </p>
+        <form id="login-form" class="login-form" autocomplete="on">
+          <label class="visually-hidden" for="username">Username</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">👤</span>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              placeholder="Admin username"
+              required
+            />
+          </div>
+          <label class="visually-hidden" for="password">Password</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">🔒</span>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Password"
+              required
+            />
+            <button type="button" class="secondary" id="toggle-password-visibility" aria-pressed="false">
+              Show
+            </button>
+          </div>
+          <div class="login-actions">
+            <button id="login-submit" type="submit">Sign in</button>
+          </div>
         </form>
-        <p id="status-message"></p>
+        <p id="status-message" class="form-status-text"></p>
       </section>
 
       <div id="dashboard" class="hidden">
+        <section class="panel" id="admin-account-panel">
+          <h2 style="margin-top:0;">Admin account</h2>
+          <p class="muted-text" id="admin-account-description">
+            Update the username and password used to access this dashboard. Password changes require at least 12 characters.
+          </p>
+          <form id="admin-credentials-form" class="settings-form">
+            <div class="field-grid">
+              <label>
+                Username
+                <input name="username" type="text" autocomplete="username" placeholder="Admin username" />
+              </label>
+              <label>
+                New password
+                <input
+                  name="newPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Leave blank to keep current"
+                />
+              </label>
+              <label>
+                Confirm new password
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Repeat the new password"
+                />
+              </label>
+            </div>
+            <label>
+              Current password
+              <input name="currentPassword" type="password" autocomplete="current-password" required />
+            </label>
+            <p class="form-status" data-status-for="admin-credentials"></p>
+            <div class="form-actions">
+              <button type="submit">Save admin credentials</button>
+            </div>
+          </form>
+        </section>
         <section class="panel" id="prospect-share-panel">
           <h2 style="margin-top:0;">Invite a new supporter</h2>
           <p class="muted-text" style="margin:0 0 16px;">
@@ -1170,9 +1410,18 @@
 
     <script>
       const loginPanel = document.getElementById('login-panel');
+      const loginForm = document.getElementById('login-form');
+      const loginUsernameInput = document.getElementById('username');
+      const loginPasswordInput = document.getElementById('password');
+      const loginSubmitButton = document.getElementById('login-submit');
+      const loginHelp = document.getElementById('login-help');
+      const togglePasswordVisibilityButton = document.getElementById('toggle-password-visibility');
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
+      const adminAccountPanel = document.getElementById('admin-account-panel');
+      const adminCredentialsForm = document.getElementById('admin-credentials-form');
+      const adminAccountDescription = document.getElementById('admin-account-description');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
@@ -1353,7 +1602,19 @@
         paypalPlanError: '',
         paypalPlanManageUrl: '',
         paypalPlanLoading: false,
+        adminUsername: 'admin',
       };
+
+      function setLoginStatus(message = '', stateAttr = '') {
+        if (!statusMessage) {
+          return;
+        }
+        statusMessage.textContent = message;
+        statusMessage.classList.remove('error', 'success');
+        if (stateAttr) {
+          statusMessage.classList.add(stateAttr);
+        }
+      }
 
       const AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
       let autoRefreshTimerId = null;
@@ -1634,14 +1895,34 @@
         return data;
       }
 
+      async function ensureCsrfToken() {
+        if (csrfToken) {
+          return csrfToken;
+        }
+        try {
+          const data = await api('/api/admin/session');
+          csrfToken = data.csrfToken || csrfToken;
+          state.authenticated = Boolean(data.authenticated);
+          if (data.adminUsername) {
+            state.adminUsername = data.adminUsername;
+          }
+          render();
+          return csrfToken;
+        } catch (err) {
+          console.error('Failed to refresh CSRF token', err);
+          throw err;
+        }
+      }
+
       function render() {
+        renderAdminAccountPanel();
         renderProspectSharePanel();
         renderShareLinks();
         if (state.authenticated) {
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
           logoutButton.classList.remove('hidden');
-          statusMessage.textContent = '';
+          setLoginStatus('', '');
           renderSubscribers();
           renderEvents();
           renderSettings();
@@ -1649,6 +1930,14 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
+          setLoginStatus('', '');
+          if (loginHelp) {
+            loginHelp.innerHTML =
+              'Use your Plex Donate admin username and password to sign in. The default username is <code>admin</code>. On first run a temporary password is written to your server logs.';
+          }
+          if (loginUsernameInput && document.activeElement !== loginUsernameInput) {
+            loginUsernameInput.value = state.adminUsername || '';
+          }
           if (prospectSharePanel) {
             prospectSharePanel.classList.add('hidden');
           }
@@ -2247,6 +2536,55 @@
       }
     }
 
+    function renderAdminAccountPanel() {
+      if (!adminAccountPanel) {
+        return;
+      }
+      if (!state.authenticated) {
+        adminAccountPanel.classList.add('hidden');
+        if (adminCredentialsForm) {
+          adminCredentialsForm.reset();
+        }
+        if (adminAccountDescription) {
+          adminAccountDescription.textContent =
+            'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
+        }
+        return;
+      }
+
+      adminAccountPanel.classList.remove('hidden');
+
+      if (adminAccountDescription) {
+        adminAccountDescription.textContent =
+          'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
+      }
+
+      if (adminCredentialsForm) {
+        const usernameInput = adminCredentialsForm.querySelector("input[name='username']");
+        if (usernameInput && document.activeElement !== usernameInput) {
+          usernameInput.value = state.adminUsername || '';
+        }
+
+        adminCredentialsForm.querySelectorAll('input').forEach((input) => {
+          input.disabled = false;
+        });
+      }
+    }
+
+    async function loadAdminAccount() {
+      if (!state.authenticated) {
+        return;
+      }
+      try {
+        const response = await api('/api/admin/account');
+        if (response && response.username) {
+          state.adminUsername = response.username;
+        }
+      } catch (err) {
+        console.error('Failed to load admin account details', err);
+      }
+    }
+
     async function loadDashboardData() {
       if (dashboardDataPromise) {
         return dashboardDataPromise;
@@ -2254,6 +2592,7 @@
 
       dashboardDataPromise = (async () => {
         try {
+          await loadAdminAccount();
           try {
             const donorsResponse = await api('/api/admin/subscribers');
             state.donors = donorsResponse.donors || [];
@@ -2297,10 +2636,15 @@
     }
 
       async function checkSession() {
-        try {
-          const data = await api('/api/admin/session');
-          csrfToken = data.csrfToken;
-          state.authenticated = data.authenticated;
+      try {
+        const data = await api('/api/admin/session');
+        csrfToken = data.csrfToken;
+        state.authenticated = data.authenticated;
+        if (data.adminUsername) {
+          state.adminUsername = data.adminUsername;
+        } else if (!state.authenticated && !state.adminUsername) {
+          state.adminUsername = 'admin';
+        }
           if (state.authenticated) {
             await loadDashboardData();
             startDashboardAutoRefresh();
@@ -2425,29 +2769,57 @@
         });
       }
 
-      document.getElementById('login-form').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const password = document.getElementById('password').value.trim();
-        if (!password) {
-          statusMessage.textContent = 'Password is required';
-          return;
-        }
-        statusMessage.textContent = 'Signing in…';
-        try {
-          const response = await api('/api/admin/login', {
-            method: 'POST',
-            body: { password },
-          });
-          csrfToken = response.csrfToken;
-          state.authenticated = true;
-          document.getElementById('password').value = '';
-          await loadDashboardData();
-          startDashboardAutoRefresh();
-          statusMessage.textContent = '';
-        } catch (err) {
-          statusMessage.textContent = err.message;
-        }
-      });
+      if (togglePasswordVisibilityButton && loginPasswordInput) {
+        togglePasswordVisibilityButton.addEventListener('click', () => {
+          const shouldReveal = loginPasswordInput.type === 'password';
+          loginPasswordInput.type = shouldReveal ? 'text' : 'password';
+          togglePasswordVisibilityButton.textContent = shouldReveal ? 'Hide' : 'Show';
+          togglePasswordVisibilityButton.setAttribute('aria-pressed', shouldReveal ? 'true' : 'false');
+        });
+      }
+
+      if (loginForm) {
+        loginForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!loginUsernameInput || !loginPasswordInput) {
+            return;
+          }
+          const username = loginUsernameInput.value.trim();
+          const password = loginPasswordInput.value;
+          if (!username) {
+            setLoginStatus('Username is required', 'error');
+            return;
+          }
+          if (!password) {
+            setLoginStatus('Password is required', 'error');
+            return;
+          }
+          setLoginStatus('Signing in…');
+          if (loginSubmitButton) {
+            loginSubmitButton.disabled = true;
+          }
+          try {
+            await ensureCsrfToken();
+            const response = await api('/api/admin/login', {
+              method: 'POST',
+              body: { username, password },
+            });
+            csrfToken = response.csrfToken;
+            state.authenticated = true;
+            state.adminUsername = response.adminUsername || username;
+            loginPasswordInput.value = '';
+            await loadDashboardData();
+            startDashboardAutoRefresh();
+            setLoginStatus('');
+          } catch (err) {
+            setLoginStatus(err.message || 'Sign in failed', 'error');
+          } finally {
+            if (loginSubmitButton) {
+              loginSubmitButton.disabled = false;
+            }
+          }
+        });
+      }
 
       logoutButton.addEventListener('click', async () => {
         try {
@@ -2466,6 +2838,7 @@
           state.paypalPlanManageUrl = '';
           state.paypalPlanLoading = false;
           state.prospectShare = null;
+          state.adminUsername = 'admin';
           render();
         }
       });
@@ -2476,6 +2849,94 @@
         prospectShareForm.addEventListener('submit', async (event) => {
           event.preventDefault();
           await generateProspectShareLink({ regenerate: false });
+        });
+      }
+
+      if (adminCredentialsForm) {
+        adminCredentialsForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const usernameInput = adminCredentialsForm.querySelector("input[name='username']");
+          const currentPasswordInput = adminCredentialsForm.querySelector(
+            "input[name='currentPassword']"
+          );
+          const newPasswordInput = adminCredentialsForm.querySelector("input[name='newPassword']");
+          const confirmPasswordInput = adminCredentialsForm.querySelector(
+            "input[name='confirmPassword']"
+          );
+
+          const username = usernameInput ? usernameInput.value.trim() : '';
+          const currentPassword = currentPasswordInput ? currentPasswordInput.value : '';
+          const newPassword = newPasswordInput ? newPasswordInput.value : '';
+          const confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : '';
+
+          if (!currentPassword) {
+            setFormStatus(adminCredentialsForm, 'Current password is required.', 'error');
+            return;
+          }
+
+          if (newPassword || confirmPassword) {
+            if (newPassword !== confirmPassword) {
+              setFormStatus(adminCredentialsForm, 'New passwords do not match.', 'error');
+              return;
+            }
+            if (newPassword.trim().length < 12) {
+              setFormStatus(
+                adminCredentialsForm,
+                'New password must be at least 12 characters long.',
+                'error'
+              );
+              return;
+            }
+          }
+
+          setFormStatus(adminCredentialsForm, 'Saving…', 'pending');
+          const submitButton = adminCredentialsForm.querySelector("button[type='submit']");
+          if (submitButton) {
+            submitButton.disabled = true;
+          }
+
+          const payload = {
+            currentPassword,
+          };
+          if (username) {
+            payload.username = username;
+          }
+          if (newPassword) {
+            payload.newPassword = newPassword;
+            payload.confirmPassword = confirmPassword;
+          }
+
+          try {
+            const response = await api('/api/admin/account', {
+              method: 'PUT',
+              body: payload,
+            });
+            if (response && response.username) {
+              state.adminUsername = response.username;
+            }
+            setFormStatus(adminCredentialsForm, 'Admin credentials updated.', 'success');
+            scheduleStatusClear(adminCredentialsForm, 4000);
+            if (currentPasswordInput) {
+              currentPasswordInput.value = '';
+            }
+            if (newPasswordInput) {
+              newPasswordInput.value = '';
+            }
+            if (confirmPasswordInput) {
+              confirmPasswordInput.value = '';
+            }
+          } catch (err) {
+            setFormStatus(
+              adminCredentialsForm,
+              err && err.message ? err.message : 'Failed to update admin credentials.',
+              'error'
+            );
+          } finally {
+            if (submitButton) {
+              submitButton.disabled = false;
+            }
+            renderAdminAccountPanel();
+          }
         });
       }
 

@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_FILE = process.env.DATABASE_FILE || ':memory:';
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-test-password';
+process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
 
 const assert = require('node:assert/strict');
@@ -9,11 +9,34 @@ const express = require('express');
 const session = require('express-session');
 const fetch = require('node-fetch');
 const { test } = require('node:test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const config = require('../config');
+const TEST_ADMIN_PASSWORD = 'admin-test-password';
+const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plex-donate-session-test-'));
+config.dataDir = testDataDir;
 
 const adminRouter = require('./admin');
 const customerRouter = require('./customer');
 const { createDonor } = require('../db');
-const { hashPassword } = require('../utils/passwords');
+const { hashPassword, hashPasswordSync } = require('../utils/passwords');
+
+const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
+
+function seedAdminCredentials(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    passwordHash: hashPasswordSync(password),
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
 
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 
@@ -205,6 +228,7 @@ async function startServer(t) {
     })
   );
 
+  seedAdminCredentials();
   const address = server.address();
   const baseUrl = `http://127.0.0.1:${address.port}`;
   return new FetchAgent(baseUrl);
@@ -224,7 +248,11 @@ test('admin login regenerates the session and refreshes the CSRF token', async (
   assert.ok(initialCookie);
 
   const loginResponse = await agent.post('/api/admin/login', {
-    body: { password: process.env.ADMIN_PASSWORD, _csrf: initialToken },
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: initialToken,
+    },
   });
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();

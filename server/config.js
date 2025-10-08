@@ -30,7 +30,7 @@ const config = {
   port: Number.parseInt(process.env.PORT || '3000', 10),
   sessionSecret:
     process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex'),
-  adminPassword: process.env.ADMIN_PASSWORD || '',
+  adminUsername: process.env.ADMIN_USERNAME || 'admin',
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.env.DATABASE_FILE)
     : path.join(dataDir, 'plex-donate.db'),

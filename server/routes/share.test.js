@@ -1,12 +1,20 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_FILE = ':memory:';
-process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-test-password';
+process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const session = require('express-session');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+const config = require('../config');
+const TEST_ADMIN_PASSWORD = 'admin-test-password';
+const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plex-donate-test-data-'));
+config.dataDir = testDataDir;
 
 const shareRouter = require('./share');
 const adminRouter = require('./admin');
@@ -24,7 +32,22 @@ const settingsStore = require('../state/settings');
 const SqliteSessionStore = require('../session-store');
 const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
-const { hashPassword } = require('../utils/passwords');
+const { hashPassword, hashPasswordSync } = require('../utils/passwords');
+
+const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
+
+function seedAdminCredentials(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    passwordHash: hashPasswordSync(password),
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
 
 function createApp() {
   const app = express();
@@ -141,6 +164,7 @@ async function createAdminSession() {
   const server = await startServer(app);
 
   try {
+    seedAdminCredentials();
     const sessionResponse = await requestJson(server, 'GET', '/api/admin/session');
     assert.equal(sessionResponse.status, 200);
     let csrfToken = sessionResponse.body.csrfToken;
@@ -148,7 +172,7 @@ async function createAdminSession() {
 
     const loginResponse = await requestJson(server, 'POST', '/api/admin/login', {
       headers: { 'x-csrf-token': csrfToken },
-      body: { password: process.env.ADMIN_PASSWORD },
+      body: { username: process.env.ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD },
     });
     assert.equal(loginResponse.status, 200);
     assert.equal(loginResponse.body.success, true);
