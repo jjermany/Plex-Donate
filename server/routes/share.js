@@ -114,6 +114,23 @@ function getInviteState(donorId) {
   };
 }
 
+function needsSubscriptionRefresh(donor, subscriptionLinked) {
+  if (!donor || !(donor.subscriptionId || '').trim()) {
+    return false;
+  }
+
+  if (subscriptionLinked) {
+    return true;
+  }
+
+  const status = (donor.status || '').toString().trim().toLowerCase();
+  if (!status) {
+    return true;
+  }
+
+  return ['pending', 'approval_pending', 'approved'].includes(status);
+}
+
 function buildShareResponse({
   shareLink,
   donor,
@@ -752,7 +769,12 @@ router.post(
         subscriptionLinked = true;
       }
 
-      if (subscriptionLinked) {
+      const shouldRefreshSubscription = needsSubscriptionRefresh(
+        activeDonor,
+        subscriptionLinked
+      );
+
+      if (shouldRefreshSubscription) {
         activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
           shareLinkId: shareLink.id,
           context: 'share-existing-account',
@@ -825,7 +847,12 @@ router.post(
         subscriptionLinked = true;
       }
 
-      if (subscriptionLinked) {
+      const shouldRefreshSubscription = needsSubscriptionRefresh(
+        activeDonor,
+        subscriptionLinked
+      );
+
+      if (shouldRefreshSubscription) {
         activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
           shareLinkId: shareLink.id,
           context: 'share-prospect-promotion',

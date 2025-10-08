@@ -456,6 +456,67 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     }
   });
 
+  await t.test(
+    'pending donor subscription refreshes when completing share account setup',
+    async (t) => {
+      resetDatabase();
+      const app = createApp();
+      const server = await startServer(app);
+
+      const paypalMock = t.mock.method(
+        paypalService,
+        'getSubscription',
+        async () => ({
+          status: 'ACTIVE',
+          billing_info: {
+            last_payment: { time: '2024-01-02T03:04:05.000Z' },
+          },
+        })
+      );
+
+      try {
+        const donor = createDonor({
+          email: 'refresh@example.com',
+          name: 'Refresh Donor',
+          subscriptionId: 'I-REFRESH',
+          status: 'pending',
+        });
+        const shareLink = createOrUpdateShareLink({
+          donorId: donor.id,
+          token: 'refresh-token',
+          sessionToken: 'refresh-session',
+        });
+
+        const response = await requestJson(
+          server,
+          'POST',
+          `/share/${shareLink.token}/account`,
+          {
+            headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+            body: {
+              email: 'refresh@example.com',
+              name: 'Refresh Donor',
+              password: 'supersecure',
+              confirmPassword: 'supersecure',
+              sessionToken: shareLink.sessionToken,
+            },
+          }
+        );
+
+        assert.equal(response.status, 200);
+        assert.ok(response.body.donor);
+        assert.equal(response.body.donor.status, 'active');
+        assert.equal(
+          response.body.donor.lastPaymentAt,
+          '2024-01-02T03:04:05.000Z'
+        );
+        assert.equal(paypalMock.mock.callCount(), 1);
+      } finally {
+        await server.close();
+      }
+    }
+  );
+
   await t.test('suspended donor can view share link but invite remains blocked', async () => {
     resetDatabase();
     const app = createApp();
