@@ -57,9 +57,31 @@ function buildSubscriberDetails(primary = {}, fallback = {}) {
   return details;
 }
 
+function mapPaypalSubscriptionStatus(status) {
+  const normalized = (status || '').toString().trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  switch (normalized) {
+    case 'approval_pending':
+      return 'pending';
+    case 'approved':
+      return 'active';
+    case 'active':
+    case 'suspended':
+    case 'cancelled':
+    case 'expired':
+      return normalized;
+    default:
+      return normalized;
+  }
+}
+
 module.exports = {
   getPaypalEnvironment,
   getSubscriptionCheckoutUrl,
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
+  mapPaypalSubscriptionStatus,
 };
