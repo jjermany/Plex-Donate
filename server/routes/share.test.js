@@ -18,6 +18,7 @@ config.dataDir = testDataDir;
 
 const shareRouter = require('./share');
 const adminRouter = require('./admin');
+const customerRouter = require('./customer');
 const {
   db,
   createDonor,
@@ -33,6 +34,7 @@ const SqliteSessionStore = require('../session-store');
 const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
+const { ensureSessionToken } = require('../utils/session-tokens');
 
 const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
 
@@ -53,6 +55,46 @@ function createApp() {
   const app = express();
   app.use(express.json());
   app.use('/share', shareRouter);
+  return app;
+}
+
+function createCustomerApp() {
+  const app = express();
+  const store = new SqliteSessionStore({ db, ttl: 1000 * 60 * 60 });
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET,
+      resave: false,
+      saveUninitialized: false,
+      store,
+    })
+  );
+  app.use(express.json());
+  app.post('/test/login', (req, res) => {
+    const rawId =
+      req.body && Object.prototype.hasOwnProperty.call(req.body, 'customerId')
+        ? req.body.customerId
+        : null;
+    let parsedId = null;
+    if (typeof rawId === 'number' && Number.isFinite(rawId)) {
+      parsedId = rawId;
+    } else if (typeof rawId === 'string' && rawId.trim()) {
+      const numeric = Number.parseInt(rawId, 10);
+      if (Number.isFinite(numeric)) {
+        parsedId = numeric;
+      }
+    }
+
+    if (parsedId) {
+      req.session.customerId = parsedId;
+    } else {
+      delete req.session.customerId;
+    }
+
+    const sessionToken = ensureSessionToken(req);
+    res.json({ success: Boolean(parsedId), sessionToken });
+  });
+  app.use('/customer', customerRouter);
   return app;
 }
 
@@ -599,6 +641,224 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(mock.mock.callCount(), 1);
     } finally {
       mock.mock.restore();
+      await server.close();
+    }
+  });
+
+  await t.test('share invite enforces cooldown window', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    const inviteCalls = [];
+    let inviteCounter = 0;
+    const originalCreateInvite = wizarrService.createInvite;
+    wizarrService.createInvite = async (payload) => {
+      inviteCounter += 1;
+      inviteCalls.push(payload);
+      return {
+        inviteCode: `SHARE-${inviteCounter}`,
+        inviteUrl: `https://wizarr/invite/SHARE-${inviteCounter}`,
+      };
+    };
+
+    try {
+      const firstInviteEmail = 'friend-one@example.com';
+      const secondInviteEmail = 'friend-two@example.com';
+      const donor = createDonor({
+        email: 'cooldown@example.com',
+        name: 'Cooldown Donor',
+        subscriptionId: 'I-COOLDOWN',
+        status: 'active',
+        plexAccountId: 'plex-cooldown',
+        plexEmail: 'cooldown@example.com',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'cooldown-token',
+        sessionToken: 'cooldown-session',
+      });
+
+      const firstResponse = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: firstInviteEmail,
+            name: 'Friend One',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(firstResponse.status, 200);
+      assert.equal(firstResponse.body.invite.recipientEmail, firstInviteEmail);
+      assert.equal(firstResponse.body.inviteLimitReached, true);
+      assert.equal(typeof firstResponse.body.nextInviteAvailableAt, 'string');
+      const firstInviteId = firstResponse.body.invite.id;
+      assert.ok(firstInviteId);
+      const firstNextAvailable = firstResponse.body.nextInviteAvailableAt;
+
+      const blocked = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: secondInviteEmail,
+            name: 'Friend Two',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(blocked.status, 409);
+      assert.ok(blocked.body.payload);
+      assert.equal(blocked.body.payload.inviteLimitReached, true);
+      assert.equal(blocked.body.payload.nextInviteAvailableAt, firstNextAvailable);
+
+      const staleTimestamp = new Date(
+        Date.now() - 31 * 24 * 60 * 60 * 1000
+      ).toISOString();
+      db.prepare('UPDATE invites SET created_at = ? WHERE id = ?').run(
+        staleTimestamp,
+        firstInviteId
+      );
+
+      const allowed = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: secondInviteEmail,
+            name: 'Friend Two',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(allowed.status, 200);
+      assert.ok(allowed.body.invite);
+      assert.notEqual(allowed.body.invite.id, firstInviteId);
+      assert.equal(allowed.body.invite.recipientEmail, secondInviteEmail);
+      assert.equal(allowed.body.inviteLimitReached, true);
+      assert.equal(typeof allowed.body.nextInviteAvailableAt, 'string');
+      assert.ok(Date.parse(allowed.body.nextInviteAvailableAt) > Date.now());
+
+      assert.equal(inviteCalls.length, 2);
+    } finally {
+      wizarrService.createInvite = originalCreateInvite;
+      await server.close();
+    }
+  });
+
+  await t.test('customer invite enforces cooldown window', async () => {
+    resetDatabase();
+    const app = createCustomerApp();
+    const server = await startServer(app);
+
+    const inviteCalls = [];
+    let inviteCounter = 0;
+    const originalCreateInvite = wizarrService.createInvite;
+    wizarrService.createInvite = async (payload) => {
+      inviteCounter += 1;
+      inviteCalls.push(payload);
+      return {
+        inviteCode: `CUSTOMER-${inviteCounter}`,
+        inviteUrl: `https://wizarr/invite/CUSTOMER-${inviteCounter}`,
+      };
+    };
+
+    try {
+      const firstInviteEmail = 'friend-one@example.com';
+      const secondInviteEmail = 'friend-two@example.com';
+      const donor = createDonor({
+        email: 'customer@example.com',
+        name: 'Customer Donor',
+        subscriptionId: 'I-CUSTOMER',
+        status: 'active',
+        plexAccountId: 'plex-customer',
+        plexEmail: 'customer@example.com',
+      });
+
+      const loginResponse = await requestJson(server, 'POST', '/test/login', {
+        body: { customerId: donor.id },
+      });
+      assert.equal(loginResponse.status, 200);
+      assert.ok(loginResponse.body.sessionToken);
+
+      const firstResponse = await requestJson(
+        server,
+        'POST',
+        '/customer/invite',
+        {
+          body: {
+            email: firstInviteEmail,
+            name: 'Friend One',
+          },
+        }
+      );
+
+      assert.equal(firstResponse.status, 200);
+      assert.equal(firstResponse.body.invite.recipientEmail, firstInviteEmail);
+      assert.equal(firstResponse.body.inviteLimitReached, true);
+      assert.equal(typeof firstResponse.body.nextInviteAvailableAt, 'string');
+      const firstInviteId = firstResponse.body.invite.id;
+      const firstNextAvailable = firstResponse.body.nextInviteAvailableAt;
+
+      const blocked = await requestJson(
+        server,
+        'POST',
+        '/customer/invite',
+        {
+          body: {
+            email: secondInviteEmail,
+            name: 'Friend Two',
+          },
+        }
+      );
+
+      assert.equal(blocked.status, 409);
+      assert.ok(blocked.body.payload);
+      assert.equal(blocked.body.payload.inviteLimitReached, true);
+      assert.equal(blocked.body.payload.nextInviteAvailableAt, firstNextAvailable);
+
+      const staleTimestamp = new Date(
+        Date.now() - 31 * 24 * 60 * 60 * 1000
+      ).toISOString();
+      db.prepare('UPDATE invites SET created_at = ? WHERE id = ?').run(
+        staleTimestamp,
+        firstInviteId
+      );
+
+      const allowed = await requestJson(
+        server,
+        'POST',
+        '/customer/invite',
+        {
+          body: {
+            email: secondInviteEmail,
+            name: 'Friend Two',
+          },
+        }
+      );
+
+      assert.equal(allowed.status, 200);
+      assert.ok(allowed.body.invite);
+      assert.notEqual(allowed.body.invite.id, firstInviteId);
+      assert.equal(allowed.body.invite.recipientEmail, secondInviteEmail);
+      assert.equal(allowed.body.inviteLimitReached, true);
+      assert.equal(typeof allowed.body.nextInviteAvailableAt, 'string');
+      assert.ok(Date.parse(allowed.body.nextInviteAvailableAt) > Date.now());
+
+      assert.equal(inviteCalls.length, 2);
+    } finally {
+      wizarrService.createInvite = originalCreateInvite;
       await server.close();
     }
   });

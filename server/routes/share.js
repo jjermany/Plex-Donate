@@ -24,6 +24,10 @@ const logger = require('../utils/logger');
 const { hashPassword, isPasswordStrong } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
 const {
+  evaluateInviteCooldown,
+  getInviteCreatedAtMs,
+} = require('../utils/invite-cooldown');
+const {
   getSubscriptionCheckoutUrl,
   getPaypalEnvironment,
   isSubscriptionCheckoutConfigured,
@@ -65,20 +69,45 @@ function requiresPlexRelink(donor) {
   return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
 }
 
+function getMostRecentInvite(activeInvite, latestInvite) {
+  if (activeInvite && latestInvite) {
+    const activeCreatedAt = getInviteCreatedAtMs(activeInvite);
+    const latestCreatedAt = getInviteCreatedAtMs(latestInvite);
+
+    if (Number.isFinite(activeCreatedAt) && Number.isFinite(latestCreatedAt)) {
+      return activeCreatedAt >= latestCreatedAt ? activeInvite : latestInvite;
+    }
+
+    if (Number.isFinite(activeCreatedAt)) {
+      return activeInvite;
+    }
+
+    if (Number.isFinite(latestCreatedAt)) {
+      return latestInvite;
+    }
+  }
+
+  return activeInvite || latestInvite || null;
+}
+
 function getInviteState(donorId) {
   const activeInvite = getLatestActiveInviteForDonor(donorId);
-  if (activeInvite) {
-    return {
-      activeInvite,
-      latestInvite: activeInvite,
-      inviteLimitReached: true,
-    };
-  }
-  const latestInvite = getLatestInviteForDonor(donorId);
+  const latestInviteRecord = getLatestInviteForDonor(donorId);
+  const mostRecentInvite = getMostRecentInvite(activeInvite, latestInviteRecord);
+  const { nextInviteAvailableAt, cooldownActive } = mostRecentInvite
+    ? evaluateInviteCooldown(mostRecentInvite)
+    : { nextInviteAvailableAt: null, cooldownActive: false };
+  const inviteLimitReached = mostRecentInvite
+    ? nextInviteAvailableAt === null
+      ? Boolean(activeInvite)
+      : cooldownActive
+    : false;
+
   return {
-    activeInvite: null,
-    latestInvite: latestInvite || null,
-    inviteLimitReached: Boolean(latestInvite),
+    activeInvite: activeInvite || null,
+    latestInvite: mostRecentInvite || null,
+    inviteLimitReached,
+    nextInviteAvailableAt,
   };
 }
 
@@ -88,6 +117,7 @@ function buildShareResponse({
   invite,
   prospect,
   inviteLimitReached = Boolean(invite),
+  nextInviteAvailableAt = null,
 }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
@@ -135,6 +165,12 @@ function buildShareResponse({
       subscriptionCheckoutAvailable: checkoutAvailable,
     },
     inviteLimitReached: Boolean(inviteLimitReached),
+    nextInviteAvailableAt:
+      nextInviteAvailableAt instanceof Date
+        ? nextInviteAvailableAt.toISOString()
+        : typeof nextInviteAvailableAt === 'string'
+        ? nextInviteAvailableAt
+        : null,
   };
 }
 
@@ -188,9 +224,8 @@ router.get(
     }
 
     if (donor) {
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(
-        donor.id
-      );
+      const { activeInvite: invite, inviteLimitReached, nextInviteAvailableAt } =
+        getInviteState(donor.id);
 
       return res.json(
         buildShareResponse({
@@ -199,6 +234,7 @@ router.get(
           invite,
           prospect: null,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     }
@@ -271,8 +307,9 @@ router.post(
 
     const {
       activeInvite: inviteFromState,
-      latestInvite: existingInvite,
+      latestInvite,
       inviteLimitReached,
+      nextInviteAvailableAt,
     } = getInviteState(donor.id);
     let invite = inviteFromState;
     const canReuseInvite =
@@ -349,6 +386,7 @@ router.post(
         donor: activeDonor,
         invite,
         inviteLimitReached: true,
+        nextInviteAvailableAt,
       });
       if (warnings.length > 0) {
         response.warnings = warnings;
@@ -356,13 +394,14 @@ router.post(
       return res.json(response);
     }
 
-    if (inviteLimitReached || existingInvite) {
+    if (inviteLimitReached) {
       const payload = buildShareResponse({
         shareLink,
         donor: activeDonor,
-        invite,
+        invite: invite || latestInvite || null,
         prospect: null,
         inviteLimitReached: true,
+        nextInviteAvailableAt,
       });
       if (warnings.length > 0) {
         payload.warnings = warnings;
@@ -415,12 +454,15 @@ router.post(
       shareLinkId: updatedLink.id,
     });
 
+    const { nextInviteAvailableAt: updatedNextInviteAvailableAt } =
+      evaluateInviteCooldown(inviteRecord);
     const response = buildShareResponse({
       shareLink: updatedLink,
       donor: activeDonor,
       invite: inviteRecord,
       prospect: null,
       inviteLimitReached: true,
+      nextInviteAvailableAt: updatedNextInviteAvailableAt,
     });
     if (warnings.length > 0) {
       response.warnings = warnings;
@@ -653,9 +695,11 @@ router.post(
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
 
       const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(
-        activeDonor.id
-      );
+      const {
+        activeInvite: invite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      } = getInviteState(activeDonor.id);
 
       logEvent('share.account.password_set', {
         donorId: activeDonor.id,
@@ -669,6 +713,7 @@ router.post(
           invite,
           prospect: null,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     }
@@ -725,9 +770,11 @@ router.post(
       clearLastUsed: true,
     });
     const updatedLink = markShareLinkUsed(reassignedLink.id) || reassignedLink;
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(
-      activeDonor.id
-    );
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(activeDonor.id);
 
     if (prospect) {
       markProspectConverted(prospect.id, activeDonor.id);
@@ -746,6 +793,7 @@ router.post(
         invite,
         prospect: null,
         inviteLimitReached,
+        nextInviteAvailableAt,
       })
     );
   })
