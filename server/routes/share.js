@@ -13,10 +13,12 @@ const {
   updateDonorPassword,
   createDonor,
   updateDonorSubscriptionId,
+  updateDonorStatus,
   getProspectById,
   assignShareLinkToDonor,
   markProspectConverted,
   updateInvitePlexDetails,
+  setDonorAccessExpirationBySubscription,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -32,6 +34,7 @@ const {
   getPaypalEnvironment,
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
+  mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
 
 const router = express.Router();
@@ -199,6 +202,61 @@ function getProvidedSessionToken(req) {
     providedSessionToken = req.body.sessionToken.trim();
   }
   return providedSessionToken;
+}
+
+async function refreshDonorFromPaypalSubscription(donor, { shareLinkId, context } = {}) {
+  if (!donor || !(donor.subscriptionId || '').trim()) {
+    return donor;
+  }
+
+  try {
+    const subscription = await paypalService.getSubscription(
+      donor.subscriptionId
+    );
+    const subscriptionStatus = (subscription && subscription.status) || '';
+    const normalizedStatus = mapPaypalSubscriptionStatus(subscriptionStatus);
+    const billingInfo = (subscription && subscription.billing_info) || {};
+    const lastPaymentAt =
+      (billingInfo.last_payment && billingInfo.last_payment.time) || null;
+
+    let refreshedDonor = donor;
+
+    if (normalizedStatus || lastPaymentAt) {
+      const previousStatus = donor.status;
+      const previousLastPaymentAt = donor.lastPaymentAt;
+      const statusToApply = normalizedStatus || previousStatus || 'pending';
+      const statusUpdated = updateDonorStatus(
+        donor.subscriptionId,
+        statusToApply,
+        lastPaymentAt || previousLastPaymentAt || null
+      );
+
+      if (statusUpdated) {
+        refreshedDonor = statusUpdated;
+      }
+
+      if (normalizedStatus === 'active') {
+        const donorWithAccess = setDonorAccessExpirationBySubscription(
+          donor.subscriptionId,
+          null
+        );
+        if (donorWithAccess) {
+          refreshedDonor = donorWithAccess;
+        }
+      }
+    }
+
+    return refreshedDonor;
+  } catch (err) {
+    logger.warn('Failed to refresh PayPal subscription after share link update', {
+      donorId: donor && donor.id ? donor.id : null,
+      subscriptionId: donor && donor.subscriptionId ? donor.subscriptionId : null,
+      shareLinkId: shareLinkId || null,
+      context: context || 'share-link',
+      error: err && err.message,
+    });
+    return donor;
+  }
 }
 
 router.get(
@@ -682,6 +740,7 @@ router.post(
       }
 
       const existingSubscription = (activeDonor.subscriptionId || '').trim();
+      let subscriptionLinked = false;
       if (
         normalizedSubscriptionId &&
         normalizedSubscriptionId !== existingSubscription.toUpperCase()
@@ -690,6 +749,14 @@ router.post(
           activeDonor.id,
           normalizedSubscriptionId
         );
+        subscriptionLinked = true;
+      }
+
+      if (subscriptionLinked) {
+        activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
+          shareLinkId: shareLink.id,
+          context: 'share-existing-account',
+        });
       }
 
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
@@ -746,6 +813,7 @@ router.post(
         activeDonor = updateDonorContact(activeDonor.id, updates);
       }
       const existingSubscription = (activeDonor.subscriptionId || '').trim();
+      let subscriptionLinked = false;
       if (
         normalizedSubscriptionId &&
         normalizedSubscriptionId !== existingSubscription.toUpperCase()
@@ -754,6 +822,14 @@ router.post(
           activeDonor.id,
           normalizedSubscriptionId
         );
+        subscriptionLinked = true;
+      }
+
+      if (subscriptionLinked) {
+        activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
+          shareLinkId: shareLink.id,
+          context: 'share-prospect-promotion',
+        });
       }
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
     } else {
@@ -764,6 +840,12 @@ router.post(
         passwordHash: hashedPassword,
         status: 'pending',
       });
+      if (normalizedSubscriptionId) {
+        activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
+          shareLinkId: shareLink.id,
+          context: 'share-prospect-created',
+        });
+      }
     }
 
     const reassignedLink = assignShareLinkToDonor(shareLink.id, activeDonor.id, {

@@ -24,6 +24,7 @@ const {
   getPaypalEnvironment,
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
+  mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
 const plexOAuth = require('../services/plex-oauth');
 const {
@@ -99,27 +100,6 @@ function isValidSubscriptionId(subscriptionId) {
     return false;
   }
   return /^[a-z0-9-]+$/i.test(normalized);
-}
-
-function mapPaypalSubscriptionStatus(status) {
-  const normalized = (status || '').toString().trim().toLowerCase();
-  if (!normalized) {
-    return '';
-  }
-
-  switch (normalized) {
-    case 'approval_pending':
-      return 'pending';
-    case 'approved':
-      return 'active';
-    case 'active':
-    case 'suspended':
-    case 'cancelled':
-    case 'expired':
-      return normalized;
-    default:
-      return normalized;
-  }
 }
 
 function needsSubscriptionRefresh(donor, subscriptionLinked) {
