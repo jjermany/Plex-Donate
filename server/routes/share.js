@@ -685,6 +685,11 @@ router.post(
     }
 
     if (activeDonor) {
+      if (activeDonor.hasPassword) {
+        return res.status(409).json({
+          error: 'This account already has a password. Please log in instead.',
+        });
+      }
       const updates = {};
       if (normalizedEmail && normalizedEmail !== normalizeEmail(activeDonor.email)) {
         updates.email = normalizedEmail;

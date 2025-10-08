@@ -301,6 +301,75 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     }
   });
 
+  await t.test(
+    'prospect promotion rejects takeover when donor already has password',
+    async () => {
+      resetDatabase();
+      const app = createApp();
+      const server = await startServer(app);
+
+      try {
+        const passwordHash = await hashPassword('ExistingPass123!');
+        const donor = createDonor({
+          email: 'secure@example.com',
+          name: 'Secure Donor',
+          status: 'pending',
+          passwordHash,
+        });
+
+        const originalPasswordRow = db
+          .prepare('SELECT password_hash FROM donors WHERE id = ?')
+          .get(donor.id);
+
+        const prospect = createProspect({
+          email: donor.email,
+          name: 'Secure Donor',
+        });
+
+        const shareLink = createOrUpdateShareLink({
+          prospectId: prospect.id,
+          token: 'prospect-secure-token',
+          sessionToken: 'prospect-secure-session',
+        });
+
+        const takeoverAttempt = await requestJson(
+          server,
+          'POST',
+          `/share/${shareLink.token}/account`,
+          {
+            headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+            body: {
+              email: prospect.email,
+              name: prospect.name,
+              password: 'NewPassword123!',
+              confirmPassword: 'NewPassword123!',
+              sessionToken: shareLink.sessionToken,
+            },
+          }
+        );
+
+        assert.equal(takeoverAttempt.status, 409);
+        assert.ok(
+          takeoverAttempt.body &&
+            typeof takeoverAttempt.body.error === 'string' &&
+            takeoverAttempt.body.error.toLowerCase().includes('log in'),
+          'response should include guidance to log in'
+        );
+
+        const updatedPasswordRow = db
+          .prepare('SELECT password_hash FROM donors WHERE id = ?')
+          .get(donor.id);
+        assert.equal(updatedPasswordRow.password_hash, originalPasswordRow.password_hash);
+
+        const refreshedLink = getShareLinkByToken(shareLink.token);
+        assert.equal(refreshedLink.donorId, null);
+        assert.equal(refreshedLink.prospectId, prospect.id);
+      } finally {
+        await server.close();
+      }
+    }
+  );
+
   await t.test('pending donor cannot generate invite from share link', async () => {
     resetDatabase();
     const app = createApp();
