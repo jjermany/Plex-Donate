@@ -28,6 +28,10 @@ const {
   ensureSessionToken,
   hasValidSessionToken,
 } = require('../utils/session-tokens');
+const {
+  evaluateInviteCooldown,
+  getInviteCreatedAtMs,
+} = require('../utils/invite-cooldown');
 
 const router = express.Router();
 
@@ -156,20 +160,45 @@ function getPendingPlexLink(req, donor) {
   };
 }
 
+function getMostRecentInvite(activeInvite, latestInvite) {
+  if (activeInvite && latestInvite) {
+    const activeCreatedAt = getInviteCreatedAtMs(activeInvite);
+    const latestCreatedAt = getInviteCreatedAtMs(latestInvite);
+
+    if (Number.isFinite(activeCreatedAt) && Number.isFinite(latestCreatedAt)) {
+      return activeCreatedAt >= latestCreatedAt ? activeInvite : latestInvite;
+    }
+
+    if (Number.isFinite(activeCreatedAt)) {
+      return activeInvite;
+    }
+
+    if (Number.isFinite(latestCreatedAt)) {
+      return latestInvite;
+    }
+  }
+
+  return activeInvite || latestInvite || null;
+}
+
 function getInviteState(donorId) {
   const activeInvite = getLatestActiveInviteForDonor(donorId);
-  if (activeInvite) {
-    return {
-      activeInvite,
-      latestInvite: activeInvite,
-      inviteLimitReached: true,
-    };
-  }
-  const latestInvite = getLatestInviteForDonor(donorId);
+  const latestInviteRecord = getLatestInviteForDonor(donorId);
+  const mostRecentInvite = getMostRecentInvite(activeInvite, latestInviteRecord);
+  const { nextInviteAvailableAt, cooldownActive } = mostRecentInvite
+    ? evaluateInviteCooldown(mostRecentInvite)
+    : { nextInviteAvailableAt: null, cooldownActive: false };
+  const inviteLimitReached = mostRecentInvite
+    ? nextInviteAvailableAt === null
+      ? Boolean(activeInvite)
+      : cooldownActive
+    : false;
+
   return {
-    activeInvite: null,
-    latestInvite: latestInvite || null,
-    inviteLimitReached: Boolean(latestInvite),
+    activeInvite: activeInvite || null,
+    latestInvite: mostRecentInvite || null,
+    inviteLimitReached,
+    nextInviteAvailableAt,
   };
 }
 
@@ -178,6 +207,7 @@ function buildDashboardResponse({
   invite,
   pendingPlexLink = null,
   inviteLimitReached = Boolean(invite),
+  nextInviteAvailableAt = null,
 }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
@@ -236,6 +266,12 @@ function buildDashboardResponse({
         }
       : { pending: false },
     inviteLimitReached: Boolean(inviteLimitReached),
+    nextInviteAvailableAt:
+      nextInviteAvailableAt instanceof Date
+        ? nextInviteAvailableAt.toISOString()
+        : typeof nextInviteAvailableAt === 'string'
+        ? nextInviteAvailableAt
+        : null,
   };
 }
 
@@ -280,7 +316,11 @@ router.get(
       return res.json({ authenticated: false });
     }
     res.locals.sessionToken = ensureSessionToken(req);
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(donor.id);
     const pendingPlexLink = getPendingPlexLink(req, donor);
     return res.json(
       buildDashboardResponse({
@@ -288,6 +328,7 @@ router.get(
         invite,
         pendingPlexLink,
         inviteLimitReached,
+        nextInviteAvailableAt,
       })
     );
   })
@@ -366,7 +407,11 @@ router.post(
 
       res.locals.sessionToken = ensureSessionToken(req);
 
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(donor.id);
+      const {
+        activeInvite: invite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      } = getInviteState(donor.id);
       const pendingPlexLink = getPendingPlexLink(req, donor);
       return res.json(
         buildDashboardResponse({
@@ -374,6 +419,7 @@ router.post(
           invite,
           pendingPlexLink,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     });
@@ -536,9 +582,11 @@ router.post(
       updates: profileUpdates,
     });
 
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(
-      updatedDonor.id
-    );
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(updatedDonor.id);
     const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
     req.customer.donor = updatedDonor;
     return res.json(
@@ -547,6 +595,7 @@ router.post(
         invite,
         pendingPlexLink,
         inviteLimitReached,
+        nextInviteAvailableAt,
       })
     );
   })
@@ -580,9 +629,11 @@ router.post(
         pinId: pin.pinId,
       });
 
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(
-        donor.id
-      );
+      const {
+        activeInvite: invite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      } = getInviteState(donor.id);
       const pendingPlexLink = getPendingPlexLink(req, donor);
 
       return res.json(
@@ -591,6 +642,7 @@ router.post(
           invite,
           pendingPlexLink,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     } catch (err) {
@@ -610,15 +662,18 @@ router.get(
     const sessionLink = getActivePlexLinkSession(req, donor);
 
     if (!sessionLink) {
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(
-        donor.id
-      );
+      const {
+        activeInvite: invite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      } = getInviteState(donor.id);
       return res.json(
         buildDashboardResponse({
           donor,
           invite,
           pendingPlexLink: null,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     }
@@ -636,9 +691,11 @@ router.get(
       if (!poll.authToken) {
         if (poll.expired) {
           delete req.session.plexLink;
-          const { activeInvite: invite, inviteLimitReached } = getInviteState(
-            donor.id
-          );
+          const {
+            activeInvite: invite,
+            inviteLimitReached,
+            nextInviteAvailableAt,
+          } = getInviteState(donor.id);
           return res.status(410).json({
             error: 'Plex authentication expired. Start the link again.',
             payload: buildDashboardResponse({
@@ -646,13 +703,16 @@ router.get(
               invite,
               pendingPlexLink: null,
               inviteLimitReached,
+              nextInviteAvailableAt,
             }),
           });
         }
 
-        const { activeInvite: invite, inviteLimitReached } = getInviteState(
-          donor.id
-        );
+        const {
+          activeInvite: invite,
+          inviteLimitReached,
+          nextInviteAvailableAt,
+        } = getInviteState(donor.id);
         const pendingPlexLink = getPendingPlexLink(req, donor);
         return res.json(
           buildDashboardResponse({
@@ -660,6 +720,7 @@ router.get(
             invite,
             pendingPlexLink,
             inviteLimitReached,
+            nextInviteAvailableAt,
           })
         );
       }
@@ -692,7 +753,9 @@ router.get(
 
       req.customer.donor = updatedDonor;
 
-      const { inviteLimitReached } = getInviteState(updatedDonor.id);
+      const { inviteLimitReached, nextInviteAvailableAt } = getInviteState(
+        updatedDonor.id
+      );
 
       return res.json(
         buildDashboardResponse({
@@ -700,14 +763,17 @@ router.get(
           invite,
           pendingPlexLink: null,
           inviteLimitReached,
+          nextInviteAvailableAt,
         })
       );
     } catch (err) {
       logger.warn('Failed to complete Plex OAuth link', err.message);
       delete req.session.plexLink;
-      const { activeInvite: invite, inviteLimitReached } = getInviteState(
-        donor.id
-      );
+      const {
+        activeInvite: invite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      } = getInviteState(donor.id);
       return res.status(502).json({
         error: 'Failed to verify Plex authentication. Start the link again.',
         payload: buildDashboardResponse({
@@ -715,6 +781,7 @@ router.get(
           invite,
           pendingPlexLink: null,
           inviteLimitReached,
+          nextInviteAvailableAt,
         }),
       });
     }
@@ -729,15 +796,18 @@ router.post(
     if (req.session && req.session.plexLink) {
       delete req.session.plexLink;
     }
-    const { activeInvite: invite, inviteLimitReached } = getInviteState(
-      donor.id
-    );
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(donor.id);
     return res.json(
       buildDashboardResponse({
         donor,
         invite,
         pendingPlexLink: null,
         inviteLimitReached,
+        nextInviteAvailableAt,
       })
     );
   })
@@ -765,7 +835,9 @@ router.post(
 
     req.customer.donor = updatedDonor;
 
-    const { inviteLimitReached } = getInviteState(updatedDonor.id);
+    const { inviteLimitReached, nextInviteAvailableAt } = getInviteState(
+      updatedDonor.id
+    );
 
     return res.json(
       buildDashboardResponse({
@@ -773,6 +845,7 @@ router.post(
         invite,
         pendingPlexLink: null,
         inviteLimitReached,
+        nextInviteAvailableAt,
       })
     );
   })
@@ -815,8 +888,9 @@ router.post(
 
     const {
       activeInvite: activeInviteFromState,
-      latestInvite: existingInvite,
+      latestInvite,
       inviteLimitReached,
+      nextInviteAvailableAt,
     } = getInviteState(donor.id);
     let invite = activeInviteFromState;
     const canReuseInvite =
@@ -870,6 +944,7 @@ router.post(
         invite,
         pendingPlexLink,
         inviteLimitReached: true,
+        nextInviteAvailableAt,
       });
       if (warnings.length > 0) {
         response.warnings = warnings;
@@ -877,14 +952,15 @@ router.post(
       return res.json(response);
     }
 
-    if (inviteLimitReached || existingInvite) {
+    if (inviteLimitReached) {
       const pendingPlexLink = getPendingPlexLink(req, activeDonor);
       req.customer.donor = activeDonor;
       const payload = buildDashboardResponse({
         donor: activeDonor,
-        invite,
+        invite: invite || latestInvite || null,
         pendingPlexLink,
         inviteLimitReached: true,
+        nextInviteAvailableAt,
       });
       if (warnings.length > 0) {
         payload.warnings = warnings;
@@ -950,11 +1026,14 @@ router.post(
 
     const pendingPlexLink = getPendingPlexLink(req, activeDonor);
     req.customer.donor = activeDonor;
+    const { nextInviteAvailableAt: updatedNextInviteAvailableAt } =
+      evaluateInviteCooldown(inviteRecord);
     const response = buildDashboardResponse({
       donor: activeDonor,
       invite: inviteRecord,
       pendingPlexLink,
       inviteLimitReached: true,
+      nextInviteAvailableAt: updatedNextInviteAvailableAt,
     });
     if (warnings.length > 0) {
       response.warnings = warnings;
