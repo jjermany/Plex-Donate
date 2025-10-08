@@ -594,8 +594,8 @@
                   <div>
                     <h3 class="step-title">Send yourself a Plex invite</h3>
                     <p id="step-invite-note" class="muted small">
-                      Generate your personal Wizarr invite and unlock instant
-                      access to endless content.
+                      Generate your personal Wizarr invite and check back each
+                      month when the next link becomes available.
                     </p>
                   </div>
                 </div>
@@ -699,8 +699,8 @@
           <article class="surface">
             <h2 class="section-title">Your invite link</h2>
             <p class="muted" id="invite-description">
-              Generate your Wizarr invite once and keep the link handy for
-              future devices.
+              Active subscribers can generate their own Wizarr invite each
+              month. We'll highlight the next unlock window right here.
             </p>
             <form id="invite-form">
               <label>
@@ -749,8 +749,8 @@
                 >
               </li>
               <li class="muted small">
-                Need a personal invite link? Contact the server admin for a
-                share URL.
+                Need another invite? Active supporters can generate a fresh
+                link below once the monthly cooldown resets.
               </li>
             </ul>
           </article>
@@ -761,7 +761,11 @@
     <script>
       const state = {
         data: null,
+        inviteLimitReached: false,
+        nextInviteAvailableAt: null,
       };
+      let inviteCooldownTimer = null;
+      let inviteCooldownTimerType = null;
 
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
@@ -967,6 +971,77 @@
         return date.toLocaleString();
       }
 
+      function parseDate(value) {
+        if (!value) {
+          return null;
+        }
+        if (value instanceof Date) {
+          return Number.isNaN(value.getTime()) ? null : value;
+        }
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function formatDateTime(value) {
+        const date = parseDate(value);
+        if (!date) {
+          return '';
+        }
+        try {
+          return new Intl.DateTimeFormat(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }).format(date);
+        } catch (err) {
+          return date.toLocaleString();
+        }
+      }
+
+      function clearInviteCooldownTimer() {
+        if (!inviteCooldownTimer) {
+          return;
+        }
+        if (inviteCooldownTimerType === 'interval') {
+          window.clearInterval(inviteCooldownTimer);
+        } else {
+          window.clearTimeout(inviteCooldownTimer);
+        }
+        inviteCooldownTimer = null;
+        inviteCooldownTimerType = null;
+      }
+
+      function scheduleInviteCooldownRefresh(nextAvailableAt) {
+        clearInviteCooldownTimer();
+        const nextDate = parseDate(nextAvailableAt);
+        state.nextInviteAvailableAt = nextDate
+          ? nextDate.toISOString()
+          : null;
+        if (!nextDate) {
+          return;
+        }
+        const delay = nextDate.getTime() - Date.now();
+        if (delay <= 0) {
+          fetchSession({ silent: true });
+          return;
+        }
+        const MAX_TIMEOUT = 2_147_483_647;
+        if (delay > MAX_TIMEOUT) {
+          inviteCooldownTimer = window.setInterval(() => {
+            if (Date.now() >= nextDate.getTime()) {
+              clearInviteCooldownTimer();
+              fetchSession({ silent: true });
+            }
+          }, 60 * 60 * 1000);
+          inviteCooldownTimerType = 'interval';
+        } else {
+          inviteCooldownTimer = window.setTimeout(() => {
+            clearInviteCooldownTimer();
+            fetchSession({ silent: true });
+          }, delay);
+          inviteCooldownTimerType = 'timeout';
+        }
+      }
+
       function setStatusText(el, message, statusClass) {
         if (!el) return;
         el.textContent = message || '';
@@ -976,7 +1051,10 @@
         }
       }
 
-      function updateMembershipStatusMessage(donor, { showSubscriptionCta }) {
+      function updateMembershipStatusMessage(
+        donor,
+        { showSubscriptionCta, nextInviteMessage = '', cooldownActive = false } = {}
+      ) {
         if (!memberStatusMessage) {
           return;
         }
@@ -993,9 +1071,15 @@
         switch (normalizedStatus) {
           case 'active':
             tone = 'success';
-            message = lastPayment
-              ? `Your subscription is active. Last payment recorded ${lastPayment}.`
-              : 'Your subscription is active and invites are unlocked.';
+            if (nextInviteMessage && cooldownActive) {
+              message = `${nextInviteMessage} We'll refresh this dashboard automatically when a new link unlocks so you can generate it yourself.`;
+            } else if (nextInviteMessage) {
+              message = `Your subscription is active. ${nextInviteMessage} Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.`;
+            } else if (lastPayment) {
+              message = `Your subscription is active. Last payment recorded ${lastPayment}. Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.`;
+            } else {
+              message = 'Your subscription is active. Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.';
+            }
             break;
           case 'pending':
             tone = 'info';
@@ -1043,8 +1127,14 @@
         memberStatusMessage.classList.add('small');
       }
 
-      function renderInvite(invite, limitReached) {
+      function renderInvite(invite, limitReached, nextInviteAvailableAt) {
         const limitHit = Boolean(limitReached);
+        const nextAvailableDate = parseDate(nextInviteAvailableAt);
+        const cooldownActive =
+          limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
+        const nextInviteMessage = cooldownActive
+          ? `Next invite available on ${formatDateTime(nextAvailableDate)}.`
+          : '';
 
         if (inviteStatus) {
           setStatusText(inviteStatus, '');
@@ -1064,13 +1154,22 @@
           inviteLinkEl.textContent = '';
           inviteEmailDisplay.textContent = '';
           inviteCreated.textContent = '';
-          inviteDescription.textContent = limitHit
-            ? 'An invite has already been created for this subscription. Contact the server admin if you need it refreshed.'
-            : 'Generate your Wizarr invite once and keep the link handy for future devices.';
+          if (cooldownActive && nextInviteMessage) {
+            inviteDescription.textContent =
+              `${nextInviteMessage} We'll refresh this dashboard automatically when you're eligible to generate another invite.`;
+          } else {
+            inviteDescription.textContent = limitHit
+              ? 'An invite has already been created for this subscription. Contact the server admin if you need it refreshed.'
+              : 'Active subscribers can generate a fresh Wizarr invite each month. Use the form below when you need the next link.';
+          }
           if (inviteSubmit) {
-            inviteSubmit.textContent = limitHit
-              ? 'Invite already created'
-              : 'Generate invite';
+            if (cooldownActive) {
+              inviteSubmit.textContent = 'Invite cooling down…';
+            } else {
+              inviteSubmit.textContent = limitHit
+                ? 'Invite already created'
+                : 'Generate invite';
+            }
             inviteSubmit.disabled = limitHit;
           }
           return;
@@ -1085,13 +1184,22 @@
         inviteCreated.textContent = invite.createdAt
           ? `Created ${formatDate(invite.createdAt)}`
           : '';
-        inviteDescription.textContent = limitHit
-          ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
-          : 'Invite ready! Use the link below whenever you set up a new device.';
+        if (cooldownActive && nextInviteMessage) {
+          inviteDescription.textContent =
+            `${nextInviteMessage} We'll refresh this dashboard automatically when the cooldown ends.`;
+        } else {
+          inviteDescription.textContent = limitHit
+            ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
+            : 'Invite ready! Use the link below whenever you set up a new device.';
+        }
         if (inviteSubmit) {
-          inviteSubmit.textContent = limitHit
-            ? 'Invite already created'
-            : 'Generate another invite';
+          if (cooldownActive) {
+            inviteSubmit.textContent = 'Invite cooling down…';
+          } else {
+            inviteSubmit.textContent = limitHit
+              ? 'Invite already created'
+              : 'Generate another invite';
+          }
           inviteSubmit.disabled = limitHit;
         }
       }
@@ -1113,7 +1221,14 @@
         }
       }
 
-      function updateOnboarding(data, { showSubscriptionCta } = {}) {
+      function updateOnboarding(
+        data,
+        {
+          showSubscriptionCta,
+          inviteCooldownActive = false,
+          nextInviteMessage = '',
+        } = {}
+      ) {
         if (!onboardingPanel) {
           return;
         }
@@ -1210,8 +1325,13 @@
             stepInviteNote.textContent =
               'Use the form below to send the invite to your inbox as soon as you are verified.';
           } else if (inviteLimitReached) {
-            stepInviteNote.textContent =
-              'Your invite is ready below. Reach out to the server admin if you need it refreshed.';
+            if (inviteCooldownActive && nextInviteMessage) {
+              stepInviteNote.textContent =
+                `${nextInviteMessage} We'll refresh this dashboard automatically when you can generate the next link.`;
+            } else {
+              stepInviteNote.textContent =
+                'Your invite is ready below. Reach out to the server admin if you need it refreshed.';
+            }
           } else {
             stepInviteNote.textContent =
               'Invite ready! Grab it below whenever you set up a new device.';
@@ -1229,6 +1349,9 @@
           loginForm.reset();
           setStatusText(loginStatus, '');
           setStatusText(memberStatusMessage, '');
+          clearInviteCooldownTimer();
+          state.inviteLimitReached = false;
+          state.nextInviteAvailableAt = null;
           if (forgotPasswordHelp) {
             forgotPasswordHelp.classList.add('hidden');
           }
@@ -1305,8 +1428,30 @@
             (!donor.subscriptionId || normalizedStatus !== 'active')
         );
 
-        updateMembershipStatusMessage(donor, { showSubscriptionCta });
-        updateOnboarding(data, { showSubscriptionCta });
+        const limitReached = Boolean(data.inviteLimitReached);
+        state.inviteLimitReached = limitReached;
+        const nextInviteAvailableAt = data.nextInviteAvailableAt || null;
+        const nextInviteDate = parseDate(nextInviteAvailableAt);
+        const nextInviteInFuture =
+          nextInviteDate && nextInviteDate.getTime() > Date.now();
+        const nextInviteMessage = nextInviteInFuture
+          ? `Next invite available on ${formatDateTime(nextInviteDate)}.`
+          : '';
+        const inviteCooldownActive = limitReached && nextInviteInFuture;
+        scheduleInviteCooldownRefresh(
+          inviteCooldownActive ? nextInviteAvailableAt : null
+        );
+
+        updateMembershipStatusMessage(donor, {
+          showSubscriptionCta,
+          nextInviteMessage,
+          cooldownActive: inviteCooldownActive,
+        });
+        updateOnboarding(data, {
+          showSubscriptionCta,
+          inviteCooldownActive,
+          nextInviteMessage,
+        });
 
         if (subscriptionButton && subscriptionCta) {
           if (showSubscriptionCta) {
@@ -1362,9 +1507,7 @@
         }
         inviteEmail.value = donor.email || '';
 
-        const limitReached = Boolean(data.inviteLimitReached);
-
-        renderInvite(data.invite, limitReached);
+        renderInvite(data.invite, limitReached, nextInviteAvailableAt);
 
         const inviteBlocked = normalizedStatus !== 'active' || limitReached;
         if (inviteSubmit) {
@@ -1496,8 +1639,11 @@
         }
       }
 
-      async function fetchSession() {
-        showLoading();
+      async function fetchSession(options = {}) {
+        const silent = options && options.silent;
+        if (!silent) {
+          showLoading();
+        }
         try {
           const response = await sessionFetch('/api/customer/session');
           const payload = await response.json();
