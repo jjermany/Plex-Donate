@@ -237,6 +237,35 @@
         color: #e2e8f0;
         border: 1px solid rgba(148, 163, 184, 0.4);
       }
+      .plex-link-controls {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+        justify-items: start;
+        align-items: start;
+      }
+      .plex-link-controls .button-primary {
+        width: fit-content;
+      }
+      .plex-link-pin {
+        display: grid;
+        gap: 6px;
+        padding: 14px 18px;
+        border-radius: 14px;
+        background: rgba(79, 70, 229, 0.18);
+        border: 1px solid rgba(165, 180, 252, 0.35);
+        font-variant-numeric: tabular-nums;
+        max-width: min(320px, 100%);
+      }
+      .plex-link-pin-code {
+        font-size: 1.9rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
+      .plex-link-pin-expiry {
+        font-size: 0.85rem;
+        color: rgba(203, 213, 225, 0.85);
+      }
       .header-actions {
         display: flex;
         gap: 12px;
@@ -576,8 +605,8 @@
                   <div>
                     <h3 class="step-title">Authenticate with Plex</h3>
                     <p id="step-plex-note" class="muted small">
-                      Launch the Plex prompt above to link the account you use
-                      for streaming.
+                      Use the button below to launch the Plex prompt and link
+                      the account you use for streaming.
                     </p>
                   </div>
                 </div>
@@ -585,6 +614,28 @@
                   We rely on Plex to deliver the library—linking your account
                   keeps access seamless.
                 </p>
+                <div id="plex-link-controls" class="plex-link-controls">
+                  <button id="plex-link-button" class="button-primary" type="button">
+                    Link Plex account
+                  </button>
+                  <div
+                    id="plex-link-pin"
+                    class="plex-link-pin hidden"
+                    aria-live="polite"
+                  >
+                    <span class="muted small">Use this PIN if Plex asks for it:</span>
+                    <span id="plex-link-pin-code" class="plex-link-pin-code">----</span>
+                    <span
+                      id="plex-link-pin-expiry"
+                      class="plex-link-pin-expiry"
+                    ></span>
+                  </div>
+                  <p
+                    id="plex-link-status"
+                    class="status-text small"
+                    aria-live="polite"
+                  ></p>
+                </div>
               </div>
               <div id="step-subscription" class="step" data-state="upcoming">
                 <div class="step-header">
@@ -773,9 +824,15 @@
         data: null,
         inviteLimitReached: false,
         nextInviteAvailableAt: null,
+        pendingPlexLink: null,
       };
       let inviteCooldownTimer = null;
       let inviteCooldownTimerType = null;
+      let plexLinkPollTimer = null;
+      let plexLinkCountdownTimer = null;
+      let plexLinkCountdownExpiryMs = null;
+      let plexLinkAuthWindow = null;
+      let plexLinkStatusSticky = false;
 
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
@@ -807,6 +864,11 @@
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
       const memberStatusMessage = document.getElementById('member-status-message');
+      const plexLinkButton = document.getElementById('plex-link-button');
+      const plexLinkStatus = document.getElementById('plex-link-status');
+      const plexLinkPin = document.getElementById('plex-link-pin');
+      const plexLinkPinCode = document.getElementById('plex-link-pin-code');
+      const plexLinkPinExpiry = document.getElementById('plex-link-pin-expiry');
       const changePasswordButton = document.getElementById('change-password-button');
       const onboardingPanel = document.getElementById('onboarding-panel');
       const stepSubscription = document.getElementById('step-subscription');
@@ -1007,6 +1069,20 @@
         }
       }
 
+      function getPlexCountdownLabel(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return '';
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return '';
+        }
+        const minutes = Math.max(0, Math.floor(diff / 60000));
+        const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }
+
       function clearInviteCooldownTimer() {
         if (!inviteCooldownTimer) {
           return;
@@ -1058,6 +1134,225 @@
         el.className = 'status-text';
         if (statusClass) {
           el.classList.add(statusClass);
+        }
+      }
+
+      function clearPlexLinkPollTimer() {
+        if (!plexLinkPollTimer) {
+          return;
+        }
+        window.clearTimeout(plexLinkPollTimer);
+        plexLinkPollTimer = null;
+      }
+
+      function schedulePlexLinkStatusPoll(intervalMs) {
+        if (!state.pendingPlexLink) {
+          clearPlexLinkPollTimer();
+          return;
+        }
+        const normalized = Number(intervalMs ?? state.pendingPlexLink.pollIntervalMs);
+        const delay = Number.isFinite(normalized) && normalized > 0 ? normalized : 5000;
+        clearPlexLinkPollTimer();
+        plexLinkPollTimer = window.setTimeout(() => {
+          plexLinkPollTimer = null;
+          pollPlexLinkStatus();
+        }, delay);
+      }
+
+      function clearPlexLinkCountdownTimer({ resetText = true } = {}) {
+        if (plexLinkCountdownTimer) {
+          window.clearInterval(plexLinkCountdownTimer);
+          plexLinkCountdownTimer = null;
+        }
+        plexLinkCountdownExpiryMs = null;
+        if (resetText && plexLinkPinExpiry) {
+          plexLinkPinExpiry.textContent = '';
+        }
+      }
+
+      function updatePlexLinkCountdownDisplay() {
+        if (!plexLinkPinExpiry || !Number.isFinite(plexLinkCountdownExpiryMs)) {
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          return '';
+        }
+        const diff = plexLinkCountdownExpiryMs - Date.now();
+        if (diff <= 0) {
+          plexLinkPinExpiry.textContent = 'PIN expired';
+          return '';
+        }
+        const minutes = Math.max(0, Math.floor(diff / 60000));
+        const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
+        const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        plexLinkPinExpiry.textContent = `Expires in ${formatted}`;
+        return formatted;
+      }
+
+      function startPlexLinkCountdown(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          clearPlexLinkCountdownTimer();
+          return '';
+        }
+        const targetMs = date.getTime();
+        if (plexLinkCountdownTimer && plexLinkCountdownExpiryMs === targetMs) {
+          return updatePlexLinkCountdownDisplay();
+        }
+        clearPlexLinkCountdownTimer();
+        plexLinkCountdownExpiryMs = targetMs;
+        const initial = updatePlexLinkCountdownDisplay();
+        if (!initial) {
+          return '';
+        }
+        plexLinkCountdownTimer = window.setInterval(() => {
+          const next = updatePlexLinkCountdownDisplay();
+          if (!next) {
+            clearPlexLinkCountdownTimer({ resetText: false });
+          }
+        }, 1000);
+        return initial;
+      }
+
+      function closePlexAuthWindow() {
+        if (plexLinkAuthWindow && !plexLinkAuthWindow.closed) {
+          try {
+            plexLinkAuthWindow.close();
+          } catch (err) {
+            // Ignore window close errors.
+          }
+        }
+        plexLinkAuthWindow = null;
+      }
+
+      function setPlexLinkStatus(message, tone, { sticky = false, force = false } = {}) {
+        if (!force && plexLinkStatusSticky && !sticky) {
+          return;
+        }
+        plexLinkStatusSticky = sticky;
+        if (!plexLinkStatus) {
+          return;
+        }
+        setStatusText(plexLinkStatus, message, tone || null);
+        plexLinkStatus.classList.add('small');
+      }
+
+      function clearPlexLinkStatus({ force = false } = {}) {
+        if (!force && plexLinkStatusSticky) {
+          return;
+        }
+        plexLinkStatusSticky = false;
+        if (!plexLinkStatus) {
+          return;
+        }
+        setStatusText(plexLinkStatus, '', null);
+        plexLinkStatus.classList.add('small');
+      }
+
+      async function pollPlexLinkStatus() {
+        if (!state.pendingPlexLink) {
+          clearPlexLinkPollTimer();
+          return;
+        }
+        let response;
+        try {
+          response = await sessionFetch('/api/customer/plex/link/status');
+        } catch (err) {
+          setPlexLinkStatus('Unable to reach Plex right now. Retrying…', 'error', {
+            force: true,
+          });
+          schedulePlexLinkStatusPoll(state.pendingPlexLink.pollIntervalMs);
+          return;
+        }
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (err) {
+          payload = {};
+        }
+        updateSessionTokenFromResponse(payload);
+        if (!response.ok) {
+          if (payload && payload.payload) {
+            renderDashboard(payload.payload);
+          }
+          setPlexLinkStatus(
+            payload && payload.error
+              ? payload.error
+              : 'Failed to verify Plex authentication. Start the link again.',
+            'error',
+            { sticky: true, force: true }
+          );
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer({ resetText: false });
+          closePlexAuthWindow();
+          return;
+        }
+        renderDashboard(payload);
+      }
+
+      function applyPlexLinkState(donor, plexLink) {
+        const plexLinked = Boolean(donor && donor.plexLinked);
+        const pending = plexLink && plexLink.pending ? plexLink : null;
+
+        if (pending) {
+          state.pendingPlexLink = {
+            code: pending.code || '',
+            authUrl: pending.authUrl || '',
+            expiresAt: pending.expiresAt || null,
+            pollIntervalMs: Number(pending.pollIntervalMs) || null,
+          };
+        } else {
+          state.pendingPlexLink = null;
+        }
+
+        if (plexLinkButton) {
+          if (plexLinked || pending) {
+            plexLinkButton.classList.add('hidden');
+            plexLinkButton.disabled = true;
+          } else {
+            plexLinkButton.classList.remove('hidden');
+            plexLinkButton.disabled = false;
+          }
+        }
+
+        if (pending) {
+          if (plexLinkPin) {
+            plexLinkPin.classList.remove('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = state.pendingPlexLink.code || '----';
+          }
+          const countdown = startPlexLinkCountdown(state.pendingPlexLink.expiresAt);
+          const baseMessage =
+            'Waiting for Plex to confirm your account. Complete the Plex prompt in the new tab.';
+          const message = countdown
+            ? `${baseMessage} PIN expires in ${countdown}.`
+            : baseMessage;
+          setPlexLinkStatus(message, 'info', { force: true });
+          schedulePlexLinkStatusPoll(state.pendingPlexLink.pollIntervalMs);
+        } else {
+          clearPlexLinkCountdownTimer();
+          clearPlexLinkPollTimer();
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          if (plexLinked) {
+            setPlexLinkStatus('Plex account linked successfully.', 'success', {
+              force: true,
+            });
+          } else {
+            setPlexLinkStatus(
+              'Link your Plex account so we can enable PayPal checkout and invites.',
+              'info'
+            );
+          }
+          closePlexAuthWindow();
         }
       }
 
@@ -1317,11 +1612,20 @@
                 'Plex account verified—head to the next step to start your membership.';
             }
           } else if (plexLinkPending) {
-            stepPlexNote.textContent =
-              'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
+            const countdownLabel =
+              data && data.plexLink
+                ? getPlexCountdownLabel(data.plexLink.expiresAt)
+                : '';
+            if (countdownLabel) {
+              stepPlexNote.textContent =
+                `Plex authentication in progress—finish the prompt before it expires in ${countdownLabel}. We'll refresh this card automatically.`;
+            } else {
+              stepPlexNote.textContent =
+                'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
+            }
           } else {
             stepPlexNote.textContent =
-              'Launch the Plex authentication prompt above to link your streaming account. We will update this step as soon as verification completes.';
+              'Use the button below to launch the Plex authentication prompt and link your streaming account. We will update this step as soon as verification completes.';
           }
         }
 
@@ -1382,8 +1686,27 @@
           setStatusText(loginStatus, '');
           setStatusText(memberStatusMessage, '');
           clearInviteCooldownTimer();
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer();
+          closePlexAuthWindow();
           state.inviteLimitReached = false;
           state.nextInviteAvailableAt = null;
+          state.pendingPlexLink = null;
+          plexLinkStatusSticky = false;
+          clearPlexLinkStatus({ force: true });
+          if (plexLinkButton) {
+            plexLinkButton.disabled = false;
+            plexLinkButton.classList.remove('hidden');
+          }
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
           if (forgotPasswordHelp) {
             forgotPasswordHelp.classList.add('hidden');
           }
@@ -1413,6 +1736,7 @@
         dashboardPanel.classList.remove('hidden');
 
         const donor = data.donor || {};
+        applyPlexLinkState(donor, data.plexLink || null);
         memberNameEl.textContent = donor.name
           ? `Hi ${donor.name}!`
           : 'Add a display name below so we know how to greet you.';
@@ -1855,6 +2179,125 @@
             return;
           }
           await openDashboardSubscriptionCheckout();
+        });
+      }
+
+      if (plexLinkButton) {
+        plexLinkButton.addEventListener('click', async () => {
+          if (plexLinkButton.disabled) {
+            return;
+          }
+
+          setPlexLinkStatus('Starting Plex authentication…', 'info', {
+            force: true,
+          });
+          plexLinkButton.disabled = true;
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer();
+          closePlexAuthWindow();
+          state.pendingPlexLink = null;
+
+          let authWindow = null;
+          try {
+            authWindow = window.open('', '_blank');
+            if (authWindow) {
+              try {
+                authWindow.opener = null;
+              } catch (err) {
+                // Ignore browsers that prevent direct assignment.
+              }
+            }
+          } catch (err) {
+            authWindow = null;
+          }
+
+          let responseData = null;
+          try {
+            const response = await sessionFetch('/api/customer/plex/link/start', {
+              method: 'POST',
+            });
+            try {
+              responseData = await response.json();
+            } catch (err) {
+              responseData = {};
+            }
+            updateSessionTokenFromResponse(responseData);
+            if (!response.ok) {
+              throw new Error(
+                (responseData && responseData.error) ||
+                  'Failed to start Plex authentication. Try again shortly.'
+              );
+            }
+
+            renderDashboard(responseData);
+
+            const authUrl =
+              responseData &&
+              responseData.plexLink &&
+              responseData.plexLink.authUrl
+                ? responseData.plexLink.authUrl
+                : '';
+
+            if (authUrl) {
+              let opened = false;
+              if (authWindow) {
+                authWindow.location = authUrl;
+                plexLinkAuthWindow = authWindow;
+                opened = true;
+              } else {
+                const fallbackWindow = window.open(authUrl, '_blank');
+                if (fallbackWindow) {
+                  opened = true;
+                  plexLinkAuthWindow = fallbackWindow;
+                  try {
+                    fallbackWindow.opener = null;
+                  } catch (err) {
+                    // Ignore browsers that prevent direct assignment.
+                  }
+                }
+              }
+
+              if (!opened) {
+                throw new Error(
+                  'Your browser blocked the Plex authentication window. Allow pop-ups and try again.'
+                );
+              }
+            } else if (authWindow) {
+              try {
+                authWindow.close();
+              } catch (err) {
+                // Ignore window close errors.
+              }
+              plexLinkAuthWindow = null;
+            }
+          } catch (err) {
+            if (authWindow) {
+              try {
+                authWindow.close();
+              } catch (closeErr) {
+                // Ignore window close errors.
+              }
+            }
+            plexLinkAuthWindow = null;
+            setPlexLinkStatus(err.message || 'Failed to start Plex authentication.', 'error', {
+              sticky: true,
+              force: true,
+            });
+            plexLinkButton.disabled = false;
+            plexLinkButton.classList.remove('hidden');
+            clearPlexLinkCountdownTimer();
+            clearPlexLinkPollTimer();
+            state.pendingPlexLink = null;
+            if (plexLinkPin) {
+              plexLinkPin.classList.add('hidden');
+            }
+            if (plexLinkPinCode) {
+              plexLinkPinCode.textContent = '----';
+            }
+            if (plexLinkPinExpiry) {
+              plexLinkPinExpiry.textContent = '';
+            }
+          }
         });
       }
 
