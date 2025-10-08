@@ -158,6 +158,9 @@ function buildShareResponse({
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
           hasPassword: Boolean(donor.hasPassword),
+          plexLinked: hasPlexLink(donor),
+          plexAccountId: donor.plexAccountId || null,
+          plexEmail: donor.plexEmail || '',
         }
       : null,
     prospect: prospect

@@ -519,13 +519,13 @@
           <article class="surface" id="support-card">
             <h2>Here's how it works</h2>
             <p class="muted">
-              Whether you're brand new or returning for another invite, follow
-              these quick steps.
+              Follow these steps in order to activate your library access.
             </p>
             <ul class="support-list">
-              <li>Create or update your account with the email you want to use for streaming.</li>
-              <li>Share your PayPal subscription ID when you have it and we'll link everything up.</li>
-              <li>Generate your Wizarr invite once to unlock Plex and the rest of our library.</li>
+              <li>Create or update your account with the email you'll use for streaming.</li>
+              <li>Complete the Plex authentication prompt to link your Plex identity.</li>
+              <li>Start your PayPal donation or paste your subscription ID so we can verify billing.</li>
+              <li>Generate your Wizarr invite once your donation is active to unlock Plex and the rest of our library.</li>
             </ul>
             <div class="cta">
               <h3>Already subscribed?</h3>
@@ -606,11 +606,12 @@
         </section>
 
         <section class="surface" id="invite-panel">
-          <h2>Step 2 · Claim your Plex access</h2>
+          <h2>Step 2 · Link Plex & claim your access</h2>
           <p class="muted" id="invite-description">
-            Active supporters can generate a fresh Wizarr invite every month.
-            Choose the email you want to use for streaming access and we'll
-            highlight when the next link unlocks.
+            Once your Plex account is linked and your donation is active, you
+            can generate a fresh Wizarr invite every month. Choose the email you
+            want to use for streaming access and we'll highlight when the next
+            link unlocks.
           </p>
           <form id="invite-form">
             <label>
@@ -876,7 +877,7 @@
           inviteEmailEl.textContent = '';
           inviteCreatedEl.textContent = '';
           inviteDescription.textContent =
-            'Finish the quick account setup above to unlock invite generation.';
+            'Finish the quick account setup above to link Plex and unlock invite generation.';
           if (generateButton) {
             generateButton.textContent = 'Generate my invite';
           }
@@ -969,10 +970,12 @@
         ).toLowerCase();
         const isActive = normalizedStatus === 'active';
         const accountReady = Boolean(donor && donor.hasPassword);
+        const plexLinked = Boolean(donor && donor.plexLinked);
         const hasSubscriptionId = Boolean(donor && donor.subscriptionId);
         const showSubscriptionCta = Boolean(
           checkoutAvailable &&
             accountReady &&
+            plexLinked &&
             (!hasSubscriptionId || !isActive)
         );
         state.isProspect = isProspect;
@@ -1009,9 +1012,15 @@
         if (accountDescription) {
           if (isProspect) {
             accountDescription.textContent =
-              'Step one: create your login so we can connect your subscription details.';
+              'Step one: create your login so you can link Plex and connect your subscription details.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
+            }
+          } else if (accountReady && !plexLinked) {
+            accountDescription.textContent =
+              'Great! Stay signed in and complete the Plex authentication prompt to move on to checkout.';
+            if (accountSubmit) {
+              accountSubmit.textContent = 'Update account';
             }
           } else if (accountReady) {
             accountDescription.textContent =
@@ -1042,7 +1051,7 @@
 
         const severeStatuses = new Set(['cancelled', 'suspended', 'expired']);
         const hasSevereIssue = !isProspect && severeStatuses.has(normalizedStatus);
-        const inviteLocked = isProspect || !isActive || limitReached;
+        const inviteLocked = isProspect || !plexLinked || !isActive || limitReached;
 
         if (generateButton) {
           generateButton.dataset.blocked = inviteLocked ? 'true' : 'false';
@@ -1084,6 +1093,9 @@
               if (!accountReady) {
                 hintMessage =
                   'Create or update your account above to unlock PayPal checkout.';
+              } else if (!plexLinked) {
+                hintMessage =
+                  'Link your Plex account before heading to PayPal checkout.';
               } else if (!isActive && hasSubscriptionId) {
                 hintMessage =
                   'We are waiting for PayPal to confirm your subscription. This usually updates shortly.';
@@ -1109,6 +1121,10 @@
           } else if (!accountReady) {
             actionStatus.textContent =
               'Create your dashboard password above to unlock invite generation.';
+            actionStatus.className = 'status-text info';
+          } else if (!plexLinked) {
+            actionStatus.textContent =
+              'Authenticate with Plex to continue—watch for the sign-in prompt above.';
             actionStatus.className = 'status-text info';
           } else if (hasSevereIssue) {
             actionStatus.textContent =
@@ -1218,7 +1234,10 @@
 
         renderInvite(invite, limitReached, nextInviteAvailableAt);
 
-        if (!isActive && !limitReached) {
+        if (!plexLinked && !limitReached) {
+          inviteDescription.textContent =
+            'Link your Plex account to unlock checkout and invite generation.';
+        } else if (!isActive && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
             ? 'Once your donation is active we will unlock invite generation.'
             : 'Invite generation unlocks once your subscription is active.';
