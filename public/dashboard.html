@@ -1053,9 +1053,22 @@
 
       function updateMembershipStatusMessage(
         donor,
-        { showSubscriptionCta, nextInviteMessage = '', cooldownActive = false } = {}
+        {
+          showSubscriptionCta,
+          nextInviteMessage = '',
+          cooldownActive = false,
+          refreshError = '',
+        } = {}
       ) {
         if (!memberStatusMessage) {
+          return;
+        }
+
+        const normalizedRefreshError =
+          typeof refreshError === 'string' ? refreshError.trim() : '';
+        if (normalizedRefreshError) {
+          setStatusText(memberStatusMessage, normalizedRefreshError, 'error');
+          memberStatusMessage.classList.add('small');
           return;
         }
 
@@ -1446,6 +1459,10 @@
           showSubscriptionCta,
           nextInviteMessage,
           cooldownActive: inviteCooldownActive,
+          refreshError:
+            data.paypal && typeof data.paypal.refreshError === 'string'
+              ? data.paypal.refreshError
+              : '',
         });
         updateOnboarding(data, {
           showSubscriptionCta,

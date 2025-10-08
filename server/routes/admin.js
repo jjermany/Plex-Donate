@@ -34,6 +34,7 @@ const {
   verifyAdminCredentials,
   updateAdminCredentials,
 } = require('../state/admin-credentials');
+const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
 
 const router = express.Router();
 const csrfProtection = csurf();
@@ -239,6 +240,58 @@ router.get(
   asyncHandler(async (req, res) => {
     const donors = listDonorsWithDetails();
     res.json({ donors, csrfToken: res.locals.csrfToken });
+  })
+);
+
+router.post(
+  '/subscribers/:id/refresh',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(donorId) || donorId <= 0) {
+      return res.status(400).json({
+        error: 'Invalid subscriber ID',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({
+        error: 'Subscriber not found',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const donorForRefresh = donor;
+    const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+      donorForRefresh,
+      {
+        onError: (refreshErr) =>
+          logger.warn('Failed to refresh PayPal subscription from admin dashboard', {
+            donorId: donorForRefresh.id,
+            subscriptionId: donorForRefresh.subscriptionId,
+            error: refreshErr && refreshErr.message,
+          }),
+      }
+    );
+
+    const donorsWithDetails = listDonorsWithDetails();
+    const detailedDonor =
+      donorsWithDetails.find((item) => item.id === donorId) ||
+      refreshedDonor ||
+      donor;
+
+    const normalizedError = error ? String(error) : '';
+    const donorPayload = detailedDonor
+      ? { ...detailedDonor, paypalRefreshError: normalizedError }
+      : null;
+
+    res.json({
+      donor: donorPayload,
+      error: normalizedError,
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 
