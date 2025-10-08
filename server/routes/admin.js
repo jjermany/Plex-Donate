@@ -1,6 +1,5 @@
 const express = require('express');
 const csurf = require('csurf');
-const config = require('../config');
 const { nanoid } = require('nanoid');
 const {
   listDonorsWithDetails,
@@ -30,6 +29,12 @@ const emailService = require('../services/email');
 const plexService = require('../services/plex');
 const logger = require('../utils/logger');
 const settingsStore = require('../state/settings');
+const {
+  getAdminAccount,
+  isManagedExternally,
+  verifyAdminCredentials,
+  updateAdminCredentials,
+} = require('../state/admin-credentials');
 
 const router = express.Router();
 const csrfProtection = csurf();
@@ -96,26 +101,35 @@ router.use((req, res, next) => {
 });
 
 router.get('/session', (req, res) => {
-  if (req.session && req.session.isAdmin) {
+  const authenticated = Boolean(req.session && req.session.isAdmin);
+  if (authenticated) {
     res.locals.sessionToken = ensureSessionToken(req);
   } else {
     res.locals.sessionToken = null;
   }
+  const account = getAdminAccount();
   res.json({
-    authenticated: Boolean(req.session && req.session.isAdmin),
+    authenticated,
     csrfToken: res.locals.csrfToken,
+    adminUsername: authenticated ? account.username : null,
+    credentialsManagedExternally: account.credentialsManagedExternally,
   });
 });
 
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
-    const { password } = req.body || {};
-    if (!config.adminPassword) {
-      return res.status(500).json({ error: 'Admin password not configured' });
+    const { username, password } = req.body || {};
+    const normalizedUsername = typeof username === 'string' ? username.trim() : '';
+    const providedPassword = typeof password === 'string' ? password : '';
+    if (!normalizedUsername) {
+      return res.status(400).json({ error: 'Username is required' });
     }
-    if (password !== config.adminPassword) {
-      return res.status(401).json({ error: 'Invalid admin password' });
+    if (!providedPassword) {
+      return res.status(400).json({ error: 'Password is required' });
+    }
+    if (!verifyAdminCredentials(normalizedUsername, providedPassword)) {
+      return res.status(401).json({ error: 'Invalid admin credentials' });
     }
     if (!req.session || typeof req.session.regenerate !== 'function') {
       logger.error('Session is not available for admin login regeneration');
@@ -140,9 +154,82 @@ router.post(
       }
 
       res.locals.csrfToken = csrfToken;
+      const account = getAdminAccount();
       logger.info('Admin logged in');
-      return res.json({ success: true, csrfToken });
+      return res.json({
+        success: true,
+        csrfToken,
+        adminUsername: account.username,
+        credentialsManagedExternally: account.credentialsManagedExternally,
+      });
     });
+  })
+);
+
+router.get(
+  '/account',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const account = getAdminAccount();
+    res.json({
+      username: account.username,
+      credentialsManagedExternally: account.credentialsManagedExternally,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.put(
+  '/account',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (isManagedExternally()) {
+      return res.status(400).json({
+        error: 'Admin credentials are managed via environment variables. Update them in your configuration.',
+      });
+    }
+
+    const { currentPassword, username, newPassword, confirmPassword } = req.body || {};
+    const current = typeof currentPassword === 'string' ? currentPassword : '';
+    if (!current) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
+
+    if (newPassword || confirmPassword) {
+      if (typeof newPassword !== 'string' || typeof confirmPassword !== 'string') {
+        return res.status(400).json({ error: 'New password and confirmation are required.' });
+      }
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'New password and confirmation must match.' });
+      }
+    }
+
+    try {
+      const result = updateAdminCredentials({
+        currentPassword: current,
+        username,
+        newPassword,
+      });
+      logger.info('Admin credentials updated');
+      res.json({
+        success: true,
+        username: result.username,
+        credentialsManagedExternally: false,
+        csrfToken: res.locals.csrfToken,
+      });
+    } catch (err) {
+      if (err && err.code === 'INVALID_CURRENT_PASSWORD') {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
+      if (err && err.code === 'PASSWORD_TOO_WEAK') {
+        return res.status(400).json({ error: err.message || 'New password is too weak.' });
+      }
+      if (err && err.code === 'CURRENT_PASSWORD_REQUIRED') {
+        return res.status(400).json({ error: err.message || 'Current password is required.' });
+      }
+      logger.error('Failed to update admin credentials', err);
+      throw err;
+    }
   })
 );
 

@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_FILE = ':memory:';
+process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-test-password';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
 
@@ -148,7 +149,7 @@ async function createAdminSession() {
 
     const loginResponse = await requestJson(server, 'POST', '/api/admin/login', {
       headers: { 'x-csrf-token': csrfToken },
-      body: { password: process.env.ADMIN_PASSWORD },
+      body: { username: process.env.ADMIN_USERNAME, password: process.env.ADMIN_PASSWORD },
     });
     assert.equal(loginResponse.status, 200);
     assert.equal(loginResponse.body.success, true);

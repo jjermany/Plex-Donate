@@ -30,6 +30,7 @@ const config = {
   port: Number.parseInt(process.env.PORT || '3000', 10),
   sessionSecret:
     process.env.SESSION_SECRET || crypto.randomBytes(48).toString('hex'),
+  adminUsername: process.env.ADMIN_USERNAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || '',
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.env.DATABASE_FILE)

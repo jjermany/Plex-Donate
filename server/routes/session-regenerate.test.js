@@ -1,5 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_FILE = process.env.DATABASE_FILE || ':memory:';
+process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin-test-password';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
 
@@ -224,7 +225,11 @@ test('admin login regenerates the session and refreshes the CSRF token', async (
   assert.ok(initialCookie);
 
   const loginResponse = await agent.post('/api/admin/login', {
-    body: { password: process.env.ADMIN_PASSWORD, _csrf: initialToken },
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: process.env.ADMIN_PASSWORD,
+      _csrf: initialToken,
+    },
   });
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();

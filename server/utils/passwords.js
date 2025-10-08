@@ -50,54 +50,61 @@ function parseHash(serialized) {
 
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
-    if (typeof password !== 'string' || password.length === 0) {
-      return reject(new Error('Password must be a non-empty string'));
+    try {
+      const result = hashPasswordSync(password);
+      resolve(result);
+    } catch (err) {
+      reject(err);
     }
-    const salt = crypto.randomBytes(SALT_LENGTH);
-    crypto.pbkdf2(
-      password,
-      salt,
-      PBKDF2_ITERATIONS,
-      PBKDF2_KEY_LENGTH,
-      PBKDF2_DIGEST,
-      (err, derivedKey) => {
-        if (err) {
-          return reject(err);
-        }
-        resolve(serializeHash(PBKDF2_ITERATIONS, salt, derivedKey));
-      }
-    );
   });
 }
 
 function verifyPassword(password, storedHash) {
-  return new Promise((resolve, reject) => {
-    if (typeof password !== 'string' || password.length === 0) {
-      return resolve(false);
-    }
-    const parsed = parseHash(storedHash);
-    if (!parsed) {
-      return resolve(false);
-    }
-    crypto.pbkdf2(
+  return new Promise((resolve) => {
+    resolve(verifyPasswordSync(password, storedHash));
+  });
+}
+
+function hashPasswordSync(password) {
+  if (typeof password !== 'string' || password.length === 0) {
+    throw new Error('Password must be a non-empty string');
+  }
+  const salt = crypto.randomBytes(SALT_LENGTH);
+  const derivedKey = crypto.pbkdf2Sync(
+    password,
+    salt,
+    PBKDF2_ITERATIONS,
+    PBKDF2_KEY_LENGTH,
+    PBKDF2_DIGEST
+  );
+  return serializeHash(PBKDF2_ITERATIONS, salt, derivedKey);
+}
+
+function verifyPasswordSync(password, storedHash) {
+  if (typeof password !== 'string' || password.length === 0) {
+    return false;
+  }
+  const parsed = parseHash(storedHash);
+  if (!parsed) {
+    return false;
+  }
+  let derivedKey;
+  try {
+    derivedKey = crypto.pbkdf2Sync(
       password,
       parsed.salt,
       parsed.iterations,
       parsed.key.length,
-      PBKDF2_DIGEST,
-      (err, derivedKey) => {
-        if (err) {
-          return reject(err);
-        }
-        try {
-          const matches = crypto.timingSafeEqual(parsed.key, derivedKey);
-          resolve(matches);
-        } catch (compareErr) {
-          resolve(false);
-        }
-      }
+      PBKDF2_DIGEST
     );
-  });
+  } catch (err) {
+    return false;
+  }
+  try {
+    return crypto.timingSafeEqual(parsed.key, derivedKey);
+  } catch (err) {
+    return false;
+  }
 }
 
 function isPasswordStrong(password) {
@@ -113,6 +120,8 @@ function isPasswordStrong(password) {
 
 module.exports = {
   hashPassword,
+  hashPasswordSync,
   verifyPassword,
+  verifyPasswordSync,
   isPasswordStrong,
 };

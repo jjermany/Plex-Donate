@@ -225,6 +225,122 @@
         backdrop-filter: blur(14px);
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .login-panel {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .login-panel::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+            circle at top right,
+            rgba(99, 102, 241, 0.25),
+            transparent 55%
+          ),
+          radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.2), transparent 60%);
+        pointer-events: none;
+        opacity: 0.85;
+      }
+
+      .login-panel > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      .login-panel h2 {
+        margin-top: 0;
+        margin-bottom: 8px;
+      }
+
+      .login-description {
+        margin-top: 0;
+        margin-bottom: 20px;
+        color: var(--text-muted);
+      }
+
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .input-shell {
+        display: flex;
+        align-items: center;
+        border-radius: 12px;
+        border: 1px solid var(--input-border);
+        background: var(--input-background);
+        padding: 0 14px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .input-shell:focus-within {
+        border-color: rgba(79, 70, 229, 0.8);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+      }
+
+      .input-shell .input-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted-soft);
+        margin-right: 10px;
+        font-size: 1rem;
+      }
+
+      .input-shell input {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: inherit;
+        padding: 12px 0;
+        font-size: 1rem;
+        outline: none;
+      }
+
+      .input-shell button {
+        margin-left: 8px;
+        padding: 6px 10px;
+        font-size: 0.85rem;
+      }
+
+      .login-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .login-actions button {
+        width: 100%;
+      }
+
+      .form-status-text {
+        margin: 16px 0 0;
+        color: var(--form-status);
+      }
+
+      .form-status-text.error {
+        color: var(--form-status-error);
+      }
+
+      .form-status-text.success {
+        color: var(--form-status-success);
+      }
+
       label {
         display: block;
         font-weight: 600;
@@ -757,18 +873,92 @@
         </div>
       </header>
 
-      <section id="login-panel" class="panel">
-        <h2>Admin Sign in</h2>
-        <p>Enter the admin password defined in your <code>.env</code> file.</p>
-        <form id="login-form">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required />
-          <button type="submit" style="margin-top: 16px;">Sign in</button>
+      <section id="login-panel" class="panel login-panel">
+        <h2>Admin sign in</h2>
+        <p class="login-description" id="login-help">
+          Use the admin username and password configured for Plex Donate. The default username is
+          <code>admin</code>. On first run a temporary password is written to your server logs.
+        </p>
+        <form id="login-form" class="login-form" autocomplete="on">
+          <label class="visually-hidden" for="username">Username</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">👤</span>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autocomplete="username"
+              placeholder="Admin username"
+              required
+            />
+          </div>
+          <label class="visually-hidden" for="password">Password</label>
+          <div class="input-shell">
+            <span class="input-icon" aria-hidden="true">🔒</span>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              placeholder="Password"
+              required
+            />
+            <button type="button" class="secondary" id="toggle-password-visibility" aria-pressed="false">
+              Show
+            </button>
+          </div>
+          <div class="login-actions">
+            <button id="login-submit" type="submit">Sign in</button>
+          </div>
         </form>
-        <p id="status-message"></p>
+        <p id="status-message" class="form-status-text"></p>
       </section>
 
       <div id="dashboard" class="hidden">
+        <section class="panel" id="admin-account-panel">
+          <h2 style="margin-top:0;">Admin account</h2>
+          <p class="muted-text" id="admin-account-description">
+            Update the username and password used to access this dashboard. Password changes require at least 12 characters.
+          </p>
+          <form id="admin-credentials-form" class="settings-form">
+            <div class="field-grid">
+              <label>
+                Username
+                <input name="username" type="text" autocomplete="username" placeholder="Admin username" />
+              </label>
+              <label>
+                New password
+                <input
+                  name="newPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Leave blank to keep current"
+                />
+              </label>
+              <label>
+                Confirm new password
+                <input
+                  name="confirmPassword"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="Repeat the new password"
+                />
+              </label>
+            </div>
+            <label>
+              Current password
+              <input name="currentPassword" type="password" autocomplete="current-password" required />
+            </label>
+            <p class="form-status" data-status-for="admin-credentials"></p>
+            <div class="form-actions">
+              <button type="submit">Save admin credentials</button>
+            </div>
+          </form>
+          <p class="subtle-text hidden" id="admin-credentials-external-note">
+            Admin credentials are currently managed through environment variables. Update <code>ADMIN_USERNAME</code> and
+            <code>ADMIN_PASSWORD</code> in your deployment to change the login details.
+          </p>
+        </section>
         <section class="panel" id="prospect-share-panel">
           <h2 style="margin-top:0;">Invite a new supporter</h2>
           <p class="muted-text" style="margin:0 0 16px;">
@@ -1170,9 +1360,19 @@
 
     <script>
       const loginPanel = document.getElementById('login-panel');
+      const loginForm = document.getElementById('login-form');
+      const loginUsernameInput = document.getElementById('username');
+      const loginPasswordInput = document.getElementById('password');
+      const loginSubmitButton = document.getElementById('login-submit');
+      const loginHelp = document.getElementById('login-help');
+      const togglePasswordVisibilityButton = document.getElementById('toggle-password-visibility');
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
+      const adminAccountPanel = document.getElementById('admin-account-panel');
+      const adminCredentialsForm = document.getElementById('admin-credentials-form');
+      const adminCredentialsNote = document.getElementById('admin-credentials-external-note');
+      const adminAccountDescription = document.getElementById('admin-account-description');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
@@ -1353,7 +1553,20 @@
         paypalPlanError: '',
         paypalPlanManageUrl: '',
         paypalPlanLoading: false,
+        adminUsername: 'admin',
+        credentialsManagedExternally: false,
       };
+
+      function setLoginStatus(message = '', stateAttr = '') {
+        if (!statusMessage) {
+          return;
+        }
+        statusMessage.textContent = message;
+        statusMessage.classList.remove('error', 'success');
+        if (stateAttr) {
+          statusMessage.classList.add(stateAttr);
+        }
+      }
 
       const AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
       let autoRefreshTimerId = null;
@@ -1634,14 +1847,37 @@
         return data;
       }
 
+      async function ensureCsrfToken() {
+        if (csrfToken) {
+          return csrfToken;
+        }
+        try {
+          const data = await api('/api/admin/session');
+          csrfToken = data.csrfToken || csrfToken;
+          state.authenticated = Boolean(data.authenticated);
+          if (typeof data.credentialsManagedExternally !== 'undefined') {
+            state.credentialsManagedExternally = Boolean(data.credentialsManagedExternally);
+          }
+          if (data.adminUsername) {
+            state.adminUsername = data.adminUsername;
+          }
+          render();
+          return csrfToken;
+        } catch (err) {
+          console.error('Failed to refresh CSRF token', err);
+          throw err;
+        }
+      }
+
       function render() {
+        renderAdminAccountPanel();
         renderProspectSharePanel();
         renderShareLinks();
         if (state.authenticated) {
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
           logoutButton.classList.remove('hidden');
-          statusMessage.textContent = '';
+          setLoginStatus('', '');
           renderSubscribers();
           renderEvents();
           renderSettings();
@@ -1649,6 +1885,19 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
+          setLoginStatus('', '');
+          if (loginHelp) {
+            if (state.credentialsManagedExternally) {
+              loginHelp.innerHTML =
+                'Use the admin username and password configured in your environment variables (<code>ADMIN_USERNAME</code> and <code>ADMIN_PASSWORD</code>). On first run a temporary password is written to your server logs.';
+            } else {
+              loginHelp.innerHTML =
+                'Use the admin username and password configured for Plex Donate. The default username is <code>admin</code>. On first run a temporary password is written to your server logs.';
+            }
+          }
+          if (loginUsernameInput && document.activeElement !== loginUsernameInput) {
+            loginUsernameInput.value = state.adminUsername || '';
+          }
           if (prospectSharePanel) {
             prospectSharePanel.classList.add('hidden');
           }
@@ -2247,6 +2496,75 @@
       }
     }
 
+    function renderAdminAccountPanel() {
+      if (!adminAccountPanel) {
+        return;
+      }
+      if (!state.authenticated) {
+        adminAccountPanel.classList.add('hidden');
+        if (adminCredentialsForm) {
+          adminCredentialsForm.reset();
+        }
+        if (adminCredentialsNote) {
+          adminCredentialsNote.classList.add('hidden');
+        }
+        if (adminAccountDescription) {
+          adminAccountDescription.textContent =
+            'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
+        }
+        return;
+      }
+
+      adminAccountPanel.classList.remove('hidden');
+
+      const managedExternally = Boolean(state.credentialsManagedExternally);
+      if (adminAccountDescription) {
+        adminAccountDescription.textContent = managedExternally
+          ? 'Admin credentials are managed via environment variables. Update them in your deployment to make changes.'
+          : 'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
+      }
+
+      if (adminCredentialsForm) {
+        const usernameInput = adminCredentialsForm.querySelector("input[name='username']");
+        if (usernameInput && document.activeElement !== usernameInput) {
+          usernameInput.value = state.adminUsername || '';
+        }
+
+        adminCredentialsForm.querySelectorAll('input').forEach((input) => {
+          input.disabled = managedExternally;
+          if (managedExternally && input.name !== 'username') {
+            input.value = '';
+          }
+        });
+
+        const submitButton = adminCredentialsForm.querySelector("button[type='submit']");
+        if (submitButton) {
+          submitButton.disabled = managedExternally;
+        }
+      }
+
+      if (adminCredentialsNote) {
+        adminCredentialsNote.classList.toggle('hidden', !managedExternally);
+      }
+    }
+
+    async function loadAdminAccount() {
+      if (!state.authenticated) {
+        return;
+      }
+      try {
+        const response = await api('/api/admin/account');
+        if (response && typeof response.credentialsManagedExternally !== 'undefined') {
+          state.credentialsManagedExternally = Boolean(response.credentialsManagedExternally);
+        }
+        if (response && response.username) {
+          state.adminUsername = response.username;
+        }
+      } catch (err) {
+        console.error('Failed to load admin account details', err);
+      }
+    }
+
     async function loadDashboardData() {
       if (dashboardDataPromise) {
         return dashboardDataPromise;
@@ -2254,6 +2572,7 @@
 
       dashboardDataPromise = (async () => {
         try {
+          await loadAdminAccount();
           try {
             const donorsResponse = await api('/api/admin/subscribers');
             state.donors = donorsResponse.donors || [];
@@ -2301,6 +2620,14 @@
           const data = await api('/api/admin/session');
           csrfToken = data.csrfToken;
           state.authenticated = data.authenticated;
+          if (typeof data.credentialsManagedExternally !== 'undefined') {
+            state.credentialsManagedExternally = Boolean(data.credentialsManagedExternally);
+          }
+          if (data.adminUsername) {
+            state.adminUsername = data.adminUsername;
+          } else if (!state.authenticated && !state.adminUsername) {
+            state.adminUsername = 'admin';
+          }
           if (state.authenticated) {
             await loadDashboardData();
             startDashboardAutoRefresh();
@@ -2425,29 +2752,60 @@
         });
       }
 
-      document.getElementById('login-form').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const password = document.getElementById('password').value.trim();
-        if (!password) {
-          statusMessage.textContent = 'Password is required';
-          return;
-        }
-        statusMessage.textContent = 'Signing in…';
-        try {
-          const response = await api('/api/admin/login', {
-            method: 'POST',
-            body: { password },
-          });
-          csrfToken = response.csrfToken;
-          state.authenticated = true;
-          document.getElementById('password').value = '';
-          await loadDashboardData();
-          startDashboardAutoRefresh();
-          statusMessage.textContent = '';
-        } catch (err) {
-          statusMessage.textContent = err.message;
-        }
-      });
+      if (togglePasswordVisibilityButton && loginPasswordInput) {
+        togglePasswordVisibilityButton.addEventListener('click', () => {
+          const shouldReveal = loginPasswordInput.type === 'password';
+          loginPasswordInput.type = shouldReveal ? 'text' : 'password';
+          togglePasswordVisibilityButton.textContent = shouldReveal ? 'Hide' : 'Show';
+          togglePasswordVisibilityButton.setAttribute('aria-pressed', shouldReveal ? 'true' : 'false');
+        });
+      }
+
+      if (loginForm) {
+        loginForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!loginUsernameInput || !loginPasswordInput) {
+            return;
+          }
+          const username = loginUsernameInput.value.trim();
+          const password = loginPasswordInput.value;
+          if (!username) {
+            setLoginStatus('Username is required', 'error');
+            return;
+          }
+          if (!password) {
+            setLoginStatus('Password is required', 'error');
+            return;
+          }
+          setLoginStatus('Signing in…');
+          if (loginSubmitButton) {
+            loginSubmitButton.disabled = true;
+          }
+          try {
+            await ensureCsrfToken();
+            const response = await api('/api/admin/login', {
+              method: 'POST',
+              body: { username, password },
+            });
+            csrfToken = response.csrfToken;
+            state.authenticated = true;
+            state.adminUsername = response.adminUsername || username;
+            if (typeof response.credentialsManagedExternally !== 'undefined') {
+              state.credentialsManagedExternally = Boolean(response.credentialsManagedExternally);
+            }
+            loginPasswordInput.value = '';
+            await loadDashboardData();
+            startDashboardAutoRefresh();
+            setLoginStatus('');
+          } catch (err) {
+            setLoginStatus(err.message || 'Sign in failed', 'error');
+          } finally {
+            if (loginSubmitButton) {
+              loginSubmitButton.disabled = false;
+            }
+          }
+        });
+      }
 
       logoutButton.addEventListener('click', async () => {
         try {
@@ -2466,6 +2824,8 @@
           state.paypalPlanManageUrl = '';
           state.paypalPlanLoading = false;
           state.prospectShare = null;
+          state.adminUsername = 'admin';
+          state.credentialsManagedExternally = false;
           render();
         }
       });
@@ -2476,6 +2836,106 @@
         prospectShareForm.addEventListener('submit', async (event) => {
           event.preventDefault();
           await generateProspectShareLink({ regenerate: false });
+        });
+      }
+
+      if (adminCredentialsForm) {
+        adminCredentialsForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (state.credentialsManagedExternally) {
+            setFormStatus(
+              adminCredentialsForm,
+              'Admin credentials are managed via environment variables.',
+              'error'
+            );
+            return;
+          }
+
+          const usernameInput = adminCredentialsForm.querySelector("input[name='username']");
+          const currentPasswordInput = adminCredentialsForm.querySelector(
+            "input[name='currentPassword']"
+          );
+          const newPasswordInput = adminCredentialsForm.querySelector("input[name='newPassword']");
+          const confirmPasswordInput = adminCredentialsForm.querySelector(
+            "input[name='confirmPassword']"
+          );
+
+          const username = usernameInput ? usernameInput.value.trim() : '';
+          const currentPassword = currentPasswordInput ? currentPasswordInput.value : '';
+          const newPassword = newPasswordInput ? newPasswordInput.value : '';
+          const confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : '';
+
+          if (!currentPassword) {
+            setFormStatus(adminCredentialsForm, 'Current password is required.', 'error');
+            return;
+          }
+
+          if (newPassword || confirmPassword) {
+            if (newPassword !== confirmPassword) {
+              setFormStatus(adminCredentialsForm, 'New passwords do not match.', 'error');
+              return;
+            }
+            if (newPassword.trim().length < 12) {
+              setFormStatus(
+                adminCredentialsForm,
+                'New password must be at least 12 characters long.',
+                'error'
+              );
+              return;
+            }
+          }
+
+          setFormStatus(adminCredentialsForm, 'Saving…', 'pending');
+          const submitButton = adminCredentialsForm.querySelector("button[type='submit']");
+          if (submitButton) {
+            submitButton.disabled = true;
+          }
+
+          const payload = {
+            currentPassword,
+          };
+          if (username) {
+            payload.username = username;
+          }
+          if (newPassword) {
+            payload.newPassword = newPassword;
+            payload.confirmPassword = confirmPassword;
+          }
+
+          try {
+            const response = await api('/api/admin/account', {
+              method: 'PUT',
+              body: payload,
+            });
+            if (response && response.username) {
+              state.adminUsername = response.username;
+            }
+            if (response && typeof response.credentialsManagedExternally !== 'undefined') {
+              state.credentialsManagedExternally = Boolean(response.credentialsManagedExternally);
+            }
+            setFormStatus(adminCredentialsForm, 'Admin credentials updated.', 'success');
+            scheduleStatusClear(adminCredentialsForm, 4000);
+            if (currentPasswordInput) {
+              currentPasswordInput.value = '';
+            }
+            if (newPasswordInput) {
+              newPasswordInput.value = '';
+            }
+            if (confirmPasswordInput) {
+              confirmPasswordInput.value = '';
+            }
+          } catch (err) {
+            setFormStatus(
+              adminCredentialsForm,
+              err && err.message ? err.message : 'Failed to update admin credentials.',
+              'error'
+            );
+          } finally {
+            if (submitButton) {
+              submitButton.disabled = state.credentialsManagedExternally;
+            }
+            renderAdminAccountPanel();
+          }
         });
       }
 

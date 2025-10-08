@@ -10,6 +10,7 @@ const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
 const SqliteSessionStore = require('./session-store');
+const { initializeAdminCredentials } = require('./state/admin-credentials');
 const {
   db,
   listDonorsWithExpiredAccess,
@@ -24,6 +25,13 @@ const SESSION_TTL_MS = 1000 * 60 * 15;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
+
+try {
+  initializeAdminCredentials();
+} catch (err) {
+  logger.error('Failed to initialize admin credentials', err);
+  process.exit(1);
+}
 
 const sessionStore = new SqliteSessionStore({
   db,
