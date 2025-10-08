@@ -562,28 +562,30 @@
               Follow the guided path below to complete your setup.
             </p>
             <div class="steps">
-              <div id="step-subscription" class="step" data-state="current">
+              <div id="step-plex" class="step" data-state="current">
                 <div class="step-header">
                   <span class="step-number" data-step-number="1">1</span>
                   <div>
-                    <h3 class="step-title">Start your support subscription</h3>
-                    <p id="step-subscription-note" class="muted small">
-                      Use the PayPal button above to kick off your membership.
+                    <h3 class="step-title">Authenticate with Plex</h3>
+                    <p id="step-plex-note" class="muted small">
+                      Launch the Plex prompt above to link the account you use
+                      for streaming.
                     </p>
                   </div>
                 </div>
                 <p class="step-footnote muted small">
-                  Supporting the server keeps the library growing for everyone.
+                  We rely on Plex to deliver the library—linking your account
+                  keeps access seamless.
                 </p>
               </div>
-              <div id="step-plex" class="step" data-state="upcoming">
+              <div id="step-subscription" class="step" data-state="upcoming">
                 <div class="step-header">
                   <span class="step-number" data-step-number="2">2</span>
                   <div>
-                    <h3 class="step-title">Authenticate with Plex</h3>
-                    <p id="step-plex-note" class="muted small">
-                      We'll prompt you to link your Plex account once your
-                      subscription is confirmed.
+                    <h3 class="step-title">Start your support subscription</h3>
+                    <p id="step-subscription-note" class="muted small">
+                      Once Plex is linked, use the PayPal button above to kick
+                      off your membership.
                     </p>
                   </div>
                 </div>
@@ -1058,6 +1060,7 @@
           nextInviteMessage = '',
           cooldownActive = false,
           refreshError = '',
+          plexLinked = false,
         } = {}
       ) {
         if (!memberStatusMessage) {
@@ -1097,7 +1100,10 @@
           case 'pending':
             tone = 'info';
             if (!donor || !donor.subscriptionId) {
-              if (showSubscriptionCta) {
+              if (!plexLinked) {
+                message =
+                  'Link your Plex account above to unlock the PayPal checkout or paste your subscription ID once you have it.';
+              } else if (showSubscriptionCta) {
                 message =
                   'Start your PayPal subscription above or paste an existing subscription ID below to activate your membership.';
               } else {
@@ -1263,7 +1269,7 @@
           data && data.invite && data.invite.wizarrInviteUrl
         );
         const inviteLimitReached = Boolean(data && data.inviteLimitReached);
-        const allComplete = subscriptionComplete && plexLinked && inviteReadyState;
+        const allComplete = plexLinked && subscriptionComplete && inviteReadyState;
 
         if (allComplete) {
           onboardingPanel.classList.add('hidden');
@@ -1273,8 +1279,8 @@
         onboardingPanel.classList.remove('hidden');
 
         const steps = [
-          { el: stepSubscription, complete: subscriptionComplete },
           { el: stepPlex, complete: plexLinked },
+          { el: stepSubscription, complete: subscriptionComplete },
           { el: stepInvite, complete: inviteReadyState },
         ];
 
@@ -1293,14 +1299,35 @@
           }
         }
 
+        if (stepPlexNote) {
+          if (plexLinked) {
+            if (subscriptionComplete) {
+              stepPlexNote.textContent =
+                'Plex account verified—time to generate your invite!';
+            } else {
+              stepPlexNote.textContent =
+                'Plex account verified—head to the next step to start your membership.';
+            }
+          } else if (plexLinkPending) {
+            stepPlexNote.textContent =
+              'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
+          } else {
+            stepPlexNote.textContent =
+              'Launch the Plex authentication prompt above to link your streaming account. We will update this step as soon as verification completes.';
+          }
+        }
+
         if (stepSubscriptionNote) {
-          if (!subscriptionStarted) {
+          if (!plexLinked) {
+            stepSubscriptionNote.textContent =
+              'Finish Plex authentication first—we unlock the PayPal checkout and subscription linking right after.';
+          } else if (!subscriptionStarted) {
             if (showSubscriptionCta) {
               stepSubscriptionNote.textContent =
                 'Use the PayPal button above or paste your subscription ID below to kick off your membership.';
             } else {
               stepSubscriptionNote.textContent =
-                'Paste your PayPal subscription ID below once you have it and we will link your membership automatically.';
+                'Already supporting the server? Paste your PayPal subscription ID below and we will link it automatically.';
             }
           } else if (!subscriptionComplete) {
             stepSubscriptionNote.textContent =
@@ -1311,29 +1338,13 @@
           }
         }
 
-        if (stepPlexNote) {
-          if (!subscriptionComplete) {
-            stepPlexNote.textContent =
-              'We’ll unlock Plex linking after your subscription is confirmed.';
-          } else if (plexLinked) {
-            stepPlexNote.textContent =
-              'Plex account verified—time to generate your invite!';
-          } else if (plexLinkPending) {
-            stepPlexNote.textContent =
-              'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
-          } else {
-            stepPlexNote.textContent =
-              'Watch for the Plex authentication prompt here once your access is approved.';
-          }
-        }
-
         if (stepInviteNote) {
-          if (!subscriptionComplete) {
-            stepInviteNote.textContent =
-              'Invite generation unlocks after your subscription is active.';
-          } else if (!plexLinked) {
+          if (!plexLinked) {
             stepInviteNote.textContent =
               'Finish Plex authentication and we’ll enable invite generation.';
+          } else if (!subscriptionComplete) {
+            stepInviteNote.textContent =
+              'Invite generation unlocks after your subscription is active.';
           } else if (!inviteReadyState) {
             stepInviteNote.textContent =
               'Use the form below to send the invite to your inbox as soon as you are verified.';
@@ -1402,6 +1413,7 @@
           : 'Set your preferred streaming email under profile settings.';
 
         const normalizedStatus = (donor.status || 'pending').toLowerCase();
+        const plexLinked = Boolean(donor.plexLinked);
         if (memberStatusEl) {
           memberStatusEl.dataset.status = normalizedStatus;
           memberStatusEl.textContent = normalizedStatus || 'pending';
@@ -1435,10 +1447,13 @@
           memberPlanEl.innerHTML = '';
         }
 
-        const showSubscriptionCta = Boolean(
+        const subscriptionCheckoutEligible = Boolean(
           data.paypal &&
             data.paypal.subscriptionCheckoutAvailable &&
             (!donor.subscriptionId || normalizedStatus !== 'active')
+        );
+        const showSubscriptionCta = Boolean(
+          subscriptionCheckoutEligible && plexLinked
         );
 
         const limitReached = Boolean(data.inviteLimitReached);
@@ -1463,6 +1478,7 @@
             data.paypal && typeof data.paypal.refreshError === 'string'
               ? data.paypal.refreshError
               : '',
+          plexLinked,
         });
         updateOnboarding(data, {
           showSubscriptionCta,
@@ -1473,6 +1489,7 @@
         if (subscriptionButton && subscriptionCta) {
           if (showSubscriptionCta) {
             subscriptionCta.classList.remove('hidden');
+            subscriptionButton.classList.remove('hidden');
             subscriptionButton.disabled = false;
             subscriptionButton.dataset.available = 'true';
             subscriptionButton.textContent = defaultSubscriptionButtonLabel;
@@ -1482,8 +1499,21 @@
               'info'
             );
             subscriptionNote.classList.add('small');
+          } else if (subscriptionCheckoutEligible && !plexLinked) {
+            subscriptionCta.classList.remove('hidden');
+            subscriptionButton.classList.add('hidden');
+            subscriptionButton.disabled = true;
+            subscriptionButton.dataset.available = 'false';
+            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+            setStatusText(
+              subscriptionNote,
+              'Link your Plex account above and we will unlock the PayPal checkout automatically.',
+              'info'
+            );
+            subscriptionNote.classList.add('small');
           } else {
             subscriptionCta.classList.add('hidden');
+            subscriptionButton.classList.remove('hidden');
             subscriptionButton.disabled = true;
             subscriptionButton.dataset.available = 'false';
             subscriptionButton.textContent = defaultSubscriptionButtonLabel;
