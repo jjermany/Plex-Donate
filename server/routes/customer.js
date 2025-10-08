@@ -8,9 +8,11 @@ const {
   updateDonorContact,
   getDonorAuthByEmail,
   updateDonorSubscriptionId,
+  updateDonorStatus,
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
   updateInvitePlexDetails,
+  setDonorAccessExpirationBySubscription,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -97,6 +99,44 @@ function isValidSubscriptionId(subscriptionId) {
     return false;
   }
   return /^[a-z0-9-]+$/i.test(normalized);
+}
+
+function mapPaypalSubscriptionStatus(status) {
+  const normalized = (status || '').toString().trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+
+  switch (normalized) {
+    case 'approval_pending':
+      return 'pending';
+    case 'approved':
+      return 'active';
+    case 'active':
+    case 'suspended':
+    case 'cancelled':
+    case 'expired':
+      return normalized;
+    default:
+      return normalized;
+  }
+}
+
+function needsSubscriptionRefresh(donor, subscriptionLinked) {
+  if (!donor || !normalizeSubscriptionId(donor.subscriptionId || '')) {
+    return false;
+  }
+
+  if (subscriptionLinked) {
+    return true;
+  }
+
+  const status = (donor.status || '').toString().trim().toLowerCase();
+  if (!status) {
+    return true;
+  }
+
+  return ['pending', 'approval_pending', 'approved'].includes(status);
 }
 
 function hasPlexLink(donor) {
@@ -552,6 +592,10 @@ router.post(
       ? existingSubscription.toUpperCase()
       : '';
     let subscriptionLinked = false;
+    const profileUpdates = {
+      email: updatedDonor.email,
+      name: updatedDonor.name,
+    };
 
     if (
       normalizedSubscriptionInput &&
@@ -569,10 +613,66 @@ router.post(
       });
     }
 
-    const profileUpdates = {
-      email: updatedDonor.email,
-      name: updatedDonor.name,
-    };
+    const shouldRefreshSubscription = needsSubscriptionRefresh(
+      updatedDonor,
+      subscriptionLinked
+    );
+
+    if (shouldRefreshSubscription) {
+      try {
+        const subscription = await paypalService.getSubscription(
+          updatedDonor.subscriptionId
+        );
+        const subscriptionStatus = (subscription && subscription.status) || '';
+        const normalizedStatus = mapPaypalSubscriptionStatus(
+          subscriptionStatus
+        );
+        const billingInfo = (subscription && subscription.billing_info) || {};
+        const lastPaymentAt =
+          (billingInfo.last_payment && billingInfo.last_payment.time) || null;
+
+        if (normalizedStatus || lastPaymentAt) {
+          const previousStatus = updatedDonor.status;
+          const previousLastPaymentAt = updatedDonor.lastPaymentAt;
+          const statusToApply =
+            normalizedStatus || previousStatus || 'pending';
+          const statusUpdated = updateDonorStatus(
+            updatedDonor.subscriptionId,
+            statusToApply,
+            lastPaymentAt || previousLastPaymentAt || null
+          );
+
+          if (statusUpdated) {
+            updatedDonor = statusUpdated;
+            if (updatedDonor.status !== previousStatus) {
+              profileUpdates.status = updatedDonor.status;
+            }
+            if (updatedDonor.lastPaymentAt !== previousLastPaymentAt) {
+              profileUpdates.lastPaymentAt = updatedDonor.lastPaymentAt;
+            }
+          }
+
+          if (normalizedStatus === 'active') {
+            const donorWithAccess = setDonorAccessExpirationBySubscription(
+              updatedDonor.subscriptionId,
+              null
+            );
+            if (donorWithAccess) {
+              updatedDonor = donorWithAccess;
+            }
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to refresh PayPal subscription after manual link', {
+          donorId: donor.id,
+          subscriptionId: updatedDonor.subscriptionId,
+          error: err && err.message,
+        });
+      }
+    }
+
+    profileUpdates.email = updatedDonor.email;
+    profileUpdates.name = updatedDonor.name;
     if (subscriptionLinked) {
       profileUpdates.subscriptionId = updatedDonor.subscriptionId;
     }
