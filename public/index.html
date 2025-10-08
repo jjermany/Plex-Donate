@@ -1850,8 +1850,38 @@
         `;
       }
 
+      async function refreshAdminSession() {
+        const response = await fetch(withSessionToken('/api/admin/session'), {
+          credentials: 'include',
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+          ? await response.json()
+          : {};
+
+        if (!response.ok) {
+          const error = data.error || 'Failed to refresh session';
+          throw new Error(error);
+        }
+
+        if (data && data.csrfToken) {
+          csrfToken = data.csrfToken;
+        }
+
+        updateSessionTokenFromResponse(data);
+
+        state.authenticated = Boolean(data.authenticated);
+        if (data.adminUsername) {
+          state.adminUsername = data.adminUsername;
+        }
+        render();
+
+        return data;
+      }
+
       async function api(path, options = {}) {
-        const opts = { ...options };
+        const { _retry, ...requestOptions } = options || {};
+        const opts = { ...requestOptions };
         opts.credentials = 'include';
         opts.headers = opts.headers ? { ...opts.headers } : {};
         if (opts.body && typeof opts.body !== 'string') {
@@ -1887,6 +1917,22 @@
           throw new Error('Authentication required');
         }
 
+        if (
+          response.status === 403 &&
+          data &&
+          data.error === 'Invalid CSRF token' &&
+          !_retry
+        ) {
+          csrfToken = null;
+          try {
+            await refreshAdminSession();
+          } catch (err) {
+            console.error('Failed to recover from CSRF token error', err);
+            throw new Error(data.error || 'Invalid CSRF token');
+          }
+          return api(path, { ...requestOptions, _retry: true });
+        }
+
         if (!response.ok) {
           const error = data.error || 'Request failed';
           throw new Error(error);
@@ -1900,13 +1946,8 @@
           return csrfToken;
         }
         try {
-          const data = await api('/api/admin/session');
+          const data = await refreshAdminSession();
           csrfToken = data.csrfToken || csrfToken;
-          state.authenticated = Boolean(data.authenticated);
-          if (data.adminUsername) {
-            state.adminUsername = data.adminUsername;
-          }
-          render();
           return csrfToken;
         } catch (err) {
           console.error('Failed to refresh CSRF token', err);

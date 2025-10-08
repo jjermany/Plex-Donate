@@ -78,3 +78,23 @@ Open the **Subscribers** tab in the admin dashboard to copy invite links for sup
 ### Customer dashboard
 
 Set your PayPal return/landing URL to `https://<your-domain>/dashboard`. Subscribers sign in with their PayPal subscription ID and email to view account status, update their preferred streaming address, and generate fresh Wizarr invites on demand.
+
+## 📱 Progressive Web App
+
+- When Android 13+ "Themed icons" is enabled, the system intentionally displays
+  a monochrome version of the Plex Donate icon that matches your wallpaper.
+  Disable themed icons in Android settings if you prefer the full-color
+  artwork. The manifest continues to ship the full-color maskable icons for
+  launchers that do not support theming.
+- The PWA is available at `https://your.domain/dashboard`.
+- If you run into issues on iOS, make sure you set the `publicBaseUrl` setting
+  in the admin dashboard under _Application settings_.
+- Safari on macOS does not currently support push notifications for PWAs.
+
+### Brave browser CSRF protection
+
+Brave Shields may block authentication cookies for installed PWAs, which can
+result in an `Invalid CSRF token` error when you open the dashboard from the
+home screen. The frontend now retries once by requesting a fresh session token,
+but if Brave continues to block the cookie you will need to disable Shields for
+your Plex Donate domain.
