@@ -119,6 +119,65 @@ function needsSubscriptionRefresh(donor, subscriptionLinked) {
   return ['pending', 'approval_pending', 'approved'].includes(status);
 }
 
+async function refreshDonorSubscription(
+  donor,
+  { onError } = {}
+) {
+  if (!donor) {
+    return donor;
+  }
+
+  const subscriptionId = normalizeSubscriptionId(donor.subscriptionId || '');
+  if (!subscriptionId) {
+    return donor;
+  }
+
+  try {
+    const subscription = await paypalService.getSubscription(subscriptionId);
+    const subscriptionStatus = (subscription && subscription.status) || '';
+    const normalizedStatus = mapPaypalSubscriptionStatus(subscriptionStatus);
+    const billingInfo = (subscription && subscription.billing_info) || {};
+    const lastPaymentAt =
+      (billingInfo.last_payment && billingInfo.last_payment.time) || null;
+
+    if (!normalizedStatus && !lastPaymentAt) {
+      return donor;
+    }
+
+    const statusToApply = normalizedStatus || donor.status || 'pending';
+    const statusUpdated = updateDonorStatus(
+      subscriptionId,
+      statusToApply,
+      lastPaymentAt || donor.lastPaymentAt || null
+    );
+
+    let updatedDonor = statusUpdated || donor;
+
+    if (normalizedStatus === 'active') {
+      const donorWithAccess = setDonorAccessExpirationBySubscription(
+        subscriptionId,
+        null
+      );
+      if (donorWithAccess) {
+        updatedDonor = donorWithAccess;
+      }
+    }
+
+    return updatedDonor;
+  } catch (err) {
+    if (typeof onError === 'function') {
+      onError(err);
+    } else {
+      logger.warn('Failed to refresh PayPal subscription', {
+        donorId: donor.id,
+        subscriptionId: donor.subscriptionId,
+        error: err && err.message,
+      });
+    }
+    return donor;
+  }
+}
+
 function hasPlexLink(donor) {
   return Boolean(donor && donor.plexAccountId);
 }
@@ -330,12 +389,26 @@ function requireCustomer(req, res, next) {
 router.get(
   '/session',
   asyncHandler(async (req, res) => {
-    const donor = getAuthenticatedDonor(req);
+    let donor = getAuthenticatedDonor(req);
     if (!donor) {
       res.locals.sessionToken = null;
       return res.json({ authenticated: false });
     }
     res.locals.sessionToken = ensureSessionToken(req);
+
+    if (needsSubscriptionRefresh(donor, false)) {
+      const donorForRefresh = donor;
+      donor =
+        (await refreshDonorSubscription(donorForRefresh, {
+          onError: (err) =>
+            logger.warn('Failed to refresh PayPal subscription during session load', {
+              donorId: donorForRefresh.id,
+              subscriptionId: donorForRefresh.subscriptionId,
+              error: err && err.message,
+            }),
+        })) || donor;
+    }
+
     const {
       activeInvite: invite,
       inviteLimitReached,
@@ -397,7 +470,7 @@ router.post(
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
-    const donor = authRecord.donor;
+    let donor = authRecord.donor;
     const existingPlexLink =
       req.session && req.session.plexLink && req.session.plexLink.donorId === donor.id
         ? { ...req.session.plexLink }
@@ -410,7 +483,7 @@ router.post(
         .json({ error: 'Failed to sign in. Please try again shortly.' });
     }
 
-    return req.session.regenerate((err) => {
+    return req.session.regenerate(async (err) => {
       if (err) {
         logger.error('Failed to regenerate customer session', err);
         return res
@@ -418,30 +491,52 @@ router.post(
           .json({ error: 'Failed to sign in. Please try again shortly.' });
       }
 
-      if (existingPlexLink) {
-        req.session.plexLink = existingPlexLink;
-      }
+      try {
+        if (existingPlexLink) {
+          req.session.plexLink = existingPlexLink;
+        }
 
-      req.session.customerId = donor.id;
-      logger.info('Customer signed in with email/password', { donorId: donor.id });
+        if (needsSubscriptionRefresh(donor, false)) {
+          const donorForRefresh = donor;
+          donor =
+            (await refreshDonorSubscription(donorForRefresh, {
+              onError: (refreshErr) =>
+                logger.warn('Failed to refresh PayPal subscription during login', {
+                  donorId: donorForRefresh.id,
+                  subscriptionId: donorForRefresh.subscriptionId,
+                  error: refreshErr && refreshErr.message,
+                }),
+            })) || donor;
+        }
 
-      res.locals.sessionToken = ensureSessionToken(req);
+        req.session.customerId = donor.id;
+        logger.info('Customer signed in with email/password', {
+          donorId: donor.id,
+        });
 
-      const {
-        activeInvite: invite,
-        inviteLimitReached,
-        nextInviteAvailableAt,
-      } = getInviteState(donor.id);
-      const pendingPlexLink = getPendingPlexLink(req, donor);
-      return res.json(
-        buildDashboardResponse({
-          donor,
-          invite,
-          pendingPlexLink,
+        res.locals.sessionToken = ensureSessionToken(req);
+
+        const {
+          activeInvite: invite,
           inviteLimitReached,
           nextInviteAvailableAt,
-        })
-      );
+        } = getInviteState(donor.id);
+        const pendingPlexLink = getPendingPlexLink(req, donor);
+        return res.json(
+          buildDashboardResponse({
+            donor,
+            invite,
+            pendingPlexLink,
+            inviteLimitReached,
+            nextInviteAvailableAt,
+          })
+        );
+      } catch (handlerErr) {
+        logger.error('Failed to finalize customer login', handlerErr);
+        return res
+          .status(500)
+          .json({ error: 'Failed to sign in. Please try again shortly.' });
+      }
     });
   })
 );
@@ -598,57 +693,27 @@ router.post(
       subscriptionLinked
     );
 
+    const previousStatus = updatedDonor.status;
+    const previousLastPaymentAt = updatedDonor.lastPaymentAt;
+
     if (shouldRefreshSubscription) {
-      try {
-        const subscription = await paypalService.getSubscription(
-          updatedDonor.subscriptionId
-        );
-        const subscriptionStatus = (subscription && subscription.status) || '';
-        const normalizedStatus = mapPaypalSubscriptionStatus(
-          subscriptionStatus
-        );
-        const billingInfo = (subscription && subscription.billing_info) || {};
-        const lastPaymentAt =
-          (billingInfo.last_payment && billingInfo.last_payment.time) || null;
+      const donorForRefresh = updatedDonor;
+      updatedDonor =
+        (await refreshDonorSubscription(donorForRefresh, {
+          onError: (err) =>
+            logger.warn('Failed to refresh PayPal subscription after manual link', {
+              donorId: donorForRefresh.id,
+              subscriptionId: donorForRefresh.subscriptionId,
+              error: err && err.message,
+            }),
+        })) || updatedDonor;
+    }
 
-        if (normalizedStatus || lastPaymentAt) {
-          const previousStatus = updatedDonor.status;
-          const previousLastPaymentAt = updatedDonor.lastPaymentAt;
-          const statusToApply =
-            normalizedStatus || previousStatus || 'pending';
-          const statusUpdated = updateDonorStatus(
-            updatedDonor.subscriptionId,
-            statusToApply,
-            lastPaymentAt || previousLastPaymentAt || null
-          );
-
-          if (statusUpdated) {
-            updatedDonor = statusUpdated;
-            if (updatedDonor.status !== previousStatus) {
-              profileUpdates.status = updatedDonor.status;
-            }
-            if (updatedDonor.lastPaymentAt !== previousLastPaymentAt) {
-              profileUpdates.lastPaymentAt = updatedDonor.lastPaymentAt;
-            }
-          }
-
-          if (normalizedStatus === 'active') {
-            const donorWithAccess = setDonorAccessExpirationBySubscription(
-              updatedDonor.subscriptionId,
-              null
-            );
-            if (donorWithAccess) {
-              updatedDonor = donorWithAccess;
-            }
-          }
-        }
-      } catch (err) {
-        logger.warn('Failed to refresh PayPal subscription after manual link', {
-          donorId: donor.id,
-          subscriptionId: updatedDonor.subscriptionId,
-          error: err && err.message,
-        });
-      }
+    if (updatedDonor.status !== previousStatus) {
+      profileUpdates.status = updatedDonor.status;
+    }
+    if (updatedDonor.lastPaymentAt !== previousLastPaymentAt) {
+      profileUpdates.lastPaymentAt = updatedDonor.lastPaymentAt;
     }
 
     profileUpdates.email = updatedDonor.email;
