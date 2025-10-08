@@ -50,18 +50,52 @@ function parseHash(serialized) {
 
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
-    try {
-      const result = hashPasswordSync(password);
-      resolve(result);
-    } catch (err) {
-      reject(err);
+    if (typeof password !== 'string' || password.length === 0) {
+      return reject(new Error('Password must be a non-empty string'));
     }
+    const salt = crypto.randomBytes(SALT_LENGTH);
+    crypto.pbkdf2(
+      password,
+      salt,
+      PBKDF2_ITERATIONS,
+      PBKDF2_KEY_LENGTH,
+      PBKDF2_DIGEST,
+      (err, derivedKey) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve(serializeHash(PBKDF2_ITERATIONS, salt, derivedKey));
+      }
+    );
   });
 }
 
 function verifyPassword(password, storedHash) {
   return new Promise((resolve) => {
-    resolve(verifyPasswordSync(password, storedHash));
+    if (typeof password !== 'string' || password.length === 0) {
+      return resolve(false);
+    }
+    const parsed = parseHash(storedHash);
+    if (!parsed) {
+      return resolve(false);
+    }
+    crypto.pbkdf2(
+      password,
+      parsed.salt,
+      parsed.iterations,
+      parsed.key.length,
+      PBKDF2_DIGEST,
+      (err, derivedKey) => {
+        if (err) {
+          return resolve(false);
+        }
+        try {
+          resolve(crypto.timingSafeEqual(parsed.key, derivedKey));
+        } catch (timingError) {
+          resolve(false);
+        }
+      }
+    );
   });
 }
 
