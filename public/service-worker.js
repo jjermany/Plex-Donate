@@ -52,6 +52,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const requestUrl = new URL(request.url);
+  if (requestUrl.origin === self.location.origin && requestUrl.pathname.startsWith('/api/')) {
+    return;
+  }
+
   const acceptHeader = request.headers.get('accept') || '';
   if (acceptHeader.includes('text/html')) {
     event.respondWith(handleHtmlRequest(request));
