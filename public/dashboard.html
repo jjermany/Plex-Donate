@@ -1274,6 +1274,11 @@
         if (!response.ok) {
           if (payload && payload.payload) {
             renderDashboard(payload.payload);
+          } else {
+            if (state.data) {
+              state.data = { ...state.data, plexLink: null };
+            }
+            applyPlexLinkState(state.data && state.data.donor, null);
           }
           setPlexLinkStatus(
             payload && payload.error
