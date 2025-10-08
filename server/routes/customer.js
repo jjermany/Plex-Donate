@@ -8,11 +8,9 @@ const {
   updateDonorContact,
   getDonorAuthByEmail,
   updateDonorSubscriptionId,
-  updateDonorStatus,
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
   updateInvitePlexDetails,
-  setDonorAccessExpirationBySubscription,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const wizarrService = require('../services/wizarr');
@@ -24,7 +22,6 @@ const {
   getPaypalEnvironment,
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
-  mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
 const plexOAuth = require('../services/plex-oauth');
 const {
@@ -35,6 +32,12 @@ const {
   evaluateInviteCooldown,
   getInviteCreatedAtMs,
 } = require('../utils/invite-cooldown');
+const {
+  normalizeSubscriptionId,
+  isValidSubscriptionId,
+  needsSubscriptionRefresh,
+  refreshDonorSubscription,
+} = require('../utils/donor-subscriptions');
 
 const router = express.Router();
 
@@ -82,100 +85,6 @@ function isValidEmail(email) {
     return false;
   }
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-}
-
-function normalizeSubscriptionId(subscriptionId) {
-  if (typeof subscriptionId !== 'string') {
-    return '';
-  }
-  return subscriptionId.trim();
-}
-
-function isValidSubscriptionId(subscriptionId) {
-  const normalized = normalizeSubscriptionId(subscriptionId);
-  if (!normalized) {
-    return false;
-  }
-  if (normalized.length < 3 || normalized.length > 128) {
-    return false;
-  }
-  return /^[a-z0-9-]+$/i.test(normalized);
-}
-
-function needsSubscriptionRefresh(donor, subscriptionLinked) {
-  if (!donor || !normalizeSubscriptionId(donor.subscriptionId || '')) {
-    return false;
-  }
-
-  if (subscriptionLinked) {
-    return true;
-  }
-
-  const status = (donor.status || '').toString().trim().toLowerCase();
-  if (!status) {
-    return true;
-  }
-
-  return ['pending', 'approval_pending', 'approved'].includes(status);
-}
-
-async function refreshDonorSubscription(
-  donor,
-  { onError } = {}
-) {
-  if (!donor) {
-    return donor;
-  }
-
-  const subscriptionId = normalizeSubscriptionId(donor.subscriptionId || '');
-  if (!subscriptionId) {
-    return donor;
-  }
-
-  try {
-    const subscription = await paypalService.getSubscription(subscriptionId);
-    const subscriptionStatus = (subscription && subscription.status) || '';
-    const normalizedStatus = mapPaypalSubscriptionStatus(subscriptionStatus);
-    const billingInfo = (subscription && subscription.billing_info) || {};
-    const lastPaymentAt =
-      (billingInfo.last_payment && billingInfo.last_payment.time) || null;
-
-    if (!normalizedStatus && !lastPaymentAt) {
-      return donor;
-    }
-
-    const statusToApply = normalizedStatus || donor.status || 'pending';
-    const statusUpdated = updateDonorStatus(
-      subscriptionId,
-      statusToApply,
-      lastPaymentAt || donor.lastPaymentAt || null
-    );
-
-    let updatedDonor = statusUpdated || donor;
-
-    if (normalizedStatus === 'active') {
-      const donorWithAccess = setDonorAccessExpirationBySubscription(
-        subscriptionId,
-        null
-      );
-      if (donorWithAccess) {
-        updatedDonor = donorWithAccess;
-      }
-    }
-
-    return updatedDonor;
-  } catch (err) {
-    if (typeof onError === 'function') {
-      onError(err);
-    } else {
-      logger.warn('Failed to refresh PayPal subscription', {
-        donorId: donor.id,
-        subscriptionId: donor.subscriptionId,
-        error: err && err.message,
-      });
-    }
-    return donor;
-  }
 }
 
 function hasPlexLink(donor) {
@@ -287,6 +196,7 @@ function buildDashboardResponse({
   pendingPlexLink = null,
   inviteLimitReached = Boolean(invite),
   nextInviteAvailableAt = null,
+  paypalError = '',
 }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
@@ -328,6 +238,7 @@ function buildDashboardResponse({
       environment: paypalEnvironment,
       subscriptionUrl,
       subscriptionCheckoutAvailable: checkoutAvailable,
+      refreshError: paypalError ? String(paypalError) : '',
     },
     wizarr: {
       baseUrl: wizarrBaseUrl,
@@ -390,6 +301,7 @@ router.get(
   '/session',
   asyncHandler(async (req, res) => {
     let donor = getAuthenticatedDonor(req);
+    let subscriptionRefreshError = '';
     if (!donor) {
       res.locals.sessionToken = null;
       return res.json({ authenticated: false });
@@ -398,15 +310,21 @@ router.get(
 
     if (needsSubscriptionRefresh(donor, false)) {
       const donorForRefresh = donor;
-      donor =
-        (await refreshDonorSubscription(donorForRefresh, {
+      const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+        donorForRefresh,
+        {
           onError: (err) =>
             logger.warn('Failed to refresh PayPal subscription during session load', {
               donorId: donorForRefresh.id,
               subscriptionId: donorForRefresh.subscriptionId,
               error: err && err.message,
             }),
-        })) || donor;
+        }
+      );
+      if (refreshedDonor) {
+        donor = refreshedDonor;
+      }
+      subscriptionRefreshError = error || '';
     }
 
     const {
@@ -422,6 +340,7 @@ router.get(
         pendingPlexLink,
         inviteLimitReached,
         nextInviteAvailableAt,
+        paypalError: subscriptionRefreshError,
       })
     );
   })
@@ -496,17 +415,24 @@ router.post(
           req.session.plexLink = existingPlexLink;
         }
 
+        let subscriptionRefreshError = '';
         if (needsSubscriptionRefresh(donor, false)) {
           const donorForRefresh = donor;
-          donor =
-            (await refreshDonorSubscription(donorForRefresh, {
+          const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+            donorForRefresh,
+            {
               onError: (refreshErr) =>
                 logger.warn('Failed to refresh PayPal subscription during login', {
                   donorId: donorForRefresh.id,
                   subscriptionId: donorForRefresh.subscriptionId,
                   error: refreshErr && refreshErr.message,
                 }),
-            })) || donor;
+            }
+          );
+          if (refreshedDonor) {
+            donor = refreshedDonor;
+          }
+          subscriptionRefreshError = error || '';
         }
 
         req.session.customerId = donor.id;
@@ -529,6 +455,7 @@ router.post(
             pendingPlexLink,
             inviteLimitReached,
             nextInviteAvailableAt,
+            paypalError: subscriptionRefreshError,
           })
         );
       } catch (handlerErr) {
@@ -696,17 +623,24 @@ router.post(
     const previousStatus = updatedDonor.status;
     const previousLastPaymentAt = updatedDonor.lastPaymentAt;
 
+    let subscriptionRefreshError = '';
     if (shouldRefreshSubscription) {
       const donorForRefresh = updatedDonor;
-      updatedDonor =
-        (await refreshDonorSubscription(donorForRefresh, {
+      const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+        donorForRefresh,
+        {
           onError: (err) =>
             logger.warn('Failed to refresh PayPal subscription after manual link', {
               donorId: donorForRefresh.id,
               subscriptionId: donorForRefresh.subscriptionId,
               error: err && err.message,
             }),
-        })) || updatedDonor;
+        }
+      );
+      if (refreshedDonor) {
+        updatedDonor = refreshedDonor;
+      }
+      subscriptionRefreshError = error || '';
     }
 
     if (updatedDonor.status !== previousStatus) {
@@ -741,6 +675,7 @@ router.post(
         pendingPlexLink,
         inviteLimitReached,
         nextInviteAvailableAt,
+        paypalError: subscriptionRefreshError,
       })
     );
   })
