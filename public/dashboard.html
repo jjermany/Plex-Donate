@@ -653,10 +653,11 @@
                 <div class="step-header">
                   <span class="step-number" data-step-number="3">3</span>
                   <div>
-                    <h3 class="step-title">Send yourself a Plex invite</h3>
+                    <h3 class="step-title">Share a referral invite</h3>
                     <p id="step-invite-note" class="muted small">
-                      Generate your personal Wizarr invite and check back each
-                      month when the next link becomes available.
+                      Send a referral invite each month to welcome someone new.
+                      Lost your own library access? Regenerate your link here
+                      when you’re eligible.
                     </p>
                   </div>
                 </div>
@@ -758,14 +759,15 @@
           </article>
 
           <article class="surface">
-            <h2 class="section-title">Your invite link</h2>
+            <h2 class="section-title">Your referral invites</h2>
             <p class="muted" id="invite-description">
-              Active subscribers can generate their own Wizarr invite each
-              month. We'll highlight the next unlock window right here.
+              Active subscribers can share one referral invite each month. We'll
+              highlight when the next referral unlocks. If you lost access,
+              regenerate your personal link here once the cooldown ends.
             </p>
             <form id="invite-form">
               <label>
-                <span>Email for this invite</span>
+                <span>Email for this referral invite</span>
                 <input
                   id="invite-email"
                   type="email"
@@ -775,22 +777,22 @@
                 />
               </label>
               <label>
-                <span>Optional note</span>
+                <span>Optional note for the recipient</span>
                 <input
                   id="invite-note"
                   type="text"
-                  placeholder="Used for tracking invites"
+                  placeholder="Used for tracking referral invites"
                 />
               </label>
               <div class="cta-actions">
                 <button id="invite-submit" type="submit" class="button-primary">
-                  Generate invite
+                  Send referral invite
                 </button>
                 <p id="invite-status" class="status-text"></p>
               </div>
             </form>
             <div id="invite-ready" class="invite-ready hidden">
-              <span class="badge success">Invite ready</span>
+              <span class="badge success">Referral invite ready</span>
               <a id="invite-link" class="invite-link" href="#" target="_blank" rel="noopener"></a>
               <p id="invite-email-display" class="muted small"></p>
               <p id="invite-created" class="muted small"></p>
@@ -800,8 +802,8 @@
           <article class="surface">
             <h2 class="section-title">Streaming libraries</h2>
             <p class="muted">
-              Jump into your Plex library once your invite is active. Save the
-              link below for quick access.
+              Jump into your Plex library once your referral invite is accepted.
+              Save the link below for quick access.
             </p>
             <ul>
               <li>
@@ -810,8 +812,9 @@
                 >
               </li>
               <li class="muted small">
-                Need another invite? Active supporters can generate a fresh
-                link below once the monthly cooldown resets.
+                Need another referral? Active supporters can send a new invite
+                once the monthly cooldown resets—or regenerate their own link if
+                they’ve lost access.
               </li>
             </ul>
           </article>
@@ -1391,13 +1394,13 @@
           case 'active':
             tone = 'success';
             if (nextInviteMessage && cooldownActive) {
-              message = `${nextInviteMessage} We'll refresh this dashboard automatically when a new link unlocks so you can generate it yourself.`;
+              message = `${nextInviteMessage} We'll refresh this dashboard automatically when your next referral unlocks so you can share it or regenerate your own link if you've lost access.`;
             } else if (nextInviteMessage) {
-              message = `Your subscription is active. ${nextInviteMessage} Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.`;
+              message = `Your subscription is active. ${nextInviteMessage} Share a referral invite below when it unlocks—or regenerate your own link if you've lost access.`;
             } else if (lastPayment) {
-              message = `Your subscription is active. Last payment recorded ${lastPayment}. Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.`;
+              message = `Your subscription is active. Last payment recorded ${lastPayment}. Share a referral invite below when you're ready, and only regenerate your own link if you've lost access.`;
             } else {
-              message = 'Your subscription is active. Generate your own invite below whenever you need a fresh link—one new invite unlocks each month.';
+              message = 'Your subscription is active. Share referral invites below to welcome someone new, and only regenerate your own link if you have lost access.';
             }
             break;
           case 'pending':
@@ -1455,7 +1458,7 @@
         const cooldownActive =
           limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
         const nextInviteMessage = cooldownActive
-          ? `Next invite available on ${formatDateTime(nextAvailableDate)}.`
+          ? `Next referral invite available on ${formatDateTime(nextAvailableDate)}.`
           : '';
 
         if (inviteStatus) {
@@ -1478,19 +1481,19 @@
           inviteCreated.textContent = '';
           if (cooldownActive && nextInviteMessage) {
             inviteDescription.textContent =
-              `${nextInviteMessage} We'll refresh this dashboard automatically when you're eligible to generate another invite.`;
+              `${nextInviteMessage} We'll refresh this dashboard automatically when you're eligible to send another referral invite.`;
           } else {
             inviteDescription.textContent = limitHit
-              ? 'An invite has already been created for this subscription. Contact the server admin if you need it refreshed.'
-              : 'Active subscribers can generate a fresh Wizarr invite each month. Use the form below when you need the next link.';
+              ? 'This month’s referral invite has already been used. Contact the server admin if you lost access and need the link restored.'
+              : 'Active subscribers can send one referral invite each month. Use the form below when you are ready to share it—and only regenerate your own link if you have lost access.';
           }
           if (inviteSubmit) {
             if (cooldownActive) {
-              inviteSubmit.textContent = 'Invite cooling down…';
+              inviteSubmit.textContent = 'Referral invite cooling down…';
             } else {
               inviteSubmit.textContent = limitHit
-                ? 'Invite already created'
-                : 'Generate invite';
+                ? 'Referral invite already sent'
+                : 'Send referral invite';
             }
             inviteSubmit.disabled = limitHit;
           }
@@ -1508,19 +1511,19 @@
           : '';
         if (cooldownActive && nextInviteMessage) {
           inviteDescription.textContent =
-            `${nextInviteMessage} We'll refresh this dashboard automatically when the cooldown ends.`;
+            `${nextInviteMessage} We'll refresh this dashboard automatically when the referral cooldown ends.`;
         } else {
           inviteDescription.textContent = limitHit
-            ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
-            : 'Invite ready! Use the link below whenever you set up a new device.';
+            ? 'Referral invite ready! Reach out to the server admin if you lost access and need the link refreshed.'
+            : 'Referral invite ready! Share the link below with your recipient—only follow it yourself if you’re restoring access.';
         }
         if (inviteSubmit) {
           if (cooldownActive) {
-            inviteSubmit.textContent = 'Invite cooling down…';
+            inviteSubmit.textContent = 'Referral invite cooling down…';
           } else {
             inviteSubmit.textContent = limitHit
-              ? 'Invite already created'
-              : 'Generate another invite';
+              ? 'Referral invite already sent'
+              : 'Send another referral invite';
           }
           inviteSubmit.disabled = limitHit;
         }
@@ -1606,7 +1609,7 @@
           if (plexLinked) {
             if (subscriptionComplete) {
               stepPlexNote.textContent =
-                'Plex account verified—time to generate your invite!';
+                'Plex account verified—time to send your referral invite!';
             } else {
               stepPlexNote.textContent =
                 'Plex account verified—head to the next step to start your membership.';
@@ -1653,24 +1656,24 @@
         if (stepInviteNote) {
           if (!plexLinked) {
             stepInviteNote.textContent =
-              'Finish Plex authentication and we’ll enable invite generation.';
+              'Finish Plex authentication and we’ll enable referral invites.';
           } else if (!subscriptionComplete) {
             stepInviteNote.textContent =
-              'Invite generation unlocks after your subscription is active.';
+              'Referral invites unlock after your subscription is active.';
           } else if (!inviteReadyState) {
             stepInviteNote.textContent =
-              'Use the form below to send the invite to your inbox as soon as you are verified.';
+              'Use the form below to send a referral invite as soon as you are verified. Only regenerate your own link if you have lost access.';
           } else if (inviteLimitReached) {
             if (inviteCooldownActive && nextInviteMessage) {
               stepInviteNote.textContent =
-                `${nextInviteMessage} We'll refresh this dashboard automatically when you can generate the next link.`;
+                `${nextInviteMessage} We'll refresh this dashboard automatically when you can send the next referral invite.`;
             } else {
               stepInviteNote.textContent =
-                'Your invite is ready below. Reach out to the server admin if you need it refreshed.';
+                'Your referral invite is ready below. Reach out to the server admin if you lost access and need it refreshed.';
             }
           } else {
             stepInviteNote.textContent =
-              'Invite ready! Grab it below whenever you set up a new device.';
+              'Referral invite ready! Share it with your recipient—only use it yourself if you’re restoring access.';
           }
         }
       }
@@ -1901,8 +1904,8 @@
 
         if (inviteBlocked && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
-            ? 'Start your PayPal subscription to unlock invite generation.'
-            : 'Invite generation unlocks once your subscription is active.';
+            ? 'Start your PayPal subscription to unlock referral invites.'
+            : 'Referral invites unlock once your subscription is active.';
         }
 
         const identifier = donor.name || donor.email || donor.subscriptionId || '';
@@ -2340,7 +2343,7 @@
         ) {
           return;
         }
-        setStatusText(inviteStatus, 'Generating invite…', 'info');
+        setStatusText(inviteStatus, 'Sending referral invite…', 'info');
         inviteSubmit.disabled = true;
         let responseData = null;
         try {
@@ -2359,11 +2362,11 @@
             if (payload && payload.payload) {
               renderDashboard(payload.payload);
             }
-            throw new Error(payload.error || 'Failed to generate invite');
+            throw new Error(payload.error || 'Failed to send referral invite');
           }
           setStatusText(
             inviteStatus,
-            'Invite ready! Use the link below to finish connecting.',
+            'Referral invite ready! Share the link below—or follow it yourself if you’re restoring access.',
             'success'
           );
           inviteNote.value = '';
