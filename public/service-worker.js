@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plex-donate-cache-v2';
+const CACHE_NAME = 'plex-donate-cache-v3';
 const CORE_ASSETS = ['/', '/index.html', '/dashboard.html', '/share.html', '/manifest.webmanifest'];
 const OPTIONAL_ASSETS = [
   '/icons/plex-donate-android-any-144.png',
@@ -53,6 +53,13 @@ self.addEventListener('fetch', (event) => {
   }
 
   const acceptHeader = request.headers.get('accept') || '';
+  const isApiRequest = request.url.includes('/api/') || acceptHeader.includes('application/json');
+
+  if (isApiRequest) {
+    event.respondWith(handleApiRequest(request));
+    return;
+  }
+
   if (acceptHeader.includes('text/html')) {
     event.respondWith(handleHtmlRequest(request));
     return;
@@ -80,6 +87,18 @@ async function handleHtmlRequest(request) {
     }
     const fallback = await caches.match(fallbackPath);
     return fallback || Response.error();
+  }
+}
+
+async function handleApiRequest(request) {
+  try {
+    return await fetch(request, { cache: 'no-store' });
+  } catch (err) {
+    const cached = await caches.match(request);
+    if (cached) {
+      return cached;
+    }
+    throw err;
   }
 }
 
