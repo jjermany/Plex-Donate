@@ -176,8 +176,8 @@ function getInviteState(donorId) {
       ? Boolean(activeInvite)
       : cooldownActive
     : false;
-  const shareInviteLink = mostRecentInvite && mostRecentInvite.wizarrInviteCode
-    ? getShareLinkByToken(mostRecentInvite.wizarrInviteCode)
+  const shareInviteLink = mostRecentInvite && mostRecentInvite.plexInviteId
+    ? getShareLinkByToken(mostRecentInvite.plexInviteId)
     : null;
 
   return {
@@ -392,8 +392,8 @@ router.get(
       const invitePayload = inviteForResponse
         ? {
             ...inviteForResponse,
-            wizarrInviteUrl:
-              shareInviteDetails?.url || inviteForResponse.wizarrInviteUrl || '',
+            plexInviteUrl:
+              shareInviteDetails?.url || inviteForResponse.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && shareInviteDetails) {
@@ -564,8 +564,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            wizarrInviteUrl:
-              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+            plexInviteUrl:
+              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -589,8 +589,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            wizarrInviteUrl:
-              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+            plexInviteUrl:
+              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -630,8 +630,8 @@ router.post(
     );
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
-      code: shareInviteRecord.token,
-      url: shareInviteDetails ? shareInviteDetails.url : '',
+      inviteId: shareInviteRecord.token,
+      inviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
       recipientEmail: requestedEmail,
       note,
       plexAccountId: activeDonor.plexAccountId,
@@ -648,7 +648,7 @@ router.post(
       evaluateInviteCooldown(inviteRecord);
     const invitePayload = {
       ...inviteRecord,
-      wizarrInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+      plexInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
     };
     if (shareInviteDetails) {
       invitePayload.shareLink = shareInviteDetails;
@@ -918,8 +918,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            wizarrInviteUrl:
-              shareInviteDetails?.url || invite.wizarrInviteUrl || '',
+            plexInviteUrl:
+              shareInviteDetails?.url || invite.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && shareInviteDetails) {
@@ -1027,8 +1027,8 @@ router.post(
     const invitePayload = invite
       ? {
           ...invite,
-          wizarrInviteUrl:
-            shareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          plexInviteUrl:
+            shareInviteDetails?.url || invite.plexInviteUrl || '',
         }
       : null;
     if (invitePayload && shareInviteDetails) {

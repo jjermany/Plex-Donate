@@ -1,16 +1,23 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_FILE = process.env.DATABASE_FILE || ':memory:';
 process.env.SESSION_SECRET =
   process.env.SESSION_SECRET || 'customer-router-test-session';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+if (!process.env.DATABASE_FILE || process.env.DATABASE_FILE === ':memory:') {
+  const testDbDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'plex-donate-customer-db-')
+  );
+  process.env.DATABASE_FILE = path.join(testDbDir, 'database.sqlite');
+}
 
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
 const session = require('express-session');
 const fetch = require('node-fetch');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { test } = require('node:test');
 
 const config = require('../config');

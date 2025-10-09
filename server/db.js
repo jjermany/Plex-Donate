@@ -50,6 +50,11 @@ CREATE TABLE IF NOT EXISTS invites (
   donor_id INTEGER NOT NULL,
   wizarr_invite_code TEXT,
   wizarr_invite_url TEXT,
+  plex_invite_id TEXT,
+  plex_invite_url TEXT,
+  plex_invited_at TEXT,
+  plex_invite_status TEXT,
+  plex_shared_libraries TEXT,
   recipient_email TEXT,
   note TEXT,
   email_sent_at TEXT,
@@ -190,16 +195,45 @@ function ensureProspectsTableColumns() {
 
 function ensureInvitePlexColumns() {
   const columns = db.prepare("PRAGMA table_info('invites')").all();
-  const hasPlexAccountId = columns.some(
-    (column) => column.name === 'plex_account_id'
-  );
-  if (!hasPlexAccountId) {
-    db.exec('ALTER TABLE invites ADD COLUMN plex_account_id TEXT');
-  }
-  const hasPlexEmail = columns.some((column) => column.name === 'plex_email');
-  if (!hasPlexEmail) {
-    db.exec('ALTER TABLE invites ADD COLUMN plex_email TEXT');
-  }
+  const ensureColumn = (name, sqlType = 'TEXT') => {
+    const exists = columns.some((column) => column.name === name);
+    if (!exists) {
+      db.exec(`ALTER TABLE invites ADD COLUMN ${name} ${sqlType}`);
+    }
+  };
+
+  ensureColumn('plex_account_id');
+  ensureColumn('plex_email');
+  ensureColumn('plex_invite_id');
+  ensureColumn('plex_invite_url');
+  ensureColumn('plex_invited_at');
+  ensureColumn('plex_invite_status');
+  ensureColumn('plex_shared_libraries');
+
+  db.exec(`
+    UPDATE invites
+       SET plex_invite_id = COALESCE(
+             NULLIF(TRIM(plex_invite_id), ''),
+             NULLIF(TRIM(wizarr_invite_code), '')
+           )
+     WHERE COALESCE(TRIM(plex_invite_id), '') = ''
+       AND COALESCE(TRIM(wizarr_invite_code), '') <> '';
+
+    UPDATE invites
+       SET plex_invite_url = COALESCE(
+             NULLIF(TRIM(plex_invite_url), ''),
+             NULLIF(TRIM(wizarr_invite_url), '')
+           )
+     WHERE COALESCE(TRIM(plex_invite_url), '') = ''
+       AND COALESCE(TRIM(wizarr_invite_url), '') <> '';
+
+    UPDATE invites
+       SET plex_invited_at = COALESCE(
+             NULLIF(TRIM(plex_invited_at), ''),
+             created_at
+           )
+     WHERE COALESCE(TRIM(plex_invited_at), '') = '';
+  `);
 }
 
 function createInviteLinkIndexes() {
@@ -344,8 +378,8 @@ ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
 ensureDonorPlexColumns();
-ensureDonorSubscriptionOptional();
 ensureDonorAccessExpirationColumn();
+ensureDonorSubscriptionOptional();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInviteLinkExpirationColumns();
@@ -390,6 +424,40 @@ function normalizeAccessExpiresAt(value) {
   }
 
   return parsed.toISOString();
+}
+
+function normalizeInviteTimestamp(value) {
+  if (value == null || value === '') {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    const timestamp = value.getTime();
+    if (Number.isNaN(timestamp)) {
+      return null;
+    }
+    return value.toISOString();
+  }
+
+  if (typeof value === 'number') {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return date.toISOString();
+  }
+
+  const stringValue = String(value).trim();
+  if (!stringValue) {
+    return null;
+  }
+
+  const parsed = new Date(stringValue);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString();
+  }
+
+  return stringValue;
 }
 
 const statements = {
@@ -512,8 +580,36 @@ const statements = {
      WHERE id = ?`
   ),
   insertInvite: db.prepare(
-    `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, recipient_email, email_sent_at, plex_account_id, plex_email)
-     VALUES (@donorId, @code, @url, @note, @recipientEmail, @emailSentAt, @plexAccountId, @plexEmail)`
+    `INSERT INTO invites (
+       donor_id,
+       wizarr_invite_code,
+       wizarr_invite_url,
+       plex_invite_id,
+       plex_invite_url,
+       plex_invited_at,
+       plex_invite_status,
+       plex_shared_libraries,
+       note,
+       recipient_email,
+       email_sent_at,
+       plex_account_id,
+       plex_email
+     )
+     VALUES (
+       @donorId,
+       @legacyCode,
+       @legacyUrl,
+       @plexInviteId,
+       @plexInviteUrl,
+       @plexInvitedAt,
+       @plexInviteStatus,
+       @plexSharedLibraries,
+       @note,
+       @recipientEmail,
+       @emailSentAt,
+       @plexAccountId,
+       @plexEmail
+     )`
   ),
   updateInviteEmailSent: db.prepare(
     `UPDATE invites
@@ -530,10 +626,15 @@ const statements = {
      SET plex_revoked_at = CURRENT_TIMESTAMP
      WHERE id = ? AND plex_revoked_at IS NULL`
   ),
-  updateInvitePlexIdentity: db.prepare(
+  updateInvitePlexDetailsStatement: db.prepare(
     `UPDATE invites
      SET plex_account_id = @plexAccountId,
-         plex_email = @plexEmail
+         plex_email = @plexEmail,
+         plex_invite_id = @plexInviteId,
+         plex_invite_url = @plexInviteUrl,
+         plex_invited_at = @plexInvitedAt,
+         plex_invite_status = @plexInviteStatus,
+         plex_shared_libraries = @plexSharedLibraries
      WHERE id = @id`
   ),
   getInviteById: db.prepare('SELECT * FROM invites WHERE id = ?'),
@@ -637,11 +738,25 @@ function mapDonor(row) {
 
 function mapInvite(row) {
   if (!row) return null;
+  let sharedLibraries = [];
+  if (row.plex_shared_libraries) {
+    try {
+      const parsed = JSON.parse(row.plex_shared_libraries);
+      if (Array.isArray(parsed)) {
+        sharedLibraries = parsed;
+      }
+    } catch (err) {
+      sharedLibraries = [];
+    }
+  }
   return {
     id: row.id,
     donorId: row.donor_id,
-    wizarrInviteCode: row.wizarr_invite_code,
-    wizarrInviteUrl: row.wizarr_invite_url,
+    plexInviteId: row.plex_invite_id || null,
+    plexInviteUrl: row.plex_invite_url || row.wizarr_invite_url || null,
+    plexInvitedAt: row.plex_invited_at || null,
+    plexInviteStatus: row.plex_invite_status || null,
+    plexSharedLibraries: sharedLibraries,
     recipientEmail: row.recipient_email,
     note: row.note,
     emailSentAt: row.email_sent_at,
@@ -849,19 +964,37 @@ function createInvite({
   donorId,
   code,
   url,
+  inviteId,
+  inviteUrl,
+  inviteStatus = null,
+  invitedAt = null,
+  sharedLibraries = null,
   note = '',
   recipientEmail = null,
   emailSentAt = null,
   plexAccountId = null,
   plexEmail = null,
-}) {
+} = {}) {
   if (!donorId) {
     throw new Error('donorId is required to create invite');
   }
+  const finalInviteId = inviteId || code || null;
+  const finalInviteUrl = inviteUrl || url || null;
+  const serializedLibraries = Array.isArray(sharedLibraries)
+    ? JSON.stringify(sharedLibraries)
+    : sharedLibraries && typeof sharedLibraries === 'string'
+    ? sharedLibraries
+    : null;
+  const normalizedInvitedAt = normalizeInviteTimestamp(invitedAt);
   const info = statements.insertInvite.run({
     donorId,
-    code: code || null,
-    url: url || null,
+    legacyCode: null,
+    legacyUrl: null,
+    plexInviteId: finalInviteId || null,
+    plexInviteUrl: finalInviteUrl || null,
+    plexInvitedAt: normalizedInvitedAt,
+    plexInviteStatus: inviteStatus || null,
+    plexSharedLibraries: serializedLibraries,
     note,
     recipientEmail,
     emailSentAt,
@@ -871,15 +1004,63 @@ function createInvite({
   return mapInvite(statements.getInviteById.get(info.lastInsertRowid));
 }
 
-function updateInvitePlexDetails(inviteId, { plexAccountId = null, plexEmail = null } = {}) {
+function updateInvitePlexDetails(
+  inviteId,
+  {
+    plexAccountId,
+    plexEmail,
+    plexInviteId,
+    plexInviteUrl,
+    plexInvitedAt,
+    plexInviteStatus,
+    plexSharedLibraries,
+  } = {}
+) {
   if (!inviteId) {
     throw new Error('inviteId is required to update invite');
   }
 
-  statements.updateInvitePlexIdentity.run({
+  const existing = statements.getInviteById.get(inviteId);
+  if (!existing) {
+    return null;
+  }
+
+  const merged = {
     id: inviteId,
-    plexAccountId: plexAccountId || null,
-    plexEmail: plexEmail || null,
+    plexAccountId:
+      plexAccountId !== undefined ? plexAccountId : existing.plex_account_id,
+    plexEmail: plexEmail !== undefined ? plexEmail : existing.plex_email,
+    plexInviteId:
+      plexInviteId !== undefined ? plexInviteId : existing.plex_invite_id,
+    plexInviteUrl:
+      plexInviteUrl !== undefined ? plexInviteUrl : existing.plex_invite_url,
+    plexInvitedAt:
+      plexInvitedAt !== undefined
+        ? normalizeInviteTimestamp(plexInvitedAt)
+        : existing.plex_invited_at,
+    plexInviteStatus:
+      plexInviteStatus !== undefined
+        ? plexInviteStatus
+        : existing.plex_invite_status,
+    plexSharedLibraries:
+      plexSharedLibraries !== undefined
+        ? Array.isArray(plexSharedLibraries)
+          ? JSON.stringify(plexSharedLibraries)
+          : plexSharedLibraries && typeof plexSharedLibraries === 'string'
+          ? plexSharedLibraries
+          : null
+        : existing.plex_shared_libraries,
+  };
+
+  statements.updateInvitePlexDetailsStatement.run({
+    id: merged.id,
+    plexAccountId: merged.plexAccountId || null,
+    plexEmail: merged.plexEmail || null,
+    plexInviteId: merged.plexInviteId || null,
+    plexInviteUrl: merged.plexInviteUrl || null,
+    plexInvitedAt: merged.plexInvitedAt || null,
+    plexInviteStatus: merged.plexInviteStatus || null,
+    plexSharedLibraries: merged.plexSharedLibraries,
   });
 
   return mapInvite(statements.getInviteById.get(inviteId));

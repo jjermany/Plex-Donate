@@ -1473,12 +1473,12 @@
           }
         }
 
-        if (!invite || !invite.wizarrInviteUrl) {
-          inviteReady.classList.add('hidden');
-          inviteLinkEl.removeAttribute('href');
-          inviteLinkEl.textContent = '';
-          inviteEmailDisplay.textContent = '';
-          inviteCreated.textContent = '';
+          if (!invite || !invite.plexInviteUrl) {
+            inviteReady.classList.add('hidden');
+            inviteLinkEl.removeAttribute('href');
+            inviteLinkEl.textContent = '';
+            inviteEmailDisplay.textContent = '';
+            inviteCreated.textContent = '';
           if (cooldownActive && nextInviteMessage) {
             inviteDescription.textContent =
               `${nextInviteMessage} We'll refresh this dashboard automatically when you're eligible to send another referral invite.`;
@@ -1500,9 +1500,9 @@
           return;
         }
 
-        inviteReady.classList.remove('hidden');
-        inviteLinkEl.href = invite.wizarrInviteUrl;
-        inviteLinkEl.textContent = invite.wizarrInviteUrl;
+          inviteReady.classList.remove('hidden');
+          inviteLinkEl.href = invite.plexInviteUrl;
+          inviteLinkEl.textContent = invite.plexInviteUrl;
         inviteEmailDisplay.textContent = invite.recipientEmail
           ? `Delivering to ${invite.recipientEmail}`
           : '';
@@ -1571,9 +1571,9 @@
             typeof data.plexLink.pending === 'boolean' &&
             data.plexLink.pending
         );
-        const inviteReadyState = Boolean(
-          data && data.invite && data.invite.wizarrInviteUrl
-        );
+          const inviteReadyState = Boolean(
+            data && data.invite && data.invite.plexInviteUrl
+          );
         const inviteLimitReached = Boolean(data && data.inviteLimitReached);
         const allComplete = plexLinked && subscriptionComplete && inviteReadyState;
 

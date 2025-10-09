@@ -16,7 +16,6 @@ const {
   updateInvitePlexDetails,
 } = require('../db');
 const settingsStore = require('../state/settings');
-const wizarrService = require('../services/wizarr');
 const paypalService = require('../services/paypal');
 const logger = require('../utils/logger');
 const { verifyPassword } = require('../utils/passwords');
@@ -279,11 +278,6 @@ function buildDashboardResponse({
         apiBase: paypal.apiBase,
       })
     : '';
-  const wizarrSettings = settingsStore.getWizarrSettings();
-  const wizarrBaseUrl = (wizarrSettings.baseUrl || '').trim();
-  const wizarrPortalUrl = wizarrBaseUrl
-    ? wizarrService.getPortalUrl(wizarrSettings)
-    : '';
   return {
     authenticated: Boolean(donor),
     donor: donor
@@ -311,10 +305,6 @@ function buildDashboardResponse({
       subscriptionUrl,
       subscriptionCheckoutAvailable: checkoutAvailable,
       refreshError: paypalError ? String(paypalError) : '',
-    },
-    wizarr: {
-      baseUrl: wizarrBaseUrl,
-      portalUrl: wizarrPortalUrl,
     },
     plexLink: pendingPlexLink
       ? {
@@ -1102,8 +1092,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            wizarrInviteUrl:
-              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+            plexInviteUrl:
+              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -1128,8 +1118,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            wizarrInviteUrl:
-              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+            plexInviteUrl:
+              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -1177,8 +1167,8 @@ router.post(
     const shareInviteDetails = buildShareInviteDetails(shareInviteRecord, origin);
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
-      code: shareInviteRecord.token,
-      url: shareInviteDetails ? shareInviteDetails.url : '',
+      inviteId: shareInviteRecord.token,
+      inviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
       recipientEmail: requestedEmail,
       note,
       plexAccountId: activeDonor.plexAccountId,
@@ -1197,7 +1187,7 @@ router.post(
       evaluateInviteCooldown(inviteRecord);
     const invitePayload = {
       ...inviteRecord,
-      wizarrInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+      plexInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
     };
     if (shareInviteDetails) {
       invitePayload.shareLink = shareInviteDetails;

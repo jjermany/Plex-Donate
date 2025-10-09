@@ -15,7 +15,6 @@ const {
   setDonorAccessExpirationBySubscription,
 } = require('../db');
 const plexService = require('../services/plex');
-const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
 const logger = require('../utils/logger');
 
@@ -343,16 +342,16 @@ async function revokeDonorAccess(donor) {
   }
 
   const invite = getLatestActiveInviteForDonor(donor.id);
-  if (invite && invite.wizarrInviteCode) {
+  if (invite && invite.plexInviteId) {
     try {
-      await wizarrService.revokeInvite(invite.wizarrInviteCode);
+      await plexService.cancelInvite(invite.plexInviteId);
       revokeInviteRecord(invite.id);
-      logEvent('wizarr.invite.revoked', {
+      logEvent('plex.invite.cancelled', {
         donorId: donor.id,
         inviteId: invite.id,
       });
     } catch (err) {
-      logger.warn('Failed to revoke Wizarr invite automatically', err.message);
+      logger.warn('Failed to cancel Plex invite automatically', err.message);
     }
   }
 }
@@ -460,10 +459,59 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
   }
 
   const normalizedEmail = normalizeEmail(email);
+  const normalizedAccountId = (donor.plexAccountId || '')
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  if (plexService.isConfigured()) {
+    try {
+      const plexUsers = await plexService.listUsers();
+      if (Array.isArray(plexUsers) && plexUsers.length > 0) {
+        const donorHasAccess = plexUsers.some((user) => {
+          const candidateEmails = [
+            user.email,
+            user.username,
+            user.title,
+            user.account && user.account.email,
+          ];
+          const candidateIds = [
+            user.id,
+            user.uuid,
+            user.userID,
+            user.machineIdentifier,
+            user.account && user.account.id,
+          ];
+          const emailMatch =
+            normalizedEmail &&
+            candidateEmails.some((value) => normalizeEmail(value) === normalizedEmail);
+          const accountMatch =
+            normalizedAccountId &&
+            candidateIds.some((value) => {
+              if (value === undefined || value === null) {
+                return false;
+              }
+              return String(value).trim().toLowerCase() === normalizedAccountId;
+            });
+          return emailMatch || accountMatch;
+        });
+
+        if (donorHasAccess) {
+          logger.info('Skipping automatic invite: donor already present on Plex server', {
+            donorId: donor.id,
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      logger.warn('Unable to verify existing Plex users before inviting', err.message);
+    }
+  }
+
   const existingInvite = getLatestActiveInviteForDonor(donor.id);
   const existingInviteUsable =
     existingInvite &&
-    existingInvite.wizarrInviteUrl &&
+    existingInvite.plexInviteUrl &&
     !existingInvite.revokedAt;
   const existingInviteMatches =
     existingInviteUsable &&
@@ -486,7 +534,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       try {
         await emailService.sendInviteEmail({
           to: email,
-          inviteUrl: invite.wizarrInviteUrl,
+          inviteUrl: invite.plexInviteUrl,
           name: donor.name,
           subscriptionId: donor.subscriptionId,
         });
@@ -510,21 +558,20 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
     const note = noteParts.join(' ');
 
-    const inviteData = await wizarrService.createInvite({
+    const inviteData = await plexService.createInvite({
       email,
-      note,
-      extraFields: {
-        plex_account_id: donor.plexAccountId || undefined,
-        plexAccountId: donor.plexAccountId || undefined,
-        plex_email: donor.plexEmail || undefined,
-        plexEmail: donor.plexEmail || undefined,
-      },
+      friendlyName: donor.name || undefined,
     });
 
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
-      code: inviteData.inviteCode,
-      url: inviteData.inviteUrl,
+      inviteId: inviteData.inviteId,
+      inviteUrl: inviteData.inviteUrl || '',
+      inviteStatus: inviteData.status || null,
+      invitedAt: inviteData.invitedAt || new Date().toISOString(),
+      sharedLibraries: Array.isArray(inviteData.sharedLibraries)
+        ? inviteData.sharedLibraries
+        : undefined,
       recipientEmail: email,
       note,
       plexAccountId: donor.plexAccountId,
@@ -535,12 +582,21 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       donorId: donor.id,
       inviteId: inviteRecord.id,
       source: 'payment-webhook',
+      plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
     });
+
+    if (!inviteRecord.plexInviteUrl) {
+      logger.warn('Plex invite created without a shareable URL', {
+        donorId: donor.id,
+        plexInviteId: inviteRecord.plexInviteId,
+      });
+      return;
+    }
 
     try {
       await emailService.sendInviteEmail({
         to: email,
-        inviteUrl: inviteRecord.wizarrInviteUrl,
+        inviteUrl: inviteRecord.plexInviteUrl,
         name: donor.name,
         subscriptionId: donor.subscriptionId,
       });
@@ -552,6 +608,16 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       });
     } catch (err) {
       logger.warn('Automatic invite email failed', err.message);
+      if (inviteRecord.plexInviteId) {
+        try {
+          await plexService.cancelInvite(inviteRecord.plexInviteId);
+        } catch (cancelErr) {
+          logger.warn(
+            'Failed to cancel Plex invite after email failure',
+            cancelErr.message
+          );
+        }
+      }
     }
   } catch (err) {
     logger.warn('Failed to create automatic invite after payment', err.message);

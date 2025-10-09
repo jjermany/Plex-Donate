@@ -1,15 +1,22 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_FILE = ':memory:';
 process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+if (!process.env.DATABASE_FILE || process.env.DATABASE_FILE === ':memory:') {
+  const testDbDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'plex-donate-share-db-')
+  );
+  process.env.DATABASE_FILE = path.join(testDbDir, 'database.sqlite');
+}
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 const session = require('express-session');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 const config = require('../config');
 const TEST_ADMIN_PASSWORD = 'admin-test-password';
@@ -31,7 +38,7 @@ const {
 const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const SqliteSessionStore = require('../session-store');
-const wizarrService = require('../services/wizarr');
+const plexService = require('../services/plex');
 const emailService = require('../services/email');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
 const { ensureSessionToken } = require('../utils/session-tokens');
@@ -711,18 +718,6 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     const app = createApp();
     const server = await startServer(app);
 
-    const inviteCalls = [];
-    let inviteCounter = 0;
-    const originalCreateInvite = wizarrService.createInvite;
-    wizarrService.createInvite = async (payload) => {
-      inviteCounter += 1;
-      inviteCalls.push(payload);
-      return {
-        inviteCode: `SHARE-${inviteCounter}`,
-        inviteUrl: `https://wizarr/invite/SHARE-${inviteCounter}`,
-      };
-    };
-
     try {
       const firstInviteEmail = 'friend-one@example.com';
       const secondInviteEmail = 'friend-two@example.com';
@@ -811,9 +806,10 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(typeof allowed.body.nextInviteAvailableAt, 'string');
       assert.ok(Date.parse(allowed.body.nextInviteAvailableAt) > Date.now());
 
-      assert.equal(inviteCalls.length, 2);
+      const inviteCount = db.prepare('SELECT COUNT(*) AS count FROM invites').get()
+        .count;
+      assert.equal(inviteCount, 2);
     } finally {
-      wizarrService.createInvite = originalCreateInvite;
       await server.close();
     }
   });
@@ -822,18 +818,6 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     resetDatabase();
     const app = createCustomerApp();
     const server = await startServer(app);
-
-    const inviteCalls = [];
-    let inviteCounter = 0;
-    const originalCreateInvite = wizarrService.createInvite;
-    wizarrService.createInvite = async (payload) => {
-      inviteCounter += 1;
-      inviteCalls.push(payload);
-      return {
-        inviteCode: `CUSTOMER-${inviteCounter}`,
-        inviteUrl: `https://wizarr/invite/CUSTOMER-${inviteCounter}`,
-      };
-    };
 
     try {
       const firstInviteEmail = 'friend-one@example.com';
@@ -917,40 +901,44 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(typeof allowed.body.nextInviteAvailableAt, 'string');
       assert.ok(Date.parse(allowed.body.nextInviteAvailableAt) > Date.now());
 
-      assert.equal(inviteCalls.length, 2);
+      const inviteCount = db.prepare('SELECT COUNT(*) AS count FROM invites').get()
+        .count;
+      assert.equal(inviteCount, 2);
     } finally {
-      wizarrService.createInvite = originalCreateInvite;
       await server.close();
     }
   });
 
-  await t.test('admin can send Wizarr test invite email', async () => {
+  await t.test('admin can send Plex test invite email', async () => {
     resetDatabase();
-    settingsStore.updateGroup('wizarr', {
-      baseUrl: 'https://wizarr.saved/api',
-      apiKey: 'saved-key',
-      defaultDurationDays: 7,
-      defaultServerIds: '9',
+    settingsStore.updateGroup('plex', {
+      baseUrl: 'https://plex.local',
+      token: 'saved-token',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '9',
+      allowSync: true,
     });
 
     const inviteCalls = [];
     const emailCalls = [];
-    const revokeCalls = [];
+    const cancelCalls = [];
 
-    const originalCreateInvite = wizarrService.createInvite;
-    const originalRevokeInvite = wizarrService.revokeInvite;
+    const originalCreateInvite = plexService.createInvite;
+    const originalCancelInvite = plexService.cancelInvite;
     const originalSendInviteEmail = emailService.sendInviteEmail;
     const originalGetSmtpConfig = emailService.getSmtpConfig;
 
-    wizarrService.createInvite = async (payload, overrideConfig) => {
+    plexService.createInvite = async (payload, overrideConfig) => {
       inviteCalls.push({ payload, overrideConfig });
       return {
-        inviteCode: 'CODE123',
-        inviteUrl: 'https://wizarr/invite/CODE123',
+        inviteId: 'INV-123',
+        inviteUrl: 'https://plex.example/invite/INV-123',
+        status: 'pending',
+        sharedLibraries: [{ id: '1', title: 'Movies' }],
       };
     };
-    wizarrService.revokeInvite = async (code) => {
-      revokeCalls.push(code);
+    plexService.cancelInvite = async (id) => {
+      cancelCalls.push(id);
     };
     emailService.sendInviteEmail = async (details, overrideConfig) => {
       emailCalls.push({ details, overrideConfig });
@@ -968,19 +956,19 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       const response = await requestJson(
         server,
         'POST',
-        '/api/admin/settings/wizarr/test-invite',
+        '/api/admin/settings/plex/test-invite',
         {
           headers: { 'x-csrf-token': csrfToken },
           body: {
             email: 'tester@example.com',
             name: 'Tester Example',
             note: 'Integration check',
-            expiresInDays: 3,
             overrides: {
-              baseUrl: 'https://wizarr.preview/api',
-              apiKey: 'preview-key',
-              defaultDurationDays: 10,
-              defaultServerIds: '7,8',
+              baseUrl: 'https://plex.preview',
+              token: 'preview-token',
+              serverIdentifier: 'server-preview',
+              librarySectionIds: '7,8',
+              allowSync: false,
             },
           },
         }
@@ -989,70 +977,80 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(response.status, 200);
       assert.equal(response.body.success, true);
       assert.deepEqual(response.body.invite, {
-        code: 'CODE123',
-        url: 'https://wizarr/invite/CODE123',
+        id: 'INV-123',
+        url: 'https://plex.example/invite/INV-123',
+        sharedLibraries: [{ id: '1', title: 'Movies' }],
       });
 
       assert.equal(inviteCalls.length, 1);
       assert.deepEqual(inviteCalls[0].payload, {
         email: 'tester@example.com',
-        note: 'Integration check',
-        expiresInDays: 3,
+        friendlyName: 'Tester Example',
       });
-      assert.equal(inviteCalls[0].overrideConfig.baseUrl, 'https://wizarr.preview/api');
-      assert.equal(inviteCalls[0].overrideConfig.apiKey, 'preview-key');
-      assert.equal(inviteCalls[0].overrideConfig.defaultDurationDays, 10);
-      assert.equal(inviteCalls[0].overrideConfig.defaultServerIds, '7,8');
+      assert.equal(inviteCalls[0].overrideConfig.baseUrl, 'https://plex.preview');
+      assert.equal(inviteCalls[0].overrideConfig.token, 'preview-token');
+      assert.equal(
+        inviteCalls[0].overrideConfig.serverIdentifier,
+        'server-preview'
+      );
+      assert.equal(inviteCalls[0].overrideConfig.librarySectionIds, '7,8');
+      assert.equal(inviteCalls[0].overrideConfig.allowSync, false);
 
       assert.equal(emailCalls.length, 1);
       assert.equal(emailCalls[0].details.to, 'tester@example.com');
-      assert.equal(emailCalls[0].details.inviteUrl, 'https://wizarr/invite/CODE123');
+      assert.equal(
+        emailCalls[0].details.inviteUrl,
+        'https://plex.example/invite/INV-123'
+      );
       assert.equal(emailCalls[0].details.name, 'Tester Example');
       assert.ok(emailCalls[0].details.subscriptionId.startsWith('TEST-'));
       assert.equal(emailCalls[0].overrideConfig.host, 'smtp.example.com');
 
-      assert.equal(revokeCalls.length, 0);
+      assert.equal(cancelCalls.length, 0);
 
       const eventRow = db
         .prepare('SELECT event_type, payload FROM events ORDER BY id DESC LIMIT 1')
         .get();
-      assert.equal(eventRow.event_type, 'wizarr.test_invite');
+      assert.equal(eventRow.event_type, 'plex.test_invite');
       const eventPayload = JSON.parse(eventRow.payload);
       assert.equal(eventPayload.email, 'tester@example.com');
-      assert.equal(eventPayload.invite.code, 'CODE123');
-      assert.equal(eventPayload.invite.url, 'https://wizarr/invite/CODE123');
+      assert.equal(eventPayload.invite.id, 'INV-123');
+      assert.equal(eventPayload.invite.url, 'https://plex.example/invite/INV-123');
+      assert.equal(eventPayload.invite.status, 'pending');
       assert.equal(eventPayload.note, 'Integration check');
-      assert.equal(eventPayload.expiresInDays, 3);
+      assert.deepEqual(eventPayload.invite.sharedLibraries, [
+        { id: '1', title: 'Movies' },
+      ]);
     } finally {
       await server.close();
-      wizarrService.createInvite = originalCreateInvite;
-      wizarrService.revokeInvite = originalRevokeInvite;
+      plexService.createInvite = originalCreateInvite;
+      plexService.cancelInvite = originalCancelInvite;
       emailService.sendInviteEmail = originalSendInviteEmail;
       emailService.getSmtpConfig = originalGetSmtpConfig;
     }
   });
 
-  await t.test('admin test invite revokes when email fails', async () => {
+  await t.test('admin test invite cancels Plex invite when email fails', async () => {
     resetDatabase();
 
     const inviteCalls = [];
-    const revokeCalls = [];
+    const cancelCalls = [];
     let emailAttempts = 0;
 
-    const originalCreateInvite = wizarrService.createInvite;
-    const originalRevokeInvite = wizarrService.revokeInvite;
+    const originalCreateInvite = plexService.createInvite;
+    const originalCancelInvite = plexService.cancelInvite;
     const originalSendInviteEmail = emailService.sendInviteEmail;
     const originalGetSmtpConfig = emailService.getSmtpConfig;
 
-    wizarrService.createInvite = async (payload) => {
+    plexService.createInvite = async (payload) => {
       inviteCalls.push(payload);
       return {
-        inviteCode: 'FAIL123',
-        inviteUrl: 'https://wizarr/invite/FAIL123',
+        inviteId: 'INV-FAIL',
+        inviteUrl: 'https://plex.example/invite/INV-FAIL',
       };
     };
-    wizarrService.revokeInvite = async (code) => {
-      revokeCalls.push(code);
+    plexService.cancelInvite = async (id) => {
+      cancelCalls.push(id);
     };
     emailService.sendInviteEmail = async () => {
       emailAttempts += 1;
@@ -1071,7 +1069,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       const response = await requestJson(
         server,
         'POST',
-        '/api/admin/settings/wizarr/test-invite',
+        '/api/admin/settings/plex/test-invite',
         {
           headers: { 'x-csrf-token': csrfToken },
           body: { email: 'failure@example.com' },
@@ -1083,16 +1081,16 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(inviteCalls.length, 1);
       assert.equal(inviteCalls[0].email, 'failure@example.com');
       assert.equal(emailAttempts, 1);
-      assert.deepEqual(revokeCalls, ['FAIL123']);
+      assert.deepEqual(cancelCalls, ['INV-FAIL']);
 
       const eventCount = db
         .prepare('SELECT COUNT(*) AS count FROM events WHERE event_type = ?')
-        .get('wizarr.test_invite');
+        .get('plex.test_invite');
       assert.equal(eventCount.count, 0);
     } finally {
       await server.close();
-      wizarrService.createInvite = originalCreateInvite;
-      wizarrService.revokeInvite = originalRevokeInvite;
+      plexService.createInvite = originalCreateInvite;
+      plexService.cancelInvite = originalCancelInvite;
       emailService.sendInviteEmail = originalSendInviteEmail;
       emailService.getSmtpConfig = originalGetSmtpConfig;
     }

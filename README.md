@@ -2,7 +2,7 @@
 
 Automated system to handle:
 - **PayPal subscriptions** (monthly donations) and payment webhooks.
-- Auto-generate **Wizarr invites** and deliver them by email.
+- Auto-generate **Plex invites** and deliver them by email.
 - Manage invites/subscriptions from an **Admin dashboard** with CSRF-protected API.
 - Optionally revoke **Plex access** if a subscription is canceled.
 
@@ -10,7 +10,7 @@ Automated system to handle:
 
 - Secure admin dashboard with session-based authentication.
 - PayPal webhook endpoint that keeps the local SQLite database in sync.
-- Wizarr invite generation, storage, email delivery, and optional auto-revocation on cancellation.
+- Direct Plex invite creation, storage, email delivery, and optional auto-revocation on cancellation.
 - Optional Plex integration to remove canceled donors automatically.
 - Activity log for webhook events and admin actions.
 - Shareable donor dashboard so supporters can confirm donations, pick their invite email, and self-serve Plex access.
@@ -20,7 +20,7 @@ Automated system to handle:
 - Node.js 18+ (20+ recommended)
 - npm 9+
 - PayPal developer account
-- Wizarr running
+- Plex Media Server running (token, server UUID, and library section IDs)
 - SMTP credentials
 - (Optional) Plex Token for revoke
 
@@ -55,7 +55,19 @@ After signing in you can manage the admin username and password directly from th
 
 ### Configure integrations
 
-Use the **Integration settings** panel in the admin dashboard to store PayPal, Wizarr, SMTP, and optional Plex credentials. Values are written to the database so they survive restarts without exposing secrets in environment files.
+Use the **Integration settings** panel in the admin dashboard to store PayPal, Plex, and SMTP credentials. Values are written to the database so they survive restarts without exposing secrets in environment files.
+
+### Plex invite configuration
+
+Plex invites require the following values:
+
+- **Server URL**: the base URL used to reach your Plex server (e.g. `https://plex.example.com`).
+- **Plex token**: generate a long-lived token from Plex and paste it here.
+- **Server UUID**: the `machineIdentifier` for the Plex server that should share libraries.
+- **Library section IDs**: a comma-separated list of section IDs to share with donors.
+- **Allow sync/camera uploads/channels**: toggle the permissions that should be applied when creating an invite.
+
+The admin test invite button will verify these settings by creating a temporary Plex invite and emailing it to the address you provide.
 
 Each integration also provides a **Test** button directly beneath the save action so you can validate credentials before rolling them out to donors.
 
@@ -77,7 +89,7 @@ Open the **Subscribers** tab in the admin dashboard to copy invite links for sup
 
 ### Customer dashboard
 
-Set your PayPal return/landing URL to `https://<your-domain>/dashboard`. Subscribers sign in with their PayPal subscription ID and email to view account status, update their preferred streaming address, and generate fresh Wizarr invites on demand.
+Set your PayPal return/landing URL to `https://<your-domain>/dashboard`. Subscribers sign in with their PayPal subscription ID and email to view account status, update their preferred streaming address, and generate fresh Plex invites on demand.
 
 ## 📱 Progressive Web App
 
