@@ -688,19 +688,49 @@
 
       .library-selector {
         position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
         gap: 8px;
+      }
+
+      .library-selector-label {
+        display: block;
+        font-weight: 600;
       }
 
       .library-selector .library-selector-control {
         position: relative;
-        display: inline-flex;
+        display: flex;
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
+        width: 100%;
         gap: 8px;
       }
 
       .library-selector .library-selector-toggle {
-        min-width: 200px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        text-align: left;
+      }
+
+      .library-selector .help,
+      .library-selector .library-selector-summary {
+        margin: 0;
+      }
+
+      .library-selector .help {
+        font-weight: 500;
+        color: var(--text-muted-soft);
+        font-size: 0.85rem;
+      }
+
+      .library-selector .library-selector-summary {
+        font-size: 0.85rem;
       }
 
       .library-selector .library-selector-dropdown {
@@ -708,14 +738,13 @@
         top: calc(100% + 8px);
         left: 0;
         z-index: 20;
-        min-width: 240px;
-        width: max-content;
-        max-width: min(360px, calc(100vw - 48px));
-        border-radius: 12px;
+        min-width: 100%;
+        max-width: min(420px, calc(100vw - 48px));
+        border-radius: 16px;
         border: 1px solid var(--panel-border-color);
-        background: var(--panel-bg);
-        box-shadow: 0 22px 44px -24px rgba(15, 23, 42, 0.55);
-        padding: 16px;
+        background: var(--panel-background);
+        box-shadow: 0 28px 60px -32px rgba(15, 23, 42, 0.6);
+        padding: 20px;
         display: grid;
         gap: 12px;
       }
@@ -743,10 +772,6 @@
         justify-content: flex-end;
         gap: 8px;
         flex-wrap: wrap;
-      }
-
-      .library-selector-summary {
-        margin: 0;
       }
 
       .paypal-plan-management {
@@ -1380,8 +1405,8 @@
                   placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 />
               </label>
-              <label class="library-selector" data-library-picker>
-                Library access
+              <div class="library-selector" data-library-picker>
+                <label class="library-selector-label">Library access</label>
                 <input
                   name="librarySectionIds"
                   type="hidden"
@@ -1398,34 +1423,30 @@
                   >
                     Select libraries
                   </button>
-                  <div
-                    class="library-selector-dropdown"
-                    data-library-dropdown
+                  <p class="help" data-library-help>
+                    Test the Plex connection to load your server's libraries.
+                  </p>
+                  <p
+                    class="muted-text subtle-text library-selector-summary"
+                    data-library-summary
                     hidden
-                  >
-                    <div class="library-selector-options" data-library-options></div>
-                    <p class="library-selector-empty" data-library-empty hidden>
-                      No libraries were returned. Check your Plex permissions and try again.
-                    </p>
-                    <div class="library-selector-actions">
-                      <button type="button" class="secondary" data-library-clear>
-                        Clear selection
-                      </button>
-                      <button type="button" class="secondary" data-library-apply>
-                        Done
-                      </button>
-                    </div>
+                  ></p>
+                </div>
+                <div class="library-selector-dropdown" data-library-dropdown hidden>
+                  <div class="library-selector-options" data-library-options></div>
+                  <p class="library-selector-empty" data-library-empty hidden>
+                    No libraries were returned. Check your Plex permissions and try again.
+                  </p>
+                  <div class="library-selector-actions">
+                    <button type="button" class="secondary" data-library-clear>
+                      Clear selection
+                    </button>
+                    <button type="button" class="secondary" data-library-apply>
+                      Done
+                    </button>
                   </div>
                 </div>
-                <p class="help" data-library-help>
-                  Test the Plex connection to load your server's libraries.
-                </p>
-                <p
-                  class="muted-text subtle-text library-selector-summary"
-                  data-library-summary
-                  hidden
-                ></p>
-              </label>
+              </div>
             </div>
             <div class="field-grid">
               <label class="checkbox">
