@@ -428,6 +428,10 @@
                 login with the same supporter email.
               </li>
               <li>
+                Watch for our verification email—open it and sign in from that link so we can
+                confirm your dashboard access.
+              </li>
+              <li>
                 Complete the Plex authentication prompt to confirm which Plex identity you'll use
                 before sharing invites.
               </li>
@@ -456,7 +460,8 @@
           <h2>Step 1 · Create your account</h2>
           <p id="account-description" class="muted">
             Make sure you've created or recovered your Plex account, then save your Plex Donate
-            login with the same email so we can guide you through linking.
+            login with the same email so we can guide you through linking. We'll send a verification
+            email—open it and sign in from that link so we can confirm access.
           </p>
           <form id="account-form" class="grid">
             <label>
@@ -906,7 +911,7 @@
         if (accountDescription) {
           if (!accountReady) {
             accountDescription.textContent =
-              'Step one: create or recover your Plex account, then save your Plex Donate login so you can link Plex before subscribing.';
+              'Step one: create or recover your Plex account, then save your Plex Donate login so you can link Plex before subscribing. We’ll email a verification link—open it and sign in from that message to keep going.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
@@ -1161,10 +1166,10 @@
         render(payload);
         if (wasProspect && payload && payload.donor) {
           accountStatus.textContent =
-            'Account saved! You can now request your first referral invite.';
+            'Account saved! Open the verification email we just sent and sign in from that link to continue.';
         } else {
           accountStatus.textContent =
-            'Account saved! Use these details to sign in later.';
+            'Account saved! Finish by signing in through the verification email we just sent.';
         }
         accountStatus.className = 'status-text success';
           } catch (err) {
