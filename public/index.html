@@ -686,6 +686,69 @@
         font-size: 0.8rem;
       }
 
+      .library-selector {
+        position: relative;
+        gap: 8px;
+      }
+
+      .library-selector .library-selector-control {
+        position: relative;
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .library-selector .library-selector-toggle {
+        min-width: 200px;
+      }
+
+      .library-selector .library-selector-dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        z-index: 20;
+        min-width: 240px;
+        width: max-content;
+        max-width: min(360px, calc(100vw - 48px));
+        border-radius: 12px;
+        border: 1px solid var(--panel-border-color);
+        background: var(--panel-bg);
+        box-shadow: 0 22px 44px -24px rgba(15, 23, 42, 0.55);
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .library-selector-options {
+        display: grid;
+        gap: 8px;
+        max-height: 240px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
+      .library-selector-options .checkbox-row {
+        font-weight: 600;
+      }
+
+      .library-selector-empty {
+        margin: 0;
+        font-size: 0.9rem;
+        color: var(--text-muted-soft);
+      }
+
+      .library-selector-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .library-selector-summary {
+        margin: 0;
+      }
+
       .paypal-plan-management {
         margin-top: 16px;
         padding-top: 16px;
@@ -1317,13 +1380,51 @@
                   placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 />
               </label>
-              <label>
-                Library section IDs
+              <label class="library-selector" data-library-picker>
+                Library access
                 <input
                   name="librarySectionIds"
-                  type="text"
-                  placeholder="1,2,3"
+                  type="hidden"
+                  data-library-input
                 />
+                <div class="library-selector-control">
+                  <button
+                    type="button"
+                    class="secondary library-selector-toggle"
+                    data-library-toggle
+                    aria-haspopup="true"
+                    aria-expanded="false"
+                    disabled
+                  >
+                    Select libraries
+                  </button>
+                  <div
+                    class="library-selector-dropdown"
+                    data-library-dropdown
+                    hidden
+                  >
+                    <div class="library-selector-options" data-library-options></div>
+                    <p class="library-selector-empty" data-library-empty hidden>
+                      No libraries were returned. Check your Plex permissions and try again.
+                    </p>
+                    <div class="library-selector-actions">
+                      <button type="button" class="secondary" data-library-clear>
+                        Clear selection
+                      </button>
+                      <button type="button" class="secondary" data-library-apply>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <p class="help" data-library-help>
+                  Test the Plex connection to load your server's libraries.
+                </p>
+                <p
+                  class="muted-text subtle-text library-selector-summary"
+                  data-library-summary
+                  hidden
+                ></p>
               </label>
             </div>
             <div class="field-grid">
@@ -1487,6 +1588,36 @@
       const settingsForms = settingsPanel
         ? Array.from(settingsPanel.querySelectorAll('.settings-form'))
         : [];
+      const plexLibraryPicker = settingsPanel
+        ? settingsPanel.querySelector('[data-library-picker]')
+        : null;
+      const plexLibraryInput = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-input]')
+        : null;
+      const plexLibraryToggle = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-toggle]')
+        : null;
+      const plexLibraryDropdown = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-dropdown]')
+        : null;
+      const plexLibraryOptions = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-options]')
+        : null;
+      const plexLibraryEmpty = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-empty]')
+        : null;
+      const plexLibraryHelp = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-help]')
+        : null;
+      const plexLibrarySummary = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-summary]')
+        : null;
+      const plexLibraryClearButton = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-clear]')
+        : null;
+      const plexLibraryApplyButton = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-apply]')
+        : null;
       const paypalPlanSection = document.getElementById('paypal-plan-management');
       const paypalPlanBody = document.getElementById('paypal-plan-body');
       const paypalPlanManageLink = document.getElementById('paypal-plan-manage-link');
@@ -1660,6 +1791,7 @@
         paypalPlanLoading: false,
         adminUsername: 'admin',
         plex: null,
+        plexLibraries: null,
       };
 
       function setLoginStatus(message = '', stateAttr = '') {
@@ -2133,6 +2265,348 @@
         return payload;
       }
 
+      function parseLibraryIdList(value) {
+        if (value === undefined || value === null) {
+          return [];
+        }
+        if (Array.isArray(value)) {
+          const result = [];
+          value.forEach((entry) => {
+            result.push(...parseLibraryIdList(entry));
+          });
+          return result;
+        }
+        return String(value)
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0);
+      }
+
+      function normalizePlexLibraryValue(value, options = {}) {
+        const { skipAvailabilityCheck = false } = options;
+        const candidates = parseLibraryIdList(value);
+        const seen = new Set();
+        const normalized = [];
+        candidates.forEach((entry) => {
+          const id = String(entry).trim();
+          if (!id || seen.has(id)) {
+            return;
+          }
+          seen.add(id);
+          normalized.push(id);
+        });
+        if (skipAvailabilityCheck) {
+          return normalized;
+        }
+        if (Array.isArray(state.plexLibraries) && state.plexLibraries.length) {
+          const allowed = new Set(
+            state.plexLibraries.map((library) => String(library.id))
+          );
+          return normalized.filter((id) => allowed.has(id));
+        }
+        return normalized;
+      }
+
+      function getPlexLibraryRawSelection() {
+        if (!plexLibraryInput) {
+          return [];
+        }
+        const raw = plexLibraryInput.dataset.rawSelection || plexLibraryInput.value;
+        return normalizePlexLibraryValue(raw, { skipAvailabilityCheck: true });
+      }
+
+      function getPlexLibrarySelection() {
+        if (!plexLibraryInput) {
+          return [];
+        }
+        return normalizePlexLibraryValue(plexLibraryInput.value);
+      }
+
+      function setPlexLibrarySelection(value, options = {}) {
+        if (!plexLibraryInput) {
+          return;
+        }
+        const { skipAvailabilityCheck = false, rawValue } = options;
+        const rawSource = rawValue !== undefined ? rawValue : value;
+        const normalizedRaw = normalizePlexLibraryValue(rawSource, {
+          skipAvailabilityCheck: true,
+        });
+        plexLibraryInput.dataset.rawSelection = normalizedRaw.join(',');
+        const normalized = normalizePlexLibraryValue(value, { skipAvailabilityCheck });
+        plexLibraryInput.value = normalized.join(',');
+      }
+
+      function updatePlexLibraryToggleState() {
+        if (!plexLibraryToggle) {
+          return;
+        }
+        const availableCount = Array.isArray(state.plexLibraries)
+          ? state.plexLibraries.length
+          : 0;
+        const disabled = availableCount === 0;
+        plexLibraryToggle.disabled = disabled;
+        if (disabled) {
+          plexLibraryToggle.setAttribute('aria-expanded', 'false');
+          closePlexLibraryDropdown();
+        }
+      }
+
+      function updatePlexLibraryHelp() {
+        if (!plexLibraryHelp) {
+          return;
+        }
+        if (Array.isArray(state.plexLibraries) && state.plexLibraries.length) {
+          plexLibraryHelp.textContent =
+            'Choose the Plex libraries that new invites should include.';
+        } else {
+          plexLibraryHelp.textContent =
+            'Test the Plex connection to load your server\'s libraries.';
+        }
+      }
+
+      function updatePlexLibraryToggleLabel() {
+        if (!plexLibraryToggle) {
+          return;
+        }
+        const selection = getPlexLibrarySelection();
+        if (Array.isArray(state.plexLibraries) && state.plexLibraries.length) {
+          const count = selection.length;
+          if (count === 1) {
+            plexLibraryToggle.textContent = '1 library selected';
+          } else if (count > 1) {
+            plexLibraryToggle.textContent = `${count} libraries selected`;
+          } else {
+            plexLibraryToggle.textContent = 'Select libraries';
+          }
+        } else {
+          plexLibraryToggle.textContent = 'Select libraries';
+        }
+      }
+
+      function updatePlexLibraryOptions() {
+        if (!plexLibraryOptions) {
+          return;
+        }
+        plexLibraryOptions.innerHTML = '';
+        const libraries = Array.isArray(state.plexLibraries)
+          ? state.plexLibraries
+          : [];
+        const hasLibraries = libraries.length > 0;
+        if (plexLibraryEmpty) {
+          plexLibraryEmpty.hidden = Array.isArray(state.plexLibraries)
+            ? hasLibraries
+            : true;
+        }
+        if (!hasLibraries) {
+          return;
+        }
+
+        const selected = new Set(getPlexLibrarySelection());
+        libraries.forEach((library) => {
+          if (!library) {
+            return;
+          }
+          const id = library.id != null ? String(library.id) : '';
+          if (!id) {
+            return;
+          }
+          const label = document.createElement('label');
+          label.className = 'checkbox-row library-option';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = id;
+          checkbox.checked = selected.has(id);
+          checkbox.addEventListener('change', () => {
+            const rawSelection = new Set(getPlexLibraryRawSelection());
+            if (checkbox.checked) {
+              rawSelection.add(id);
+            } else {
+              rawSelection.delete(id);
+            }
+            const nextSelection = Array.from(rawSelection);
+            setPlexLibrarySelection(nextSelection, { rawValue: nextSelection });
+            updatePlexLibrarySummary();
+            updatePlexLibraryToggleLabel();
+          });
+          const name = document.createElement('span');
+          name.textContent = library.title || `Library ${id}`;
+          label.appendChild(checkbox);
+          label.appendChild(name);
+          plexLibraryOptions.appendChild(label);
+        });
+      }
+
+      function updatePlexLibrarySummary() {
+        if (!plexLibrarySummary) {
+          return;
+        }
+        const rawSelection = getPlexLibraryRawSelection();
+        const validatedSelection = getPlexLibrarySelection();
+        const librariesLoaded = Array.isArray(state.plexLibraries);
+        const hasLibraries = librariesLoaded
+          ? state.plexLibraries.length > 0
+          : false;
+        const missing = rawSelection.filter(
+          (id) => !validatedSelection.includes(id)
+        );
+
+        if (validatedSelection.length > 0 && librariesLoaded) {
+          const names = validatedSelection.map((id) => {
+            const match = state.plexLibraries.find(
+              (library) => String(library.id) === id
+            );
+            return match && match.title ? match.title : id;
+          });
+          let summary = `Selected libraries: ${names.join(', ')}.`;
+          if (missing.length) {
+            summary += ` (Unavailable: ${missing.join(', ')})`;
+          }
+          plexLibrarySummary.textContent = summary;
+          plexLibrarySummary.hidden = false;
+          return;
+        }
+
+        if (validatedSelection.length > 0 && !librariesLoaded) {
+          plexLibrarySummary.textContent =
+            `Saved library IDs: ${rawSelection.join(', ')}. Test the Plex connection to load available libraries.`;
+          plexLibrarySummary.hidden = false;
+          return;
+        }
+
+        if (missing.length) {
+          plexLibrarySummary.textContent =
+            `Libraries not available: ${missing.join(', ')}. Test the Plex connection again to refresh the list.`;
+          plexLibrarySummary.hidden = false;
+          return;
+        }
+
+        if (librariesLoaded && hasLibraries) {
+          plexLibrarySummary.textContent = 'No libraries selected yet.';
+          plexLibrarySummary.hidden = false;
+          return;
+        }
+
+        plexLibrarySummary.textContent = '';
+        plexLibrarySummary.hidden = true;
+      }
+
+      function renderPlexLibrarySelector(options = {}) {
+        if (!plexLibraryInput) {
+          return;
+        }
+        const { preserveSelection = false, preferredSelection = null } = options;
+        const savedValue =
+          state.settings &&
+          state.settings.plex &&
+          state.settings.plex.librarySectionIds;
+
+        if (!preserveSelection || !plexLibraryInput.value) {
+          const initialValue =
+            preferredSelection !== null && preferredSelection !== undefined
+              ? preferredSelection
+              : savedValue || '';
+          setPlexLibrarySelection(initialValue, { skipAvailabilityCheck: true });
+        } else if (
+          preferredSelection !== null &&
+          preferredSelection !== undefined
+        ) {
+          setPlexLibrarySelection(preferredSelection, {
+            skipAvailabilityCheck: true,
+          });
+        }
+
+        if (Array.isArray(state.plexLibraries)) {
+          const rawSelection = getPlexLibraryRawSelection();
+          setPlexLibrarySelection(rawSelection);
+        }
+
+        updatePlexLibraryToggleState();
+        updatePlexLibraryHelp();
+        updatePlexLibraryOptions();
+        updatePlexLibrarySummary();
+        updatePlexLibraryToggleLabel();
+      }
+
+      let plexLibraryDropdownOpen = false;
+
+      function closePlexLibraryDropdown(options = {}) {
+        if (!plexLibraryDropdown || !plexLibraryDropdownOpen) {
+          return;
+        }
+        plexLibraryDropdown.hidden = true;
+        plexLibraryDropdownOpen = false;
+        document.removeEventListener('click', handlePlexLibraryDocumentClick, true);
+        document.removeEventListener('keydown', handlePlexLibraryKeydown);
+        if (options.focusToggle && plexLibraryToggle) {
+          plexLibraryToggle.focus();
+        }
+        if (plexLibraryToggle) {
+          plexLibraryToggle.setAttribute('aria-expanded', 'false');
+        }
+      }
+
+      function openPlexLibraryDropdown() {
+        if (!plexLibraryDropdown || !plexLibraryToggle) {
+          return;
+        }
+        if (plexLibraryToggle.disabled) {
+          return;
+        }
+        updatePlexLibraryOptions();
+        plexLibraryDropdown.hidden = false;
+        plexLibraryDropdownOpen = true;
+        plexLibraryToggle.setAttribute('aria-expanded', 'true');
+        document.addEventListener('click', handlePlexLibraryDocumentClick, true);
+        document.addEventListener('keydown', handlePlexLibraryKeydown);
+      }
+
+      function handlePlexLibraryDocumentClick(event) {
+        if (!plexLibraryDropdownOpen || !plexLibraryPicker) {
+          return;
+        }
+        if (plexLibraryPicker.contains(event.target)) {
+          return;
+        }
+        closePlexLibraryDropdown();
+      }
+
+      function handlePlexLibraryKeydown(event) {
+        if (event.key === 'Escape') {
+          closePlexLibraryDropdown({ focusToggle: true });
+        }
+      }
+
+      if (plexLibraryToggle) {
+        plexLibraryToggle.addEventListener('click', (event) => {
+          event.preventDefault();
+          if (plexLibraryToggle.disabled) {
+            return;
+          }
+          if (plexLibraryDropdownOpen) {
+            closePlexLibraryDropdown({ focusToggle: true });
+          } else {
+            openPlexLibraryDropdown();
+          }
+        });
+      }
+
+      if (plexLibraryApplyButton) {
+        plexLibraryApplyButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          closePlexLibraryDropdown({ focusToggle: true });
+        });
+      }
+
+      if (plexLibraryClearButton) {
+        plexLibraryClearButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          setPlexLibrarySelection([], { rawValue: [] });
+          updatePlexLibraryOptions();
+          updatePlexLibrarySummary();
+          updatePlexLibraryToggleLabel();
+        });
+      }
+
       function renderSettings() {
         if (!settingsPanel) {
           return;
@@ -2154,6 +2628,7 @@
             });
           });
         }
+        renderPlexLibrarySelector({ preserveSelection: false });
         renderPaypalPlan();
       }
 
@@ -2414,6 +2889,7 @@
         try {
           const response = await api('/api/admin/settings');
           state.settings = response.settings || {};
+          state.plexLibraries = null;
           settingsForms.forEach((form) => setFormStatus(form, ''));
         } catch (err) {
           console.error(err);
@@ -3295,6 +3771,30 @@
                 response.message ||
                 'Settings test completed successfully.';
               setFormStatus(form, message, 'success');
+              if (group === 'plex') {
+                if (Array.isArray(result.libraries)) {
+                  state.plexLibraries = result.libraries
+                    .map((library) => ({
+                      id:
+                        library && library.id != null
+                          ? String(library.id)
+                          : '',
+                      title:
+                        library && library.title
+                          ? String(library.title)
+                          : '',
+                    }))
+                    .filter((library) => library.id);
+                }
+                const preferredSelection =
+                  result.details && result.details.librarySectionIds
+                    ? result.details.librarySectionIds
+                    : null;
+                renderPlexLibrarySelector({
+                  preserveSelection: true,
+                  preferredSelection,
+                });
+              }
               scheduleStatusClear(form);
             } catch (err) {
               setFormStatus(

@@ -3,6 +3,7 @@ const { getPlexSettings } = require('../state/settings');
 
 const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users'];
 const INVITE_ENDPOINT = '/api/v2/home/invitations';
+const LIBRARY_SECTIONS_ENDPOINT = '/library/sections';
 const DEFAULT_INVITE_HEADERS = {
   Accept: 'application/json',
   'Content-Type': 'application/json',
@@ -293,6 +294,102 @@ async function extractErrorMessage(response) {
 
 function getCacheKey(plex) {
   return normalizeBaseUrl(plex && plex.baseUrl);
+}
+
+function normalizeLibraryList(libraries) {
+  const seen = new Set();
+  return mapSharedLibrariesFromResponse({ libraries })
+    .map((library) => {
+      if (!library) {
+        return null;
+      }
+      const id = library.id != null ? String(library.id).trim() : '';
+      if (!id) {
+        return null;
+      }
+      const title = library.title ? String(library.title).trim() : '';
+      return { id, title: title || id };
+    })
+    .filter((library) => {
+      if (!library) {
+        return false;
+      }
+      if (seen.has(library.id)) {
+        return false;
+      }
+      seen.add(library.id);
+      return true;
+    });
+}
+
+function parseLibrarySectionsPayload(payload) {
+  if (!payload) {
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(payload);
+    if (data && typeof data === 'object') {
+      const container =
+        data.MediaContainer || data.mediaContainer || data.container || data;
+      if (container && typeof container === 'object') {
+        const directories =
+          container.Directory ||
+          container.directory ||
+          container.Metadata ||
+          container.metadata ||
+          [];
+        const normalized = normalizeLibraryList(coerceArray(directories));
+        if (normalized.length) {
+          return normalized;
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore JSON parsing errors and fall back to XML parsing.
+  }
+
+  const directories = [];
+  const pattern = /<Directory\b[^>]*>/gi;
+  let match;
+  while ((match = pattern.exec(payload))) {
+    const tag = match[0];
+    const attributes = {};
+    tag.replace(/([\w-]+)="([^"]*)"/g, (_, key, value) => {
+      attributes[key] = value;
+      return '';
+    });
+    directories.push(attributes);
+  }
+
+  return normalizeLibraryList(directories);
+}
+
+async function fetchLibrarySections(plex) {
+  let response;
+  try {
+    response = await fetch(buildUrlFromConfig(LIBRARY_SECTIONS_ENDPOINT, plex), {
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex library API: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to load Plex library sections: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const body = await response.text();
+  return parseLibrarySectionsPayload(body);
 }
 
 async function fetchUsersList(plex) {
@@ -586,9 +683,6 @@ async function verifyConnection(overrideSettings) {
   ensureInviteConfiguration(plex);
 
   const sections = parseLibrarySectionIds(plex.librarySectionIds);
-  if (!sections.length) {
-    throw new Error('At least one Plex library section ID must be configured');
-  }
 
   let response;
   try {
@@ -613,12 +707,20 @@ async function verifyConnection(overrideSettings) {
     );
   }
 
+  const libraries = await fetchLibrarySections(plex);
+  if (!libraries.length) {
+    throw new Error(
+      'No Plex libraries were found. Confirm the token has access to your server.'
+    );
+  }
+
   return {
     message: 'Plex invite configuration verified successfully.',
     details: {
       serverIdentifier: plex.serverIdentifier,
       librarySectionIds: sections,
     },
+    libraries,
   };
 }
 
