@@ -677,6 +677,28 @@
         }
       }
 
+      function isShareInviteExpired(invite) {
+        if (!invite || !invite.expiresAt) {
+          return false;
+        }
+        const expiresAt = parseDate(invite.expiresAt);
+        if (!expiresAt) {
+          return false;
+        }
+        return Date.now() >= expiresAt.getTime();
+      }
+
+      function isShareInviteUsed(invite) {
+        if (!invite || !invite.usedAt) {
+          return false;
+        }
+        const usedAt = parseDate(invite.usedAt);
+        if (!usedAt) {
+          return Boolean(invite.usedAt);
+        }
+        return true;
+      }
+
       function clearInviteCooldownTimer() {
         if (!inviteCooldownTimer) {
           return;
@@ -722,7 +744,12 @@
         }
       }
 
-      function renderInvite(invite, limitReached, nextInviteAvailableAt) {
+      function renderInvite(
+        invite,
+        shareInvite,
+        limitReached,
+        nextInviteAvailableAt
+      ) {
         const limitHit = Boolean(limitReached);
         const isProspect = Boolean(state.isProspect);
         const nextAvailableDate = parseDate(nextInviteAvailableAt);
@@ -730,6 +757,18 @@
           limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
         const nextInviteMessage = cooldownActive
           ? `Next referral invite available on ${formatDateTime(nextAvailableDate)}.`
+          : '';
+        const shareInviteExpired = isShareInviteExpired(shareInvite);
+        const shareInviteUsed = isShareInviteUsed(shareInvite);
+        const shareInviteActive = Boolean(
+          shareInvite &&
+            !shareInviteExpired &&
+            !shareInviteUsed
+        );
+        const inviteUrl = shareInviteActive
+          ? shareInvite.url || ''
+          : invite && invite.wizarrInviteUrl
+          ? invite.wizarrInviteUrl
           : '';
 
         if (inviteForm) {
@@ -754,7 +793,7 @@
           return;
         }
 
-        if (!invite || !invite.wizarrInviteUrl) {
+        if (!inviteUrl || shareInviteUsed || shareInviteExpired) {
           inviteReady.classList.add('hidden');
           inviteLinkEl.removeAttribute('href');
           inviteLinkEl.textContent = '';
@@ -764,9 +803,17 @@
             inviteDescription.textContent =
               `${nextInviteMessage} We'll refresh this page automatically when you're eligible to send another referral invite.`;
           } else {
-            inviteDescription.textContent = limitHit
-              ? 'This month’s referral invite has already been used. Contact the server admin if you lost your own access and need the link restored.'
-              : 'Choose who should receive this referral invite and we will generate the Wizarr link instantly. Only regenerate your own link if you have lost Plex access.';
+            if (shareInviteUsed) {
+              inviteDescription.textContent =
+                'This referral invite has already been used. Generate a new invite if your recipient still needs access.';
+            } else if (shareInviteExpired) {
+              inviteDescription.textContent =
+                'This referral invite expired after seven days. Generate a new invite to share access again.';
+            } else {
+              inviteDescription.textContent = limitHit
+                ? 'This month’s referral invite has already been used. Contact the server admin if you lost your own access and need the link restored.'
+                : 'Choose who should receive this referral invite and we will generate the share link instantly. Only regenerate your own link if you have lost Plex access.';
+            }
           }
           if (generateButton) {
             if (cooldownActive) {
@@ -781,17 +828,26 @@
         }
 
         inviteReady.classList.remove('hidden');
-        inviteLinkEl.href = invite.wizarrInviteUrl;
-        inviteLinkEl.textContent = invite.wizarrInviteUrl;
+        inviteLinkEl.href = inviteUrl;
+        inviteLinkEl.textContent = inviteUrl;
         inviteEmailEl.textContent = invite.recipientEmail
           ? `Delivering to ${invite.recipientEmail}`
           : '';
-        if (invite.createdAt) {
-          const createdDate = new Date(invite.createdAt);
-          inviteCreatedEl.textContent = `Created ${createdDate.toLocaleString()}`;
-        } else {
-          inviteCreatedEl.textContent = '';
-        }
+        const createdLabel =
+          (shareInvite && shareInvite.createdAt) || invite.createdAt
+            ? `Created ${formatDateTime(
+                shareInvite && shareInvite.createdAt
+                  ? shareInvite.createdAt
+                  : invite.createdAt
+              )}`
+            : '';
+        const expiresLabel =
+          shareInvite && shareInvite.expiresAt
+            ? `Expires ${formatDateTime(shareInvite.expiresAt)}`
+            : '';
+        inviteCreatedEl.textContent = [createdLabel, expiresLabel]
+          .filter(Boolean)
+          .join(' • ');
         if (cooldownActive && nextInviteMessage) {
           inviteDescription.textContent =
             `${nextInviteMessage} We'll refresh this page automatically when the referral cooldown ends.`;
@@ -944,6 +1000,10 @@
         }
 
         const invite = data.invite || null;
+        const shareInvite =
+          data.shareInvite ||
+          (data.invite && data.invite.shareLink) ||
+          null;
         const emailPrefill =
           (invite && invite.recipientEmail) ||
           (donor && donor.email) ||
@@ -982,7 +1042,12 @@
           accountConfirmInput.value = '';
         }
 
-        renderInvite(invite, limitReached, nextInviteAvailableAt);
+        renderInvite(
+          invite,
+          shareInvite,
+          limitReached,
+          nextInviteAvailableAt
+        );
 
         if (!plexLinked && !limitReached) {
           inviteDescription.textContent =

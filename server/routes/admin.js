@@ -4,7 +4,6 @@ const { nanoid } = require('nanoid');
 const {
   listDonorsWithDetails,
   getDonorById,
-  createInvite: createInviteRecord,
   markInviteEmailSent,
   getLatestActiveInviteForDonor,
   revokeInvite: revokeInviteRecord,
@@ -671,46 +670,48 @@ router.post(
 
     const note = (req.body && req.body.note) || '';
 
-    logger.info('Creating Wizarr invite for donor', donorId);
-    const inviteData = await wizarrService.createInvite({
-      email: donor.email,
-      note,
-      expiresInDays: req.body && req.body.expiresInDays,
-    });
-
-    const inviteRecord = createInviteRecord({
+    const token = nanoid(36);
+    const sessionToken = nanoid(48);
+    const shareLink = createOrUpdateShareLink({
       donorId: donor.id,
-      code: inviteData.inviteCode,
-      url: inviteData.inviteUrl,
-      note,
-      recipientEmail: donor.email,
+      token,
+      sessionToken,
     });
+    const origin = resolvePublicBaseUrl(req);
+    const shareUrl = `${origin}/share/${shareLink.token}`;
+    const invitePayload = {
+      wizarrInviteUrl: shareUrl,
+      recipientEmail: donor.email,
+      createdAt: shareLink.createdAt,
+      note,
+      shareLink: { ...shareLink, url: shareUrl },
+    };
 
     try {
       await emailService.sendInviteEmail({
-        to: inviteRecord.recipientEmail || donor.email,
-        inviteUrl: inviteRecord.wizarrInviteUrl,
+        to: donor.email,
+        inviteUrl: shareUrl,
         name: donor.name,
         subscriptionId: donor.subscriptionId,
       });
-      markInviteEmailSent(inviteRecord.id);
     } catch (err) {
       logger.error('Failed to send invite email', err.message);
       return res.status(500).json({
         error: 'Invite created but email delivery failed',
         details: err.message,
-        invite: inviteRecord,
+        invite: invitePayload,
         csrfToken: res.locals.csrfToken,
       });
     }
 
-    logEvent('invite.created', {
+    logEvent('share_link.invite_sent', {
       donorId: donor.id,
-      invite: inviteRecord,
+      shareLinkId: shareLink.id,
+      note,
     });
 
     res.json({
-      invite: inviteRecord,
+      invite: invitePayload,
       csrfToken: res.locals.csrfToken,
     });
   })

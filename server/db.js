@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS invite_links (
   session_token TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   last_used_at TEXT,
+  expires_at TEXT,
+  used_at TEXT,
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
   FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
 );
@@ -263,6 +265,36 @@ function ensureInviteLinksSupportsProspects() {
   createInviteLinkIndexes();
 }
 
+function ensureInviteLinkExpirationColumns() {
+  const columns = db.prepare("PRAGMA table_info('invite_links')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasExpiresAt = columns.some((column) => column.name === 'expires_at');
+  const hasUsedAt = columns.some((column) => column.name === 'used_at');
+
+  if (!hasExpiresAt) {
+    db.exec("ALTER TABLE invite_links ADD COLUMN expires_at TEXT");
+  }
+
+  if (!hasUsedAt) {
+    db.exec("ALTER TABLE invite_links ADD COLUMN used_at TEXT");
+  }
+
+  db.exec(`
+    UPDATE invite_links
+       SET expires_at = COALESCE(
+         CASE
+           WHEN expires_at IS NOT NULL AND TRIM(expires_at) <> '' THEN expires_at
+           ELSE DATETIME(COALESCE(created_at, CURRENT_TIMESTAMP), '+7 days')
+         END,
+         DATETIME(CURRENT_TIMESTAMP, '+7 days')
+       )
+     WHERE expires_at IS NULL OR TRIM(expires_at) = '';
+  `);
+}
+
 function ensureDonorSubscriptionOptional() {
   const columns = db.prepare("PRAGMA table_info('donors')").all();
   if (columns.length === 0) {
@@ -316,6 +348,7 @@ ensureDonorSubscriptionOptional();
 ensureDonorAccessExpirationColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
+ensureInviteLinkExpirationColumns();
 ensureInvitePlexColumns();
 
 function normalizeEmail(email) {
@@ -438,8 +471,14 @@ const statements = {
      ORDER BY invite_links.created_at DESC
   `),
   insertInviteLink: db.prepare(
-    `INSERT INTO invite_links (donor_id, prospect_id, token, session_token)
-     VALUES (@donorId, @prospectId, @token, @sessionToken)`
+    `INSERT INTO invite_links (donor_id, prospect_id, token, session_token, expires_at)
+     VALUES (
+       @donorId,
+       @prospectId,
+       @token,
+       @sessionToken,
+       DATETIME('now', '+7 days')
+     )`
   ),
   replaceInviteLink: db.prepare(
     `UPDATE invite_links
@@ -448,7 +487,9 @@ const statements = {
          token = @token,
          session_token = @sessionToken,
          created_at = CURRENT_TIMESTAMP,
-         last_used_at = NULL
+         last_used_at = NULL,
+         used_at = NULL,
+         expires_at = DATETIME('now', '+7 days')
      WHERE id = @id`
   ),
   deleteInviteLinkById: db.prepare('DELETE FROM invite_links WHERE id = ?'),
@@ -466,7 +507,8 @@ const statements = {
   ),
   touchInviteLink: db.prepare(
     `UPDATE invite_links
-     SET last_used_at = CURRENT_TIMESTAMP
+     SET last_used_at = CURRENT_TIMESTAMP,
+         used_at = CURRENT_TIMESTAMP
      WHERE id = ?`
   ),
   insertInvite: db.prepare(
@@ -621,6 +663,8 @@ function mapInviteLink(row) {
     sessionToken: row.session_token,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
+    expiresAt: row.expires_at,
+    usedAt: row.used_at,
   };
 }
 
