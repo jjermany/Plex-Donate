@@ -2575,8 +2575,8 @@
           }
           if (invites.length > 0) {
             const invite = invites[0];
-            if (invite.plexInviteUrl) {
-              inviteParts.push(`<a href="${invite.plexInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+            if (invite.inviteUrl) {
+              inviteParts.push(`<a href="${invite.inviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
             }
             if (invite.recipientEmail) {
               inviteParts.push(
@@ -2652,7 +2652,7 @@
           }
 
           if (resendButton) {
-            const canResend = Boolean(activeInvite && activeInvite.plexInviteUrl);
+            const canResend = Boolean(activeInvite && activeInvite.inviteUrl);
             resendButton.disabled = !canResend;
             resendButton.title = canResend
               ? 'Resend the most recent invite email'

@@ -366,7 +366,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   const body = await response.json();
   assert.ok(body.invite);
   assert.equal(body.invite.plexInviteId, 'plex-123');
-  assert.ok(body.invite.plexInviteUrl);
+  assert.ok(body.invite.inviteUrl);
   assert.ok(body.message.includes('Plex invite'));
   assert.ok(createInvitePayload);
   assert.equal(createInvitePayload.email, donor.email);
@@ -377,7 +377,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.ok(Array.isArray(updated.invites));
   const latestInvite = updated.invites[0];
   assert.equal(latestInvite.plexInviteId, 'plex-123');
-  assert.equal(latestInvite.plexInviteUrl, 'https://plex.local/invite/plex-123');
+  assert.equal(latestInvite.inviteUrl, 'https://plex.local/invite/plex-123');
 
   assert.ok(body.donor);
   assert.equal(body.donor.needsPlexInvite, false);

@@ -753,7 +753,7 @@ function mapInvite(row) {
     id: row.id,
     donorId: row.donor_id,
     plexInviteId: row.plex_invite_id || null,
-    plexInviteUrl: row.plex_invite_url || row.wizarr_invite_url || null,
+    inviteUrl: row.plex_invite_url || row.wizarr_invite_url || null,
     plexInvitedAt: row.plex_invited_at || null,
     plexInviteStatus: row.plex_invite_status || null,
     plexSharedLibraries: sharedLibraries,

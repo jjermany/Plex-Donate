@@ -510,9 +510,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
 
   const existingInvite = getLatestActiveInviteForDonor(donor.id);
   const existingInviteUsable =
-    existingInvite &&
-    existingInvite.plexInviteUrl &&
-    !existingInvite.revokedAt;
+    existingInvite && existingInvite.inviteUrl && !existingInvite.revokedAt;
   const existingInviteMatches =
     existingInviteUsable &&
     normalizeEmail(existingInvite.recipientEmail) === normalizedEmail;
@@ -534,7 +532,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       try {
         await emailService.sendInviteEmail({
           to: email,
-          inviteUrl: invite.plexInviteUrl,
+          inviteUrl: invite.inviteUrl,
           name: donor.name,
           subscriptionId: donor.subscriptionId,
         });
@@ -585,7 +583,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
     });
 
-    if (!inviteRecord.plexInviteUrl) {
+    if (!inviteRecord.inviteUrl) {
       logger.warn('Plex invite created without a shareable URL', {
         donorId: donor.id,
         plexInviteId: inviteRecord.plexInviteId,
@@ -596,7 +594,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     try {
       await emailService.sendInviteEmail({
         to: email,
-        inviteUrl: inviteRecord.plexInviteUrl,
+        inviteUrl: inviteRecord.inviteUrl,
         name: donor.name,
         subscriptionId: donor.subscriptionId,
       });

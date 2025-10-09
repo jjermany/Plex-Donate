@@ -766,9 +766,9 @@
             !shareInviteUsed
         );
         const inviteUrl = shareInviteActive
-          ? shareInvite.url || ''
-          : invite && invite.plexInviteUrl
-          ? invite.plexInviteUrl
+          ? shareInvite.inviteUrl || ''
+          : invite && invite.inviteUrl
+          ? invite.inviteUrl
           : '';
 
         if (inviteForm) {
