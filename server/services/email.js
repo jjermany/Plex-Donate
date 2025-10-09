@@ -48,11 +48,11 @@ async function sendInviteEmail(
   const mailer = createTransport(smtp);
   const subject = 'Your Plex access invite';
 
-  const text = `Hi ${name || 'there'},\n\nThank you for supporting our Plex server!\n\nYou can join using your personal Plex invite link: ${inviteUrl}\n\nSubscription ID: ${subscriptionId}\n\nIf you did not request this invite or need help, reply to this email.\n\n— Plex Donate`;
+  const text = `Hi ${name || 'there'},\n\nThank you for supporting our Plex server!\n\nUse your personal share link to accept the Plex invite: ${inviteUrl}\n\nSubscription ID: ${subscriptionId}\n\nIf you did not request this invite or need help, reply to this email.\n\n— Plex Donate`;
 
   const html = `
   <p>Hi ${name || 'there'},</p>
-  <p>Thank you for supporting our Plex server! Use the button below to accept your invite.</p>
+  <p>Thank you for supporting our Plex server! Use the button below to accept your Plex invite.</p>
   <p style="text-align:center;margin:24px 0;">
     <a href="${inviteUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Accept Invite</a>
   </p>

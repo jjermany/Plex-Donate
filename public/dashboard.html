@@ -1473,7 +1473,7 @@
           }
         }
 
-          if (!invite || !invite.plexInviteUrl) {
+          if (!invite || !invite.inviteUrl) {
             inviteReady.classList.add('hidden');
             inviteLinkEl.removeAttribute('href');
             inviteLinkEl.textContent = '';
@@ -1501,8 +1501,8 @@
         }
 
           inviteReady.classList.remove('hidden');
-          inviteLinkEl.href = invite.plexInviteUrl;
-          inviteLinkEl.textContent = invite.plexInviteUrl;
+          inviteLinkEl.href = invite.inviteUrl;
+          inviteLinkEl.textContent = invite.inviteUrl;
         inviteEmailDisplay.textContent = invite.recipientEmail
           ? `Delivering to ${invite.recipientEmail}`
           : '';
@@ -1572,7 +1572,7 @@
             data.plexLink.pending
         );
           const inviteReadyState = Boolean(
-            data && data.invite && data.invite.plexInviteUrl
+            data && data.invite && data.invite.inviteUrl
           );
         const inviteLimitReached = Boolean(data && data.inviteLimitReached);
         const allComplete = plexLinked && subscriptionComplete && inviteReadyState;

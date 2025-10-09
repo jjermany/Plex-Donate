@@ -209,7 +209,7 @@ function annotateDonorWithPlex(donor, context) {
   const plexShared = Boolean(matchedEntry && !matchedEntry.pending);
   const plexPendingFromUser = Boolean(matchedEntry && matchedEntry.pending);
   const hasActiveInvite = invites.some(
-    (invite) => invite && !invite.revokedAt && (invite.plexInviteId || invite.plexInviteUrl)
+    (invite) => invite && !invite.revokedAt && (invite.plexInviteId || invite.inviteUrl)
   );
   const plexPending = plexPendingFromUser || (!plexShared && hasActiveInvite);
   const normalizedStatus = normalizeValue(donor.status || '');
@@ -771,7 +771,7 @@ router.post(
       email,
       invite: {
         id: inviteId,
-        url: inviteUrl,
+        inviteUrl,
         status: invite ? invite.status : undefined,
         sharedLibraries: invite ? invite.sharedLibraries : undefined,
       },
@@ -783,7 +783,7 @@ router.post(
       success: true,
       invite: {
         id: inviteId,
-        url: inviteUrl,
+        inviteUrl,
         sharedLibraries: invite ? invite.sharedLibraries : undefined,
       },
       message: `Test Plex invite sent to ${email}.`,
@@ -1086,13 +1086,13 @@ router.post(
     }
 
     const invite = getLatestActiveInviteForDonor(donor.id);
-    if (!invite || !invite.plexInviteUrl) {
+    if (!invite || !invite.inviteUrl) {
       return res.status(400).json({ error: 'No active invite to email' });
     }
 
     await emailService.sendInviteEmail({
       to: invite.recipientEmail || donor.email,
-      inviteUrl: invite.plexInviteUrl,
+      inviteUrl: invite.inviteUrl,
       name: donor.name,
       subscriptionId: donor.subscriptionId,
     });

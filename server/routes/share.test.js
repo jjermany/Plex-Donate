@@ -978,7 +978,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(response.body.success, true);
       assert.deepEqual(response.body.invite, {
         id: 'INV-123',
-        url: 'https://plex.example/invite/INV-123',
+        inviteUrl: 'https://plex.example/invite/INV-123',
         sharedLibraries: [{ id: '1', title: 'Movies' }],
       });
 
@@ -1015,7 +1015,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       const eventPayload = JSON.parse(eventRow.payload);
       assert.equal(eventPayload.email, 'tester@example.com');
       assert.equal(eventPayload.invite.id, 'INV-123');
-      assert.equal(eventPayload.invite.url, 'https://plex.example/invite/INV-123');
+      assert.equal(eventPayload.invite.inviteUrl, 'https://plex.example/invite/INV-123');
       assert.equal(eventPayload.invite.status, 'pending');
       assert.equal(eventPayload.note, 'Integration check');
       assert.deepEqual(eventPayload.invite.sharedLibraries, [

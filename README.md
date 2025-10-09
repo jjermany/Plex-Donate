@@ -14,6 +14,7 @@ Automated system to handle:
 - Optional Plex integration to remove canceled donors automatically.
 - Activity log for webhook events and admin actions.
 - Shareable donor dashboard so supporters can confirm donations, pick their invite email, and self-serve Plex access.
+- Built-in referral share links that generate Plex invites directly—no external tooling or Wizarr deployment required.
 - Dedicated customer dashboard at `/dashboard` where subscribers can log in with their PayPal subscription ID to manage invites and update contact details.
 
 ## 📋 Requirements
@@ -83,9 +84,11 @@ npm start      # production mode
 
 The admin dashboard is served from `http://localhost:3000/` and exposes JSON APIs under `/api/admin`. Configure your PayPal webhook to POST to `/api/paypal/webhook`.
 
-### Shareable donor pages
+### Shareable donor pages & invite flow
 
-Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
+Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. Once the supporter signs in on that page they can generate a Plex invite directly from Plex Donate, send it to their recipient, and resend the same link later without leaving the app. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
+
+Subscribers can also access the same invite controls from the `/dashboard` experience. When they create a referral invite, the dashboard and share page both surface the generated `inviteUrl` along with cooldown messaging so they know when the next referral is available.
 
 ### Customer dashboard
 

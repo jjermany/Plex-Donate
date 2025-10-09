@@ -112,7 +112,7 @@ function buildShareInviteDetails(shareInvite, origin) {
   };
 
   if (origin) {
-    details.url = `${origin}/share/${shareInvite.token}`;
+    details.inviteUrl = `${origin}/share/${shareInvite.token}`;
   }
 
   return details;
@@ -1092,8 +1092,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            plexInviteUrl:
-              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
+            inviteUrl:
+              currentShareInviteDetails?.inviteUrl || invite.inviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -1118,8 +1118,8 @@ router.post(
       const invitePayload = invite
         ? {
             ...invite,
-            plexInviteUrl:
-              currentShareInviteDetails?.url || invite.plexInviteUrl || '',
+            inviteUrl:
+              currentShareInviteDetails?.inviteUrl || invite.inviteUrl || '',
           }
         : null;
       if (invitePayload && currentShareInviteDetails) {
@@ -1164,11 +1164,14 @@ router.post(
       prospectId: prospectRecord.id,
       token: nanoid(36),
     });
-    const shareInviteDetails = buildShareInviteDetails(shareInviteRecord, origin);
+    const shareInviteDetails = buildShareInviteDetails(
+      shareInviteRecord,
+      origin
+    );
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
       inviteId: shareInviteRecord.token,
-      inviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+      inviteUrl: shareInviteDetails ? shareInviteDetails.inviteUrl : '',
       recipientEmail: requestedEmail,
       note,
       plexAccountId: activeDonor.plexAccountId,
@@ -1187,7 +1190,7 @@ router.post(
       evaluateInviteCooldown(inviteRecord);
     const invitePayload = {
       ...inviteRecord,
-      plexInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+      inviteUrl: shareInviteDetails ? shareInviteDetails.inviteUrl : '',
     };
     if (shareInviteDetails) {
       invitePayload.shareLink = shareInviteDetails;
