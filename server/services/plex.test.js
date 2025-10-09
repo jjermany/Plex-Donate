@@ -150,15 +150,36 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
   });
 });
 
-test('plexService.verifyConnection checks invite endpoint', async () => {
+test('plexService.verifyConnection checks invite endpoint and loads libraries', async () => {
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ invitations: [] }),
-    };
+    if (url.includes('/api/v2/home/invitations')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ invitations: [] }),
+        text: async () => '',
+      };
+    }
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '/library/sections/1', title: 'Movies' },
+                { key: '/library/sections/2', title: 'TV Shows' },
+              ],
+            },
+          }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
   }, async (plexService) => {
     const result = await plexService.verifyConnection({
       baseUrl: 'https://plex.local',
@@ -167,13 +188,58 @@ test('plexService.verifyConnection checks invite endpoint', async () => {
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
     assert.equal(
       calls[0].url,
       'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
     );
     assert.equal(calls[0].options.method, 'GET');
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/library/sections?X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].options.method || 'GET', 'GET');
     assert.equal(result.details.serverIdentifier, 'server-uuid');
     assert.deepEqual(result.details.librarySectionIds, ['1', '2']);
+    assert.deepEqual(result.libraries, [
+      { id: '1', title: 'Movies' },
+      { id: '2', title: 'TV Shows' },
+    ]);
+  });
+});
+
+test('plexService.verifyConnection parses XML library list responses', async () => {
+  await withMockedFetch(async (url) => {
+    if (url.includes('/api/v2/home/invitations')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ invitations: [] }),
+        text: async () => '',
+      };
+    }
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          '<MediaContainer><Directory key="/library/sections/5" title="Kids" /><Directory key="/library/sections/9" title="Music" /></MediaContainer>',
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.verifyConnection({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '',
+    });
+
+    assert.deepEqual(result.libraries, [
+      { id: '5', title: 'Kids' },
+      { id: '9', title: 'Music' },
+    ]);
   });
 });
