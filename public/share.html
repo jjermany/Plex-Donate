@@ -251,15 +251,6 @@
         letter-spacing: 0.12em;
         color: rgba(148, 163, 184, 0.7);
       }
-      .subscription-actions {
-        margin-top: 18px;
-        display: grid;
-        gap: 10px;
-        justify-items: center;
-      }
-      .subscription-actions .cta-button {
-        margin-top: 0;
-      }
       .support-list {
         list-style: none;
         padding: 0;
@@ -506,14 +497,6 @@
               <div id="price-row" class="detail hidden"></div>
               <div id="share-last-used" class="detail muted hidden"></div>
             </div>
-            <div id="subscription-actions" class="subscription-actions hidden">
-              <button id="subscription-button" type="button" class="cta-button">
-                Start PayPal subscription
-              </button>
-              <p id="subscription-hint" class="status-text small">
-                Opens PayPal checkout in a new tab.
-              </p>
-            </div>
           </article>
 
           <article class="surface" id="support-card">
@@ -713,9 +696,6 @@
       const subscriptionIdEl = document.getElementById('subscription-id');
       const priceRow = document.getElementById('price-row');
       const shareLastUsedEl = document.getElementById('share-last-used');
-      const subscriptionActions = document.getElementById('subscription-actions');
-      const subscriptionButton = document.getElementById('subscription-button');
-      const subscriptionHint = document.getElementById('subscription-hint');
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
@@ -740,13 +720,6 @@
       const inviteLinkEl = document.getElementById('invite-link');
       const inviteCreatedEl = document.getElementById('invite-created');
       const inviteEmailEl = document.getElementById('invite-email');
-      const defaultSubscriptionButtonLabel = subscriptionButton
-        ? subscriptionButton.textContent
-        : 'Start PayPal subscription';
-      if (subscriptionButton) {
-        subscriptionButton.disabled = true;
-        subscriptionButton.dataset.available = 'false';
-      }
 
       function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) {
@@ -772,18 +745,6 @@
         errorPanel.textContent = message || 'Something went wrong.';
         errorPanel.classList.remove('hidden');
         content.classList.add('hidden');
-      }
-
-      function setStatusText(element, message, statusClass) {
-        if (!element) {
-          return;
-        }
-        element.textContent = message || '';
-        element.className = 'status-text';
-        element.classList.add('small');
-        if (statusClass) {
-          element.classList.add(statusClass);
-        }
       }
 
       function formatPrice(amount, currency) {
@@ -1084,51 +1045,6 @@
           nameInput.disabled = inviteLocked;
         }
 
-        if (subscriptionActions) {
-          if (!checkoutAvailable) {
-            subscriptionActions.classList.add('hidden');
-            if (subscriptionButton) {
-              subscriptionButton.disabled = true;
-              subscriptionButton.dataset.available = 'false';
-              subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            }
-            setStatusText(subscriptionHint, '', null);
-          } else {
-            subscriptionActions.classList.remove('hidden');
-            let hintMessage = '';
-            let hintTone = 'info';
-            if (showSubscriptionCta) {
-              if (subscriptionButton) {
-                subscriptionButton.disabled = false;
-                subscriptionButton.dataset.available = 'true';
-                subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-              }
-              hintMessage = 'Opens PayPal checkout in a new tab.';
-            } else {
-              if (subscriptionButton) {
-                subscriptionButton.disabled = true;
-                subscriptionButton.dataset.available = 'false';
-                subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-              }
-              if (!accountReady) {
-                hintMessage =
-                  'Create or update your account above to unlock PayPal checkout.';
-              } else if (!plexLinked) {
-                hintMessage =
-                  'Link your Plex account before heading to PayPal checkout.';
-              } else if (!isActive && hasSubscriptionId) {
-                hintMessage =
-                  'We are waiting for PayPal to confirm your subscription. This usually updates shortly.';
-              } else {
-                hintMessage =
-                  'Your subscription is already active—no checkout needed.';
-                hintTone = 'success';
-              }
-            }
-            setStatusText(subscriptionHint, hintMessage, hintTone);
-          }
-        }
-
         if (inviteLocked) {
           if (limitReached) {
             actionStatus.textContent =
@@ -1289,155 +1205,6 @@
         }
       }
 
-      async function openShareSubscriptionCheckout() {
-        if (!subscriptionButton || subscriptionButton.dataset.available !== 'true') {
-          return;
-        }
-
-        if (!state.token) {
-          setStatusText(
-            subscriptionHint,
-            'This invite link is missing its token. Contact the server admin for help.',
-            'error'
-          );
-          return;
-        }
-
-        if (!state.sessionToken) {
-          setStatusText(
-            subscriptionHint,
-            'Refresh the page to load your invite session before starting checkout.',
-            'error'
-          );
-          return;
-        }
-
-        const donor = state.data && state.data.donor;
-        const prospect = state.data && state.data.prospect;
-
-        if (!donor) {
-          setStatusText(
-            subscriptionHint,
-            'Create your account above to unlock PayPal checkout.',
-            'error'
-          );
-          return;
-        }
-
-        if (!donor.hasPassword) {
-          setStatusText(
-            subscriptionHint,
-            'Set up your dashboard password above to unlock PayPal checkout.',
-            'error'
-          );
-          return;
-        }
-
-        const emailSource = (accountEmailInput && accountEmailInput.value.trim())
-          || (donor && donor.email)
-          || (prospect && prospect.email)
-          || '';
-        const nameSource = (accountNameInput && accountNameInput.value.trim())
-          || (donor && donor.name)
-          || (prospect && prospect.name)
-          || '';
-
-        const headers = { 'Content-Type': 'application/json' };
-        headers['X-Share-Session'] = state.sessionToken;
-        headers['Authorization'] = `Bearer ${state.sessionToken}`;
-
-        subscriptionButton.disabled = true;
-        subscriptionButton.textContent = 'Opening PayPal…';
-        setStatusText(
-          subscriptionHint,
-          'Opening PayPal checkout in a new tab…',
-          'info'
-        );
-
-        let checkoutWindow = null;
-        try {
-          checkoutWindow = window.open('', '_blank');
-          if (checkoutWindow) {
-            try {
-              checkoutWindow.opener = null;
-            } catch (err) {
-              // Ignore browsers that prevent direct assignment.
-            }
-          }
-        } catch (err) {
-          checkoutWindow = null;
-        }
-
-        try {
-          const response = await fetch(
-            `/api/share/${encodeURIComponent(state.token)}/paypal-checkout`,
-            {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                sessionToken: state.sessionToken,
-                email: emailSource,
-                name: nameSource,
-              }),
-            }
-          );
-
-          let payload = {};
-          try {
-            payload = await response.json();
-          } catch (err) {
-            payload = {};
-          }
-
-          if (!response.ok) {
-            throw new Error(payload.error || 'Unable to start PayPal checkout.');
-          }
-
-          if (payload.approvalUrl) {
-            let opened = false;
-            if (checkoutWindow) {
-              checkoutWindow.location = payload.approvalUrl;
-              opened = true;
-            } else {
-              const fallbackWindow = window.open(payload.approvalUrl, '_blank');
-              if (fallbackWindow) {
-                opened = true;
-                checkoutWindow = fallbackWindow;
-                try {
-                  fallbackWindow.opener = null;
-                } catch (err) {
-                  // Ignore browsers that prevent direct assignment.
-                }
-              }
-            }
-
-            if (!opened) {
-              throw new Error(
-                'Your browser blocked the PayPal checkout window. Allow pop-ups and try again.'
-              );
-            }
-            setStatusText(
-              subscriptionHint,
-              'Follow the steps in the PayPal tab to finish activating your support.',
-              'success'
-            );
-          } else {
-            throw new Error('PayPal did not return a checkout URL.');
-          }
-        } catch (err) {
-          setStatusText(subscriptionHint, err.message, 'error');
-          if (checkoutWindow) {
-            try {
-              checkoutWindow.close();
-            } catch (closeErr) {
-              // Ignore close errors.
-            }
-          }
-        } finally {
-          subscriptionButton.disabled = false;
-          subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-        }
-      }
 
       if (accountForm) {
         accountForm.addEventListener('submit', async (event) => {
@@ -1530,16 +1297,6 @@
             accountPasswordInput.value = '';
             accountConfirmInput.value = '';
           }
-        });
-      }
-
-      if (subscriptionButton) {
-        subscriptionButton.addEventListener('click', async (event) => {
-          event.preventDefault();
-          if (subscriptionButton.disabled || subscriptionButton.dataset.available !== 'true') {
-            return;
-          }
-          await openShareSubscriptionCheckout();
         });
       }
 
