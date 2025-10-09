@@ -508,8 +508,9 @@ const statements = {
   touchInviteLink: db.prepare(
     `UPDATE invite_links
      SET last_used_at = CURRENT_TIMESTAMP,
-         used_at = CURRENT_TIMESTAMP
-     WHERE id = ?`
+         used_at = CURRENT_TIMESTAMP,
+         session_token = @sessionToken
+     WHERE id = @id`
   ),
   insertInvite: db.prepare(
     `INSERT INTO invites (donor_id, wizarr_invite_code, wizarr_invite_url, note, recipient_email, email_sent_at, plex_account_id, plex_email)
@@ -996,8 +997,13 @@ function markShareLinkUsed(linkId) {
   if (!linkId) {
     return null;
   }
-  statements.touchInviteLink.run(linkId);
-  return mapInviteLink(statements.getInviteLinkById.get(linkId));
+
+  const sessionToken = generateShareSessionToken();
+  statements.touchInviteLink.run({ id: linkId, sessionToken });
+
+  return ensureShareLinkHasSessionToken(
+    mapInviteLink(statements.getInviteLinkById.get(linkId))
+  );
 }
 
 function recordPayment({ donorId, paypalPaymentId, amount, currency, paidAt }) {
