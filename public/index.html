@@ -1442,7 +1442,7 @@
                       Clear selection
                     </button>
                     <button type="button" class="secondary" data-library-apply>
-                      Done
+                      OK
                     </button>
                   </div>
                 </div>
@@ -2376,15 +2376,16 @@
           return;
         }
         const selection = getPlexLibrarySelection();
-        if (Array.isArray(state.plexLibraries) && state.plexLibraries.length) {
-          const count = selection.length;
-          if (count === 1) {
-            plexLibraryToggle.textContent = '1 library selected';
-          } else if (count > 1) {
-            plexLibraryToggle.textContent = `${count} libraries selected`;
-          } else {
-            plexLibraryToggle.textContent = 'Select libraries';
-          }
+        const rawSelection = getPlexLibraryRawSelection();
+        const hasLoadedLibraries = Array.isArray(state.plexLibraries)
+          ? state.plexLibraries.length > 0
+          : false;
+        const count = hasLoadedLibraries ? selection.length : rawSelection.length;
+
+        if (count === 1) {
+          plexLibraryToggle.textContent = '1 library selected';
+        } else if (count > 1) {
+          plexLibraryToggle.textContent = `${count} libraries selected`;
         } else {
           plexLibraryToggle.textContent = 'Select libraries';
         }
@@ -2436,7 +2437,7 @@
             updatePlexLibraryToggleLabel();
           });
           const name = document.createElement('span');
-          name.textContent = library.title || `Library ${id}`;
+          name.textContent = library.title || 'Unnamed library';
           label.appendChild(checkbox);
           label.appendChild(name);
           plexLibraryOptions.appendChild(label);
@@ -2457,40 +2458,41 @@
           (id) => !validatedSelection.includes(id)
         );
 
-        if (validatedSelection.length > 0 && librariesLoaded) {
-          const names = validatedSelection.map((id) => {
-            const match = state.plexLibraries.find(
-              (library) => String(library.id) === id
-            );
-            return match && match.title ? match.title : id;
-          });
-          let summary = `Selected libraries: ${names.join(', ')}.`;
-          if (missing.length) {
-            summary += ` (Unavailable: ${missing.join(', ')})`;
-          }
-          plexLibrarySummary.textContent = summary;
-          plexLibrarySummary.hidden = false;
-          return;
-        }
-
-        if (validatedSelection.length > 0 && !librariesLoaded) {
+        if (librariesLoaded && missing.length) {
           plexLibrarySummary.textContent =
-            `Saved library IDs: ${rawSelection.join(', ')}. Test the Plex connection to load available libraries.`;
+            'Some previously selected libraries are no longer available. Test the Plex connection again to refresh the list.';
           plexLibrarySummary.hidden = false;
           return;
         }
 
-        if (missing.length) {
+        if (!librariesLoaded && rawSelection.length) {
           plexLibrarySummary.textContent =
-            `Libraries not available: ${missing.join(', ')}. Test the Plex connection again to refresh the list.`;
+            'Your saved library selection will appear after testing the Plex connection.';
           plexLibrarySummary.hidden = false;
           return;
         }
 
-        if (librariesLoaded && hasLibraries) {
+        if (librariesLoaded && hasLibraries && validatedSelection.length === 0) {
           plexLibrarySummary.textContent = 'No libraries selected yet.';
           plexLibrarySummary.hidden = false;
           return;
+        }
+
+        if (librariesLoaded && validatedSelection.length > 0) {
+          const names = validatedSelection
+            .map((id) => {
+              const match = state.plexLibraries.find(
+                (library) => String(library.id) === id
+              );
+              return match && match.title ? match.title : null;
+            })
+            .filter(Boolean);
+
+          if (names.length) {
+            plexLibrarySummary.textContent = `Selected libraries: ${names.join(', ')}.`;
+            plexLibrarySummary.hidden = false;
+            return;
+          }
         }
 
         plexLibrarySummary.textContent = '';
@@ -2618,6 +2620,8 @@
           updatePlexLibraryToggleLabel();
         });
       }
+
+      closePlexLibraryDropdown();
 
       function renderSettings() {
         if (!settingsPanel) {
