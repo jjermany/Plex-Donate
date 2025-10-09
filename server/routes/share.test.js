@@ -919,6 +919,11 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       allowSync: true,
     });
 
+    const savedPlex = settingsStore.getPlexSettings();
+    assert.equal(savedPlex.allowSync, false);
+    assert.equal(savedPlex.allowCameraUpload, false);
+    assert.equal(savedPlex.allowChannels, false);
+
     const inviteCalls = [];
     const emailCalls = [];
     const cancelCalls = [];
@@ -995,6 +1000,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       );
       assert.equal(inviteCalls[0].overrideConfig.librarySectionIds, '7,8');
       assert.equal(inviteCalls[0].overrideConfig.allowSync, false);
+      assert.equal(inviteCalls[0].overrideConfig.allowCameraUpload, false);
+      assert.equal(inviteCalls[0].overrideConfig.allowChannels, false);
 
       assert.equal(emailCalls.length, 1);
       assert.equal(emailCalls[0].details.to, 'tester@example.com');

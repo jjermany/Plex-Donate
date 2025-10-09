@@ -71,9 +71,9 @@ test('plexService.createInvite posts to Plex API', async () => {
       friendlyName: 'Friend Example',
       server: { uuid: 'server-uuid' },
       settings: {
-        allowSync: true,
+        allowSync: false,
         allowCameraUpload: false,
-        allowChannels: true,
+        allowChannels: false,
       },
       libraries: [{ id: '1' }, { id: '2' }],
     });
