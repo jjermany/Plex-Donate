@@ -118,6 +118,58 @@ function isShareInviteUsed(shareInvite) {
   return true;
 }
 
+function isShareLinkExpired(shareLink) {
+  if (!shareLink || !shareLink.expiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(shareLink.expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    return false;
+  }
+
+  return Date.now() >= expiresAtMs;
+}
+
+function isShareLinkUsed(shareLink) {
+  if (!shareLink) {
+    return false;
+  }
+
+  if (!shareLink.usedAt) {
+    return false;
+  }
+
+  const usedAtMs = Date.parse(shareLink.usedAt);
+  if (!Number.isFinite(usedAtMs)) {
+    return Boolean(shareLink.usedAt);
+  }
+
+  return true;
+}
+
+function resolveInactiveShareLinkError(shareLink) {
+  if (!shareLink) {
+    return null;
+  }
+
+  if (isShareLinkUsed(shareLink)) {
+    return {
+      status: 410,
+      message: 'Share link has already been used. Request a new link to continue.',
+    };
+  }
+
+  if (isShareLinkExpired(shareLink)) {
+    return {
+      status: 410,
+      message: 'Share link has expired. Request a new link to continue.',
+    };
+  }
+
+  return null;
+}
+
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
 }
@@ -364,6 +416,13 @@ router.get(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
+    }
+
     let donor = null;
     if (shareLink.donorId) {
       donor = getDonorById(shareLink.donorId);
@@ -425,6 +484,13 @@ router.post(
     const shareLink = getShareLinkByToken(req.params.token);
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
     }
 
     let donor = null;
@@ -677,6 +743,13 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
+    }
+
     const providedSessionToken = getProvidedSessionToken(req);
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
       return res.status(401).json({ error: 'Invalid or missing share session token' });
@@ -780,6 +853,13 @@ router.post(
     const shareLink = getShareLinkByToken(req.params.token);
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
     }
 
     let donor = null;
