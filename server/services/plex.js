@@ -624,6 +624,7 @@ async function createInvite(
 
     if (response.status === 410) {
       clearInviteEndpoint(cacheKey, basePath);
+      continue;
     }
 
     if (!response.ok) {
@@ -752,6 +753,7 @@ async function verifyConnection(overrideSettings) {
 
     if (response.status === 410) {
       clearInviteEndpoint(cacheKey, basePath);
+      continue;
     }
 
     if (!response.ok) {

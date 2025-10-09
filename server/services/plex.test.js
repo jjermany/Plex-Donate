@@ -360,6 +360,69 @@ test('plexService.verifyConnection retries invite endpoint on 404', async () => 
   });
 });
 
+test('plexService.verifyConnection retries invite endpoint on 410', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 410,
+        statusText: 'Gone',
+        text: async () => '',
+      };
+    }
+    if (url.includes('/api/home/invitations')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ invitations: [] }),
+        text: async () => '',
+      };
+    }
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '/library/sections/1', title: 'Movies' },
+                { key: '/library/sections/2', title: 'TV Shows' },
+              ],
+            },
+          }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.verifyConnection({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '1,2',
+    });
+
+    assert.equal(calls.length, 3);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/api/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[2].url,
+      'https://plex.local/library/sections?X-Plex-Token=token123'
+    );
+    assert.equal(result.message, 'Plex invite configuration verified successfully.');
+  });
+});
+
 test('plexService.verifyConnection parses XML library list responses', async () => {
   await withMockedFetch(async (url) => {
     if (url.includes('/api/v2/home/invitations')) {
