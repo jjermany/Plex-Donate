@@ -1,7 +1,17 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_FILE = process.env.DATABASE_FILE || ':memory:';
 process.env.ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+if (!process.env.DATABASE_FILE || process.env.DATABASE_FILE === ':memory:') {
+  const testDbDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'plex-donate-session-db-')
+  );
+  process.env.DATABASE_FILE = path.join(testDbDir, 'database.sqlite');
+}
 
 const assert = require('node:assert/strict');
 const http = require('node:http');
@@ -9,9 +19,6 @@ const express = require('express');
 const session = require('express-session');
 const fetch = require('node-fetch');
 const { test } = require('node:test');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 
 const config = require('../config');
 const TEST_ADMIN_PASSWORD = 'admin-test-password';
@@ -101,6 +108,7 @@ class FetchAgent {
       url.searchParams.set('session', this.sessionToken);
       requestHeaders['x-session-token'] = this.sessionToken;
     }
+
 
     let requestBody = body;
     if (
@@ -374,6 +382,9 @@ test('customer can link an existing subscription from the profile form', async (
   });
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
+  if (loginBody && typeof loginBody.sessionToken === 'string' && loginBody.sessionToken) {
+    agent.sessionToken = loginBody.sessionToken;
+  }
   assert.equal(loginBody.authenticated, true);
   assert.equal(loginBody.donor.subscriptionId, null);
 
@@ -383,6 +394,7 @@ test('customer can link an existing subscription from the profile form', async (
       email: donor.email,
       name: donor.name,
       subscriptionId,
+      sessionToken: agent.sessionToken,
     },
   });
   const updateBody = await updateResponse.json();

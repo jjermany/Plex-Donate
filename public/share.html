@@ -402,7 +402,7 @@
             referral that brought you here.
           </p>
           <div class="hero-badges">
-            <span class="chip">Plex · Wizarr ready</span>
+            <span class="chip">Plex invite ready</span>
             <span class="chip">Community powered</span>
             <span class="chip">Streaming sanctuary</span>
           </div>
@@ -437,7 +437,7 @@
               </li>
               <li>
                 Use the referral tool to welcome new viewers once your donation is active. Existing
-                supporters can regenerate their own Wizarr link here only if they've lost library
+                supporters can regenerate their own Plex invite here only if they've lost library
                 access.
               </li>
             </ul>
@@ -767,8 +767,8 @@
         );
         const inviteUrl = shareInviteActive
           ? shareInvite.url || ''
-          : invite && invite.wizarrInviteUrl
-          ? invite.wizarrInviteUrl
+          : invite && invite.plexInviteUrl
+          ? invite.plexInviteUrl
           : '';
 
         if (inviteForm) {

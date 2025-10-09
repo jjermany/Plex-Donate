@@ -1084,7 +1084,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
               <div>
                 <h2 style="margin:0 0 4px;">Active subscribers</h2>
-                <p class="muted-text" style="margin:0;">Manage Wizarr invites and check the latest payments.</p>
+                <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
               </div>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
             </div>
@@ -1229,59 +1229,6 @@
             </div>
           </form>
 
-          <form class="settings-form" data-group="wizarr">
-            <h3>Wizarr</h3>
-            <div class="field-grid">
-              <label>
-                Base URL
-                <input name="baseUrl" type="url" placeholder="https://wizarr.example.com" />
-              </label>
-              <label>
-                API key
-                <input name="apiKey" type="password" autocomplete="new-password" />
-              </label>
-              <label>
-                Default invite days
-                <input name="defaultDurationDays" type="number" min="1" />
-                <span class="help">Used when generating invites without a custom duration.</span>
-              </label>
-              <label>
-                Default server IDs
-                <input name="defaultServerIds" type="text" autocomplete="off" placeholder="1,2" />
-                <span class="help"
-                  >Optional. Comma-separated Wizarr server IDs to assign when creating
-                  invites. Required when Wizarr asks you to pick a server.</span
-                >
-              </label>
-            </div>
-            <div class="test-invite-group">
-              <label>
-                Send test invite to
-                <input
-                  name="testInviteEmail"
-                  type="email"
-                  placeholder="you@example.com"
-                  autocomplete="off"
-                  data-test-field="invite-email"
-                  data-transient="true"
-                />
-                <span class="help"
-                  >Creates a real Wizarr invite and emails it using your saved SMTP settings.</span
-                >
-              </label>
-              <p>
-                Use this to verify invite delivery before sharing your donation link. Remember to
-                revoke the test account in Wizarr when you're done.
-              </p>
-            </div>
-            <p class="form-status" data-status-for="wizarr"></p>
-            <div class="form-actions">
-              <button type="submit" class="secondary">Save Wizarr settings</button>
-              <button type="button" data-action="test">Test Wizarr connection</button>
-              <button type="button" data-action="test-invite">Send test invite</button>
-            </div>
-          </form>
-
           <form class="settings-form" data-group="smtp">
             <h3>Email (SMTP)</h3>
             <div class="field-grid">
@@ -1328,11 +1275,59 @@
                 Plex token
                 <input name="token" type="password" autocomplete="new-password" />
               </label>
+              <label>
+                Server UUID
+                <input
+                  name="serverIdentifier"
+                  type="text"
+                  placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                />
+              </label>
+              <label>
+                Library section IDs
+                <input
+                  name="librarySectionIds"
+                  type="text"
+                  placeholder="1,2,3"
+                />
+              </label>
+            </div>
+            <div class="field-grid">
+              <label class="checkbox">
+                <input name="allowSync" type="checkbox" />
+                Allow library downloads (sync)
+              </label>
+              <label class="checkbox">
+                <input name="allowCameraUpload" type="checkbox" />
+                Allow camera uploads
+              </label>
+              <label class="checkbox">
+                <input name="allowChannels" type="checkbox" />
+                Allow channels
+              </label>
+            </div>
+            <div class="test-invite-group">
+              <label>
+                Send test invite to
+                <input
+                  name="testInviteEmail"
+                  type="email"
+                  placeholder="you@example.com"
+                  autocomplete="off"
+                  data-test-field="invite-email"
+                  data-transient="true"
+                />
+                <span class="help"
+                  >Creates a real Plex invite and emails it using your saved SMTP settings.</span
+                >
+              </label>
+              <p>Use this to verify invite delivery before sharing your donation link.</p>
             </div>
             <p class="form-status" data-status-for="plex"></p>
             <div class="form-actions">
               <button type="submit" class="secondary">Save Plex settings</button>
               <button type="button" data-action="test">Test Plex connection</button>
+              <button type="button" data-action="test-invite">Send test invite</button>
             </div>
           </form>
         </section>
@@ -2476,8 +2471,8 @@
           const inviteParts = [];
           if (invites.length > 0) {
             const invite = invites[0];
-            if (invite.wizarrInviteUrl) {
-              inviteParts.push(`<a href="${invite.wizarrInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+            if (invite.plexInviteUrl) {
+              inviteParts.push(`<a href="${invite.plexInviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
             }
             if (invite.recipientEmail) {
               inviteParts.push(
@@ -2525,7 +2520,7 @@
             const hasEmail = Boolean(donor.email);
             inviteButton.disabled = !hasEmail;
             inviteButton.title = hasEmail
-              ? 'Generate a new Wizarr invite'
+              ? 'Generate a new Plex invite'
               : 'Add an email address to generate an invite';
           }
 
@@ -2541,7 +2536,7 @@
           }
 
           if (resendButton) {
-            const canResend = Boolean(activeInvite && activeInvite.wizarrInviteUrl);
+            const canResend = Boolean(activeInvite && activeInvite.plexInviteUrl);
             resendButton.disabled = !canResend;
             resendButton.title = canResend
               ? 'Resend the most recent invite email'
@@ -3196,7 +3191,7 @@
           }
 
           if (action === 'test-invite') {
-            if (group !== 'wizarr') {
+            if (group !== 'plex') {
               return;
             }
 
@@ -3224,13 +3219,13 @@
             try {
               button.disabled = true;
               setFormStatus(form, 'Sending test invite…');
-              const response = await api('/api/admin/settings/wizarr/test-invite', {
+              const response = await api('/api/admin/settings/plex/test-invite', {
                 method: 'POST',
                 body: requestBody,
               });
               const message =
                 response.message ||
-                `Test invite sent to ${emailValue}. Check your inbox for the Wizarr link.`;
+                `Test invite sent to ${emailValue}. Check your inbox for the Plex invite.`;
               setFormStatus(form, message, 'success');
               scheduleStatusClear(form, 5000);
             } catch (err) {

@@ -14,12 +14,6 @@ const DEFAULT_SETTINGS = {
     subscriptionPrice: 0,
     currency: 'USD',
   },
-  wizarr: {
-    baseUrl: '',
-    apiKey: '',
-    defaultDurationDays: 7,
-    defaultServerIds: '',
-  },
   smtp: {
     host: '',
     port: 587,
@@ -31,6 +25,11 @@ const DEFAULT_SETTINGS = {
   plex: {
     baseUrl: '',
     token: '',
+    serverIdentifier: '',
+    librarySectionIds: '',
+    allowSync: false,
+    allowCameraUpload: false,
+    allowChannels: false,
   },
 };
 
@@ -155,10 +154,6 @@ function getAppSettings() {
   return getGroup('app');
 }
 
-function getWizarrSettings() {
-  return getGroup('wizarr');
-}
-
 function getSmtpSettings() {
   return getGroup('smtp');
 }
@@ -175,7 +170,6 @@ module.exports = {
   previewGroup,
   getAppSettings,
   getPaypalSettings,
-  getWizarrSettings,
   getSmtpSettings,
   getPlexSettings,
 };

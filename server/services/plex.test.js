@@ -1,143 +1,179 @@
+process.env.NODE_ENV = 'test';
+
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
+const path = require('path');
 
+const fetchModulePath = require.resolve('node-fetch');
 const plexModulePath = path.join(__dirname, 'plex.js');
-const nodeFetchModulePath = require.resolve('node-fetch');
-const originalFetch = require(nodeFetchModulePath);
-const fetchCacheEntry = require.cache[nodeFetchModulePath];
 
-const settingsModulePath = path.join(__dirname, '../state/settings.js');
-const settingsModule = require(settingsModulePath);
-const originalGetPlexSettings = settingsModule.getPlexSettings;
-
-function restoreModules() {
+async function withMockedFetch(mockImpl, run) {
+  require('node-fetch');
+  const originalFetch = require.cache[fetchModulePath].exports;
+  require.cache[fetchModulePath].exports = mockImpl;
   delete require.cache[plexModulePath];
-  if (fetchCacheEntry && originalFetch) {
-    fetchCacheEntry.exports = originalFetch;
+  const plexService = require('./plex');
+  try {
+    return await run(plexService);
+  } finally {
+    delete require.cache[plexModulePath];
+    require.cache[fetchModulePath].exports = originalFetch;
   }
-  settingsModule.getPlexSettings = originalGetPlexSettings;
 }
 
-function createFetchMock(responses) {
+test('plexService.createInvite posts to Plex API', async () => {
   const calls = [];
-  const fn = async (url, options = {}) => {
+  await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
-    const response = responses.shift();
-    if (!response) {
-      throw new Error('No mock response configured');
-    }
-    if (response.error) {
-      throw response.error;
-    }
-    const status = response.status ?? 200;
-    const body = response.body;
-    const bodyText =
-      typeof body === 'string'
-        ? body
-        : body == null
-        ? ''
-        : JSON.stringify(body);
     return {
-      ok: status >= 200 && status < 300,
-      status,
-      statusText: response.statusText || '',
-      headers: response.headers || {},
-      async json() {
-        if (typeof body === 'string') {
-          if (!body) {
-            throw new Error('Unexpected end of JSON input');
-          }
-          return JSON.parse(body);
-        }
-        if (body == null) {
-          return {};
-        }
-        return body;
-      },
-      async text() {
-        return bodyText;
-      },
-    };
-  };
-  fn.calls = calls;
-  fn.default = fn;
-  return fn;
-}
-
-test('listUsers queries /accounts endpoint when available', async (t) => {
-  restoreModules();
-  t.after(restoreModules);
-
-  const fetchMock = createFetchMock([
-    {
+      ok: true,
       status: 200,
-      body: { users: [{ id: 'user-1' }] },
-    },
-  ]);
+      json: async () => ({
+        invitation: {
+          id: 'INV-123',
+          uri: 'https://plex.example/invite/INV-123',
+          status: 'pending',
+          created_at: '2024-01-01T00:00:00Z',
+          libraries: [{ id: 1, title: 'Movies' }],
+        },
+      }),
+    };
+  }, async (plexService) => {
+    const result = await plexService.createInvite(
+      {
+        email: 'friend@example.com',
+        friendlyName: 'Friend Example',
+      },
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'server-uuid',
+        librarySectionIds: '1, 2',
+        allowSync: true,
+        allowCameraUpload: false,
+        allowChannels: true,
+      }
+    );
 
-  if (fetchCacheEntry) {
-    fetchCacheEntry.exports = fetchMock;
-  }
+    assert.equal(calls.length, 1);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(calls[0].options.method, 'POST');
+    assert.equal(
+      calls[0].options.headers['Content-Type'],
+      'application/json'
+    );
+    const payload = JSON.parse(calls[0].options.body);
+    assert.deepEqual(payload, {
+      email: 'friend@example.com',
+      friendlyName: 'Friend Example',
+      server: { uuid: 'server-uuid' },
+      settings: {
+        allowSync: true,
+        allowCameraUpload: false,
+        allowChannels: true,
+      },
+      libraries: [{ id: '1' }, { id: '2' }],
+    });
 
-  settingsModule.getPlexSettings = () => ({
-    baseUrl: 'https://plex-server.example:32400',
-    token: 'TOKEN123',
+    assert.equal(result.inviteId, 'INV-123');
+    assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-123');
+    assert.equal(result.status, 'pending');
+    assert.equal(result.invitedAt, '2024-01-01T00:00:00.000Z');
+    assert.deepEqual(result.sharedLibraries, [{ id: '1', title: 'Movies' }]);
   });
-
-  delete require.cache[plexModulePath];
-  const { listUsers } = require(plexModulePath);
-
-  const users = await listUsers();
-
-  assert.equal(fetchMock.calls.length, 1);
-  assert.equal(
-    fetchMock.calls[0].url,
-    'https://plex-server.example:32400/accounts?X-Plex-Token=TOKEN123'
-  );
-  assert.ok(Array.isArray(users));
-  assert.equal(users[0].id, 'user-1');
 });
 
-test('listUsers falls back to legacy endpoints when /accounts is missing', async (t) => {
-  restoreModules();
-  t.after(restoreModules);
-
-  const fetchMock = createFetchMock([
-    {
-      status: 404,
-      body: '',
-      statusText: 'Not Found',
-    },
-    {
+test('plexService.createInvite throws when Plex omits invite id', async () => {
+  await withMockedFetch(
+    async () => ({
+      ok: true,
       status: 200,
-      body: { users: [{ id: 'legacy-user' }] },
-    },
-  ]);
+      json: async () => ({}),
+    }),
+    async (plexService) => {
+      await assert.rejects(
+        () =>
+          plexService.createInvite(
+            { email: 'friend@example.com' },
+            {
+              baseUrl: 'https://plex.local',
+              token: 'token123',
+              serverIdentifier: 'server-uuid',
+              librarySectionIds: '1',
+            }
+          ),
+        /did not return an invite identifier/
+      );
+    }
+  );
+});
 
-  if (fetchCacheEntry) {
-    fetchCacheEntry.exports = fetchMock;
-  }
+test('plexService.cancelInvite cancels invites and handles 404', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return { ok: true, status: 204, json: async () => ({}) };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  }, async (plexService) => {
+    const success = await plexService.cancelInvite(
+      'INV-123',
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'server-uuid',
+        librarySectionIds: '1',
+      }
+    );
+    assert.deepEqual(success, { success: true });
 
-  settingsModule.getPlexSettings = () => ({
-    baseUrl: 'https://legacy-server.example:32400',
-    token: 'TOKEN456',
+    const notFound = await plexService.cancelInvite(
+      'INV-MISSING',
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'server-uuid',
+        librarySectionIds: '1',
+      }
+    );
+    assert.deepEqual(notFound, {
+      success: false,
+      reason: 'Invite not found on Plex server',
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].options.method, 'DELETE');
   });
+});
 
-  delete require.cache[plexModulePath];
-  const { listUsers } = require(plexModulePath);
+test('plexService.verifyConnection checks invite endpoint', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ invitations: [] }),
+    };
+  }, async (plexService) => {
+    const result = await plexService.verifyConnection({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '1,2',
+    });
 
-  const users = await listUsers();
-
-  assert.equal(fetchMock.calls.length, 2);
-  assert.equal(
-    fetchMock.calls[0].url,
-    'https://legacy-server.example:32400/accounts?X-Plex-Token=TOKEN456'
-  );
-  assert.ok(
-    fetchMock.calls[1].url.includes('/api/v2/home/users?X-Plex-Token=TOKEN456') ||
-      fetchMock.calls[1].url.includes('/api/home/users?X-Plex-Token=TOKEN456')
-  );
-  assert.ok(Array.isArray(users));
-  assert.equal(users[0].id, 'legacy-user');
+    assert.equal(calls.length, 1);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(calls[0].options.method, 'GET');
+    assert.equal(result.details.serverIdentifier, 'server-uuid');
+    assert.deepEqual(result.details.librarySectionIds, ['1', '2']);
+  });
 });

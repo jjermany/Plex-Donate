@@ -23,7 +23,6 @@ const {
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
-const wizarrService = require('../services/wizarr');
 const emailService = require('../services/email');
 const plexService = require('../services/plex');
 const logger = require('../utils/logger');
@@ -350,7 +349,7 @@ router.post(
     const group = req.params.group;
     const overrides = req.body || {};
 
-    if (!['paypal', 'wizarr', 'smtp', 'plex'].includes(group)) {
+    if (!['paypal', 'smtp', 'plex'].includes(group)) {
       return res.status(404).json({
         error: 'Unknown settings group',
         csrfToken: res.locals.csrfToken,
@@ -369,9 +368,6 @@ router.post(
           environment,
           message: `PayPal credentials verified against the ${environment} environment.`,
         };
-      } else if (group === 'wizarr') {
-        const config = settingsStore.previewGroup('wizarr', overrides);
-        result = await wizarrService.verifyConnection(config);
       } else if (group === 'smtp') {
         const config = settingsStore.previewGroup('smtp', overrides);
         result = await emailService.verifyConnection(config);
@@ -456,7 +452,7 @@ router.get(
 );
 
 router.post(
-  '/settings/wizarr/test-invite',
+  '/settings/plex/test-invite',
   requireAdmin,
   asyncHandler(async (req, res) => {
     const body = req.body || {};
@@ -477,7 +473,6 @@ router.post(
 
     const noteRaw = body.note;
     const nameRaw = body.name;
-    const expiresRaw = body.expiresInDays;
     const overrides =
       body && body.overrides && typeof body.overrides === 'object'
         ? body.overrides
@@ -488,21 +483,14 @@ router.post(
       typeof nameRaw === 'string' && nameRaw.trim()
         ? nameRaw.trim()
         : 'Test Invite';
-    let expiresInDays;
-    if (expiresRaw !== undefined && expiresRaw !== null && `${expiresRaw}`.trim() !== '') {
-      const parsed = Number.parseInt(expiresRaw, 10);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        expiresInDays = parsed;
-      }
-    }
 
-    let wizarrConfig;
+    let plexConfig;
     try {
-      wizarrConfig = settingsStore.previewGroup('wizarr', overrides);
+      plexConfig = settingsStore.previewGroup('plex', overrides);
     } catch (err) {
-      logger.warn('Failed to preview Wizarr settings for test invite', err.message);
+      logger.warn('Failed to preview Plex settings for test invite', err.message);
       return res.status(400).json({
-        error: err.message || 'Wizarr settings are not configured',
+        error: err.message || 'Plex settings are not configured',
         csrfToken: res.locals.csrfToken,
       });
     }
@@ -520,33 +508,32 @@ router.post(
 
     let invite;
     try {
-      invite = await wizarrService.createInvite(
+      invite = await plexService.createInvite(
         {
           email,
-          note,
-          expiresInDays,
+          friendlyName: name,
         },
-        wizarrConfig
+        plexConfig
       );
     } catch (err) {
-      logger.warn('Failed to create Wizarr test invite', err.message);
+      logger.warn('Failed to create Plex test invite', err.message);
       return res.status(500).json({
-        error: err.message || 'Failed to create Wizarr invite',
+        error: err.message || 'Failed to create Plex invite',
         csrfToken: res.locals.csrfToken,
       });
     }
 
-    if (!invite || !invite.inviteUrl) {
-      logger.warn('Wizarr did not return an invite URL for test invite');
-      return res.status(500).json({
-        error: 'Wizarr did not return an invite link',
-        csrfToken: res.locals.csrfToken,
-      });
-    }
-
-    const inviteCode = invite.inviteCode;
-    const inviteUrl = invite.inviteUrl;
+    const inviteId = invite && invite.inviteId;
+    const inviteUrl = invite && invite.inviteUrl;
     const subscriptionId = `TEST-${nanoid(10)}`;
+
+    if (!inviteUrl) {
+      logger.warn('Plex did not return an invite URL for test invite');
+      return res.status(500).json({
+        error: 'Plex did not return an invite link for this invite.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
 
     try {
       await emailService.sendInviteEmail(
@@ -559,13 +546,13 @@ router.post(
         smtpConfig
       );
     } catch (err) {
-      logger.warn('Failed to send Wizarr test invite email', err.message);
-      if (inviteCode) {
+      logger.warn('Failed to send Plex test invite email', err.message);
+      if (inviteId) {
         try {
-          await wizarrService.revokeInvite(inviteCode);
+          await plexService.cancelInvite(inviteId, plexConfig);
         } catch (revokeErr) {
           logger.warn(
-            'Failed to revoke Wizarr invite after test email failure',
+            'Failed to cancel Plex invite after test email failure',
             revokeErr.message
           );
         }
@@ -577,22 +564,24 @@ router.post(
       });
     }
 
-    logEvent('wizarr.test_invite', {
+    logEvent('plex.test_invite', {
       email,
       invite: {
-        code: inviteCode,
+        id: inviteId,
         url: inviteUrl,
+        status: invite ? invite.status : undefined,
+        sharedLibraries: invite ? invite.sharedLibraries : undefined,
       },
       note: note || undefined,
-      expiresInDays,
     });
-    logger.info('Sent Wizarr test invite', { email });
+    logger.info('Sent Plex test invite', { email });
 
     res.json({
       success: true,
       invite: {
-        code: inviteCode,
+        id: inviteId,
         url: inviteUrl,
+        sharedLibraries: invite ? invite.sharedLibraries : undefined,
       },
       message: `Test invite sent to ${email}.`,
       csrfToken: res.locals.csrfToken,
@@ -680,7 +669,7 @@ router.post(
     const origin = resolvePublicBaseUrl(req);
     const shareUrl = `${origin}/share/${shareLink.token}`;
     const invitePayload = {
-      wizarrInviteUrl: shareUrl,
+      plexInviteUrl: shareUrl,
       recipientEmail: donor.email,
       createdAt: shareLink.createdAt,
       note,
@@ -876,13 +865,13 @@ router.post(
     }
 
     const invite = getLatestActiveInviteForDonor(donor.id);
-    if (!invite || !invite.wizarrInviteUrl) {
+    if (!invite || !invite.plexInviteUrl) {
       return res.status(400).json({ error: 'No active invite to email' });
     }
 
     await emailService.sendInviteEmail({
       to: invite.recipientEmail || donor.email,
-      inviteUrl: invite.wizarrInviteUrl,
+      inviteUrl: invite.plexInviteUrl,
       name: donor.name,
       subscriptionId: donor.subscriptionId,
     });
@@ -908,11 +897,11 @@ router.post(
       return res.status(400).json({ error: 'No invite to revoke' });
     }
 
-    if (invite.wizarrInviteCode) {
+    if (invite.plexInviteId) {
       try {
-        await wizarrService.revokeInvite(invite.wizarrInviteCode);
+        await plexService.cancelInvite(invite.plexInviteId);
       } catch (err) {
-        logger.warn('Failed to revoke Wizarr invite', err.message);
+        logger.warn('Failed to cancel Plex invite', err.message);
       }
     }
 

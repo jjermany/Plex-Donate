@@ -1,5 +1,15 @@
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_FILE = ':memory:';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
+if (!process.env.DATABASE_FILE || process.env.DATABASE_FILE === ':memory:') {
+  const testDbDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'plex-donate-webhook-db-')
+  );
+  process.env.DATABASE_FILE = path.join(testDbDir, 'database.sqlite');
+}
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
