@@ -395,11 +395,11 @@
       <main class="canvas">
         <header class="surface hero">
           <span class="eyebrow">Start here</span>
-          <h1>Claim your Plex Donate invite.</h1>
+          <h1>Claim your Plex Donate referral invite.</h1>
           <p class="lead">
             You're moments away from joining our streaming community. Follow
-            the steps below to create your account, link Plex, and unlock your
-            invite.
+            the steps below to create your account, link Plex, and activate the
+            referral that brought you here.
           </p>
           <div class="hero-badges">
             <span class="chip">Plex · Wizarr ready</span>
@@ -425,19 +425,20 @@
             <ul class="support-list">
               <li>
                 Start by creating or recovering your Plex account and saving your Plex Donate
-                login with the same streaming email.
+                login with the same supporter email.
               </li>
               <li>
-                Complete the Plex authentication prompt to link that Plex identity—this unlocks
-                the subscription checkout.
+                Complete the Plex authentication prompt to confirm which Plex identity you'll use
+                before sharing invites.
               </li>
               <li>
                 Once Plex is linked, start your PayPal donation or paste your subscription ID so
                 we can verify billing.
               </li>
               <li>
-                Generate your Wizarr invite once your donation is active to unlock Plex and the
-                rest of our library.
+                Use the referral tool to welcome new viewers once your donation is active. Existing
+                supporters can regenerate their own Wizarr link here only if they've lost library
+                access.
               </li>
             </ul>
             <div class="cta">
@@ -520,15 +521,15 @@
         </section>
 
         <section class="surface" id="invite-panel">
-          <h2>Step 2 · Link Plex & claim your access</h2>
+          <h2>Step 2 · Link Plex & share referral invites</h2>
           <p class="muted" id="invite-description">
-            After Plex is linked and your donation is confirmed, you can generate a fresh Wizarr
-            invite every month. Choose the email you want to use for streaming access and we'll
-            highlight when the next link unlocks.
+            After Plex is linked and your donation is confirmed, you can send one referral invite
+            each month. Choose who should receive it—we'll highlight when the next referral unlocks.
+            If you've lost your own library access, you can regenerate your personal link here too.
           </p>
           <form id="invite-form">
             <label>
-              <span>Email for streaming access</span>
+              <span>Email for this referral invite</span>
               <input
                 id="recipient-email"
                 type="email"
@@ -540,7 +541,7 @@
               />
             </label>
             <label>
-              <span>Name (optional)</span>
+              <span>Recipient name (optional)</span>
               <input
                 id="display-name"
                 type="text"
@@ -549,13 +550,13 @@
               />
             </label>
             <div class="form-actions">
-              <button id="generate-button" type="submit">Generate my invite</button>
+              <button id="generate-button" type="submit">Send referral invite</button>
               <p class="status-text" id="action-status"></p>
             </div>
           </form>
           <div id="invite-ready" class="invite-ready hidden">
             <div class="invite-meta">
-              <span class="badge success">Invite ready</span>
+              <span class="badge success">Referral invite ready</span>
               <span id="invite-email" class="muted small"></span>
             </div>
             <a
@@ -728,7 +729,7 @@
         const cooldownActive =
           limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
         const nextInviteMessage = cooldownActive
-          ? `Next invite available on ${formatDateTime(nextAvailableDate)}.`
+          ? `Next referral invite available on ${formatDateTime(nextAvailableDate)}.`
           : '';
 
         if (inviteForm) {
@@ -746,9 +747,9 @@
           inviteEmailEl.textContent = '';
           inviteCreatedEl.textContent = '';
           inviteDescription.textContent =
-            'Finish the quick account setup above to link Plex and unlock invite generation.';
+            'Finish the quick account setup above to link Plex and unlock referral invites.';
           if (generateButton) {
-            generateButton.textContent = 'Generate my invite';
+            generateButton.textContent = 'Send referral invite';
           }
           return;
         }
@@ -761,19 +762,19 @@
           inviteCreatedEl.textContent = '';
           if (cooldownActive && nextInviteMessage) {
             inviteDescription.textContent =
-              `${nextInviteMessage} We'll refresh this page automatically when you're eligible to generate another invite.`;
+              `${nextInviteMessage} We'll refresh this page automatically when you're eligible to send another referral invite.`;
           } else {
             inviteDescription.textContent = limitHit
-              ? 'An invite has already been created for this subscription. Contact the server admin if you need help getting back in.'
-              : 'Choose the email you want to use for streaming access and we will generate your Wizarr invite instantly.';
+              ? 'This month’s referral invite has already been used. Contact the server admin if you lost your own access and need the link restored.'
+              : 'Choose who should receive this referral invite and we will generate the Wizarr link instantly. Only regenerate your own link if you have lost Plex access.';
           }
           if (generateButton) {
             if (cooldownActive) {
-              generateButton.textContent = 'Invite cooling down…';
+              generateButton.textContent = 'Referral invite cooling down…';
             } else {
               generateButton.textContent = limitHit
-                ? 'Invite already created'
-                : 'Generate my invite';
+                ? 'Referral invite already sent'
+                : 'Send referral invite';
             }
           }
           return;
@@ -793,19 +794,19 @@
         }
         if (cooldownActive && nextInviteMessage) {
           inviteDescription.textContent =
-            `${nextInviteMessage} We'll refresh this page automatically when the cooldown ends.`;
+            `${nextInviteMessage} We'll refresh this page automatically when the referral cooldown ends.`;
         } else {
           inviteDescription.textContent = limitHit
-            ? 'Invite ready! Reach out to the server admin if you need the link refreshed.'
-            : 'Invite ready! Use the link below to finish connecting your access.';
+            ? 'Referral invite ready! Reach out to the server admin if you lost access and need the link refreshed.'
+            : 'Referral invite ready! Share the link below with your recipient—or follow it yourself if you’re restoring access.';
         }
         if (generateButton) {
           if (cooldownActive) {
-            generateButton.textContent = 'Invite cooling down…';
+            generateButton.textContent = 'Referral invite cooling down…';
           } else {
             generateButton.textContent = limitHit
-              ? 'Invite already created'
-              : 'Generate another invite';
+              ? 'Referral invite already sent'
+              : 'Send another referral invite';
           }
         }
       }
@@ -861,7 +862,7 @@
             }
           } else {
             accountDescription.textContent =
-              'Keep your contact details current while we confirm your subscription and unlock invite generation.';
+              'Keep your contact details current while we confirm your subscription and unlock referral invites.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Save changes';
             }
@@ -886,27 +887,27 @@
         if (inviteLocked) {
           if (limitReached) {
             actionStatus.textContent =
-              'An invite has already been generated for this subscription. Contact the server admin if you need the link refreshed.';
+              'This month’s referral invite has already been sent. Contact the server admin if you lost access and need the link restored.';
             actionStatus.className = 'status-text info';
           } else if (isProspect) {
             actionStatus.textContent =
-              'Finish setting up your account to unlock invite generation.';
+              'Finish setting up your account to unlock referral invites.';
             actionStatus.className = 'status-text info';
           } else if (!accountReady) {
             actionStatus.textContent =
-              'Create your dashboard password above to unlock invite generation.';
+              'Create your dashboard password above to unlock referral invites.';
             actionStatus.className = 'status-text info';
           } else if (!plexLinked) {
             actionStatus.textContent =
-              'Authenticate with Plex to continue—watch for the sign-in prompt above.';
+              'Authenticate with Plex to continue—watch for the sign-in prompt above so referral invites go to the right account.';
             actionStatus.className = 'status-text info';
           } else if (hasSevereIssue) {
             actionStatus.textContent =
-              'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
+              'This subscription needs attention before another referral invite can be generated. Contact the server admin if you need help.';
             actionStatus.className = 'status-text error';
           } else {
             actionStatus.textContent =
-              'Invite generation unlocks once your subscription is active.';
+              'Referral invites unlock once your subscription is active.';
             actionStatus.className = 'status-text info';
           }
         }
@@ -985,10 +986,10 @@
 
         if (!plexLinked && !limitReached) {
           inviteDescription.textContent =
-            'Link your Plex account to unlock checkout and invite generation.';
+            'Link your Plex account to unlock checkout and referral invites.';
         } else if (!isActive && !limitReached) {
           inviteDescription.textContent =
-            'Invite generation unlocks once your subscription is active.';
+            'Referral invites unlock once your subscription is active.';
         }
 
         const identifier =
@@ -1095,7 +1096,7 @@
         render(payload);
         if (wasProspect && payload && payload.donor) {
           accountStatus.textContent =
-            'Account saved! You can now request your first invite.';
+            'Account saved! You can now request your first referral invite.';
         } else {
           accountStatus.textContent =
             'Account saved! Use these details to sign in later.';
@@ -1124,7 +1125,7 @@
         const email = (emailInput.value || '').trim();
         const name = (nameInput.value || '').trim();
         if (!email) {
-          actionStatus.textContent = 'Please enter the email that should receive streaming access.';
+          actionStatus.textContent = 'Please enter the email that should receive this referral invite.';
           actionStatus.classList.add('error');
           return;
         }
@@ -1136,7 +1137,7 @@
         }
 
         generateButton.disabled = true;
-        actionStatus.textContent = 'Generating invite…';
+        actionStatus.textContent = 'Sending referral invite…';
         actionStatus.className = 'status-text info';
 
         let responseData = null;
@@ -1156,11 +1157,11 @@
             if (payload && payload.payload) {
               render(payload.payload);
             }
-            throw new Error(payload.error || 'Failed to create invite');
+            throw new Error(payload.error || 'Failed to create referral invite');
           }
           render(payload);
           actionStatus.textContent =
-            'Invite created! Use the link below to finish connecting your Plex account.';
+            'Referral invite created! Share the link below with your recipient or follow it yourself if you’re restoring access.';
           actionStatus.className = 'status-text success';
         } catch (err) {
           actionStatus.textContent = err.message;
