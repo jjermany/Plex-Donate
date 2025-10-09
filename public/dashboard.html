@@ -1272,16 +1272,16 @@
         }
         updateSessionTokenFromResponse(payload);
         if (!response.ok) {
-          if (payload && payload.payload) {
-            renderDashboard(payload.payload);
+          const payloadData = payload && payload.payload ? payload.payload : null;
+          if (payloadData) {
+            renderDashboard(payloadData);
+          } else {
+            applyPlexLinkState(null, null);
           }
-          setPlexLinkStatus(
-            payload && payload.error
-              ? payload.error
-              : 'Failed to verify Plex authentication. Start the link again.',
-            'error',
-            { sticky: true, force: true }
-          );
+          const plexErrorMessage = payload && payload.error
+            ? `${payload.error} Try starting the link again.`
+            : 'Failed to verify Plex authentication. Try starting the link again.';
+          setPlexLinkStatus(plexErrorMessage, 'error', { sticky: true, force: true });
           clearPlexLinkPollTimer();
           clearPlexLinkCountdownTimer({ resetText: false });
           closePlexAuthWindow();
