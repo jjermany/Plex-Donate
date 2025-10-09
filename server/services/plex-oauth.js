@@ -181,5 +181,6 @@ module.exports = {
   pollPin,
   fetchIdentity,
   buildAuthUrl,
+  buildHeaders,
   DEFAULT_POLL_INTERVAL_MS,
 };
