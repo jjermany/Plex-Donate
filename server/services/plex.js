@@ -1,13 +1,10 @@
 const fetch = require('node-fetch');
 const { getPlexSettings } = require('../state/settings');
+const { buildHeaders: buildPlexClientHeaders } = require('./plex-oauth');
 
 const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users'];
 const LIBRARY_SECTIONS_ENDPOINT = '/library/sections';
 const PLEX_TV_BASE_URL = 'https://plex.tv';
-const DEFAULT_INVITE_HEADERS = {
-  Accept: 'application/json',
-  'Content-Type': 'application/json',
-};
 const userListPathCache = new Map();
 
 function getPlexConfig(overrideSettings) {
@@ -301,6 +298,33 @@ function buildSharedServerUrl(plex, inviteId) {
 
   const encodedId = encodeURIComponent(String(inviteId));
   return buildPlexTvUrl(`${basePath}/${encodedId}`, plex);
+}
+
+function getClientIdentifier(plex) {
+  if (!plex) {
+    return 'plex-donate';
+  }
+
+  if (plex.clientIdentifier) {
+    return String(plex.clientIdentifier).trim() || 'plex-donate';
+  }
+
+  if (plex.serverIdentifier) {
+    return `plex-donate-${String(plex.serverIdentifier).trim() || 'server'}`;
+  }
+
+  return 'plex-donate';
+}
+
+function buildSharedServerHeaders(plex, extra = {}) {
+  if (!plex || !plex.token) {
+    throw new Error('Plex token is not configured');
+  }
+
+  return buildPlexClientHeaders(getClientIdentifier(plex), {
+    'X-Plex-Token': plex.token,
+    ...extra,
+  });
 }
 
 function normalizeLibraryList(libraries) {
@@ -602,7 +626,9 @@ async function createInvite(
   try {
     response = await fetch(buildSharedServerUrl(plex), {
       method: 'POST',
-      headers: DEFAULT_INVITE_HEADERS,
+      headers: buildSharedServerHeaders(plex, {
+        'Content-Type': 'application/json',
+      }),
       body: JSON.stringify(requestBody),
     });
   } catch (err) {
@@ -648,7 +674,7 @@ async function cancelInvite(inviteId, overrideSettings) {
   try {
     response = await fetch(buildSharedServerUrl(plex, inviteId), {
       method: 'DELETE',
-      headers: DEFAULT_INVITE_HEADERS,
+      headers: buildSharedServerHeaders(plex),
     });
   } catch (err) {
     throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
@@ -686,7 +712,7 @@ async function verifyConnection(overrideSettings) {
   try {
     response = await fetch(buildSharedServerUrl(plex), {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: buildSharedServerHeaders(plex),
     });
   } catch (err) {
     throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
