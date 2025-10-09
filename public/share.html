@@ -192,65 +192,6 @@
       .small {
         font-size: 0.85rem;
       }
-      .headline {
-        font-size: 1.35rem;
-        font-weight: 600;
-      }
-      .profile {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        margin-top: 12px;
-      }
-      .status-pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 14px;
-        border-radius: 999px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        background: rgba(59, 130, 246, 0.24);
-        color: #bfdbfe;
-        text-transform: capitalize;
-      }
-      .status-pill[data-status='active'] {
-        background: rgba(34, 197, 94, 0.22);
-        color: #bbf7d0;
-      }
-      .status-pill[data-status='pending'] {
-        background: rgba(59, 130, 246, 0.24);
-        color: #cfe1ff;
-      }
-      .status-pill[data-status='setup'] {
-        background: rgba(14, 165, 233, 0.2);
-        color: #bae6fd;
-      }
-      .status-pill[data-status='cancelled'],
-      .status-pill[data-status='canceled'],
-      .status-pill[data-status='suspended'],
-      .status-pill[data-status='expired'] {
-        background: rgba(248, 113, 113, 0.2);
-        color: #fecdd3;
-      }
-      .details {
-        margin-top: 18px;
-        display: grid;
-        gap: 12px;
-      }
-      .detail {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        font-size: 0.95rem;
-      }
-      .detail .label {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: rgba(148, 163, 184, 0.7);
-      }
       .support-list {
         list-style: none;
         padding: 0;
@@ -430,19 +371,12 @@
       .invite-link:hover {
         text-decoration: underline;
       }
-      #share-last-used.hidden {
-        display: none;
-      }
       @media (max-width: 640px) {
         .surface {
           padding: 24px;
         }
         .panel {
           padding: 24px;
-        }
-        .profile {
-          flex-direction: column;
-          align-items: flex-start;
         }
         .form-actions {
           align-items: stretch;
@@ -461,11 +395,11 @@
       <main class="canvas">
         <header class="surface hero">
           <span class="eyebrow">Start here</span>
-          <h1>Set up your membership or review your invite.</h1>
+          <h1>Claim your Plex Donate invite.</h1>
           <p class="lead">
-            New supporters can create their login below and we’ll walk you
-            through the rest. Already part of the community? Save your details
-            and generate your Wizarr invite in just a few clicks.
+            You're moments away from joining our streaming community. Follow
+            the steps below to create your account, link Plex, and unlock your
+            invite.
           </p>
           <div class="hero-badges">
             <span class="chip">Plex · Wizarr ready</span>
@@ -475,30 +409,6 @@
         </header>
 
         <section class="grid">
-          <article class="surface" id="subscription-panel">
-            <h2>Your membership</h2>
-            <p class="muted">
-              We keep everything running so you can press play and relax.
-            </p>
-            <div class="profile">
-              <div>
-                <div class="headline" id="donor-name">Hi there!</div>
-                <div class="muted" id="donor-email"></div>
-              </div>
-              <span class="status-pill" id="subscription-status" data-status="pending"
-                >pending</span
-              >
-            </div>
-            <div class="details">
-              <div id="subscription-id-row" class="detail hidden">
-                <span class="label">Subscription ID</span>
-                <span id="subscription-id"></span>
-              </div>
-              <div id="price-row" class="detail hidden"></div>
-              <div id="share-last-used" class="detail muted hidden"></div>
-            </div>
-          </article>
-
           <article class="surface" id="support-card">
             <h2>Here's how it works</h2>
             <p class="muted">
@@ -531,12 +441,12 @@
               </li>
             </ul>
             <div class="cta">
-              <h3>Already subscribed?</h3>
+              <h3>After you join</h3>
               <p class="muted">
-                The customer dashboard keeps your billing details, invite
-                history, and Plex status in one place.
+                You'll unlock the customer dashboard to manage billing, track your invites,
+                and confirm Plex status any time.
               </p>
-              <a class="cta-button" href="/dashboard">Open customer dashboard</a>
+              <a class="cta-button" href="/dashboard">Preview the dashboard</a>
             </div>
           </article>
         </section>
@@ -579,7 +489,7 @@
                 inputmode="text"
               />
               <p class="helper-text">
-                Already subscribed? Paste your PayPal subscription ID so we can link it
+                When your PayPal donation is ready, paste the subscription ID so we can link it
                 automatically.
               </p>
             </label>
@@ -689,13 +599,6 @@
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
       const content = document.getElementById('content');
-      const donorNameEl = document.getElementById('donor-name');
-      const donorEmailEl = document.getElementById('donor-email');
-      const statusPill = document.getElementById('subscription-status');
-      const subscriptionIdRow = document.getElementById('subscription-id-row');
-      const subscriptionIdEl = document.getElementById('subscription-id');
-      const priceRow = document.getElementById('price-row');
-      const shareLastUsedEl = document.getElementById('share-last-used');
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
@@ -745,21 +648,6 @@
         errorPanel.textContent = message || 'Something went wrong.';
         errorPanel.classList.remove('hidden');
         content.classList.add('hidden');
-      }
-
-      function formatPrice(amount, currency) {
-        if (!Number.isFinite(amount)) {
-          return '';
-        }
-        try {
-          return new Intl.NumberFormat(undefined, {
-            style: 'currency',
-            currency: currency || 'USD',
-            minimumFractionDigits: 2,
-          }).format(amount);
-        } catch (err) {
-          return `${amount.toFixed(2)} ${currency || ''}`.trim();
-        }
       }
 
       function parseDate(value) {
@@ -941,10 +829,6 @@
         const donor = data.donor || null;
         const prospect = data.prospect || null;
         const isProspect = !donor && Boolean(prospect);
-        const paypal = data.paypal || {};
-        const checkoutAvailable = Boolean(
-          paypal.subscriptionCheckoutAvailable
-        );
         const normalizedStatus = (donor && donor.status
           ? donor.status
           : 'pending'
@@ -952,13 +836,6 @@
         const isActive = normalizedStatus === 'active';
         const accountReady = Boolean(donor && donor.hasPassword);
         const plexLinked = Boolean(donor && donor.plexLinked);
-        const hasSubscriptionId = Boolean(donor && donor.subscriptionId);
-        const showSubscriptionCta = Boolean(
-          checkoutAvailable &&
-            accountReady &&
-            plexLinked &&
-            (!hasSubscriptionId || !isActive)
-        );
         state.isProspect = isProspect;
         const limitReached = Boolean(data.inviteLimitReached);
         state.inviteLimitReached = limitReached;
@@ -969,64 +846,25 @@
           limitReached && nextInviteDate && nextInviteDate.getTime() > Date.now();
         scheduleInviteCooldownRefresh(cooldownActive ? nextInviteAvailableAt : null);
 
-        if (donorNameEl) {
-          if (isProspect) {
-            donorNameEl.textContent = prospect && prospect.name
-              ? `Hi ${prospect.name}!`
-              : 'Welcome future streamer!';
-          } else {
-            donorNameEl.textContent = donor && donor.name ? `Hi ${donor.name}!` : 'Hi there!';
-          }
-        }
-
-        if (donorEmailEl) {
-          if (isProspect) {
-            donorEmailEl.textContent = prospect && prospect.email
-              ? `We can use ${prospect.email} or pick another email below.`
-              : 'Tell us which email to use for your membership.';
-          } else {
-            donorEmailEl.textContent =
-              (donor && donor.email) || 'Add your preferred streaming email below.';
-          }
-        }
-
         if (accountDescription) {
-          if (isProspect) {
+          if (!accountReady) {
             accountDescription.textContent =
               'Step one: create or recover your Plex account, then save your Plex Donate login so you can link Plex before subscribing.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
-          } else if (accountReady && !plexLinked) {
+          } else if (!plexLinked) {
             accountDescription.textContent =
-              'Great! Stay signed in and complete the Plex authentication prompt first—checkout unlocks only after Plex is linked.';
+              'Stay signed in and complete the Plex authentication prompt—this confirms which Plex identity we invite.';
             if (accountSubmit) {
-              accountSubmit.textContent = 'Update account';
-            }
-          } else if (accountReady) {
-            accountDescription.textContent =
-              'Update your login details or add your PayPal subscription ID below to keep everything synced.';
-            if (accountSubmit) {
-              accountSubmit.textContent = 'Update account';
+              accountSubmit.textContent = 'Save changes';
             }
           } else {
             accountDescription.textContent =
-              'Create or recover your Plex account, then save your Plex Donate login so you can access the dashboard and link Plex before checkout.';
+              'Keep your contact details current while we confirm your subscription and unlock invite generation.';
             if (accountSubmit) {
-              accountSubmit.textContent = 'Create account';
+              accountSubmit.textContent = 'Save changes';
             }
-          }
-        }
-
-        if (statusPill) {
-          if (isProspect) {
-            statusPill.dataset.status = 'setup';
-            statusPill.textContent = 'setup needed';
-          } else {
-            statusPill.dataset.status = normalizedStatus || 'pending';
-            statusPill.textContent = normalizedStatus
-              ? normalizedStatus.replace(/_/g, ' ')
-              : 'pending';
           }
         }
 
@@ -1067,9 +905,8 @@
               'This subscription needs attention before a new invite can be generated. Contact the server admin if you need help.';
             actionStatus.className = 'status-text error';
           } else {
-            actionStatus.textContent = showSubscriptionCta
-              ? 'Start your PayPal subscription to unlock invite generation.'
-              : 'Invite generation unlocks once your subscription is active.';
+            actionStatus.textContent =
+              'Invite generation unlocks once your subscription is active.';
             actionStatus.className = 'status-text info';
           }
         }
@@ -1103,30 +940,6 @@
           const showSubscriptionInput =
             isProspect || (donor && !donor.subscriptionId);
           accountSubscriptionRow.classList.toggle('hidden', !showSubscriptionInput);
-        }
-
-        if (donor && donor.subscriptionId) {
-          subscriptionIdEl.textContent = donor.subscriptionId;
-          subscriptionIdRow.classList.remove('hidden');
-        } else {
-          subscriptionIdRow.classList.add('hidden');
-        }
-
-        const shareLink = data.shareLink || {};
-        if (shareLink.lastUsedAt) {
-          const lastUsed = new Date(shareLink.lastUsedAt);
-          shareLastUsedEl.textContent = `Last visited ${lastUsed.toLocaleString()}`;
-          shareLastUsedEl.classList.remove('hidden');
-        } else {
-          shareLastUsedEl.classList.add('hidden');
-        }
-
-        const amount = Number(paypal.subscriptionPrice);
-        if (Number.isFinite(amount) && amount > 0) {
-          priceRow.textContent = `Recurring amount: ${formatPrice(amount, paypal.currency)}`;
-          priceRow.classList.remove('hidden');
-        } else {
-          priceRow.classList.add('hidden');
         }
 
         const invite = data.invite || null;
@@ -1174,9 +987,8 @@
           inviteDescription.textContent =
             'Link your Plex account to unlock checkout and invite generation.';
         } else if (!isActive && !limitReached) {
-          inviteDescription.textContent = showSubscriptionCta
-            ? 'Once your donation is active we will unlock invite generation.'
-            : 'Invite generation unlocks once your subscription is active.';
+          inviteDescription.textContent =
+            'Invite generation unlocks once your subscription is active.';
         }
 
         const identifier =
