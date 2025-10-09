@@ -86,6 +86,53 @@ test('plexService.createInvite posts to Plex API', async () => {
   });
 });
 
+test('plexService.createInvite retries invite endpoint on 404', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => '',
+      };
+    }
+    if (url.includes('/api/home/invitations')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({
+          invitation: { id: 'INV-404', uri: 'https://plex.example/invite/INV-404' },
+        }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.createInvite(
+      { email: 'fallback@example.com' },
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'server-uuid',
+        librarySectionIds: '1',
+      }
+    );
+
+    assert.equal(calls.length, 2);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/api/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(result.inviteId, 'INV-404');
+  });
+});
+
 test('plexService.createInvite throws when Plex omits invite id', async () => {
   await withMockedFetch(
     async () => ({
@@ -145,8 +192,50 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
       reason: 'Invite not found on Plex server',
     });
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 3);
     assert.equal(calls[0].options.method, 'DELETE');
+  });
+});
+
+test('plexService.cancelInvite retries invite endpoint on 404', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => '',
+      };
+    }
+    if (url.includes('/api/home/invitations')) {
+      return {
+        ok: true,
+        status: 204,
+        statusText: 'No Content',
+        text: async () => '',
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.cancelInvite('INV-404', {
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '1',
+    });
+
+    assert.deepEqual(result, { success: true });
+    assert.equal(calls.length, 2);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations/INV-404?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/api/home/invitations/INV-404?X-Plex-Token=token123'
+    );
   });
 });
 
@@ -205,6 +294,69 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       { id: '1', title: 'Movies' },
       { id: '2', title: 'TV Shows' },
     ]);
+  });
+});
+
+test('plexService.verifyConnection retries invite endpoint on 404', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+    if (calls.length === 1) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => '',
+      };
+    }
+    if (url.includes('/api/home/invitations')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ invitations: [] }),
+        text: async () => '',
+      };
+    }
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '/library/sections/1', title: 'Movies' },
+                { key: '/library/sections/2', title: 'TV Shows' },
+              ],
+            },
+          }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.verifyConnection({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '1,2',
+    });
+
+    assert.equal(calls.length, 3);
+    assert.equal(
+      calls[0].url,
+      'https://plex.local/api/v2/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/api/home/invitations?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[2].url,
+      'https://plex.local/library/sections?X-Plex-Token=token123'
+    );
+    assert.equal(result.message, 'Plex invite configuration verified successfully.');
   });
 });
 

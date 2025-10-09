@@ -2,13 +2,14 @@ const fetch = require('node-fetch');
 const { getPlexSettings } = require('../state/settings');
 
 const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users'];
-const INVITE_ENDPOINT = '/api/v2/home/invitations';
+const INVITE_ENDPOINTS = ['/api/v2/home/invitations', '/api/home/invitations'];
 const LIBRARY_SECTIONS_ENDPOINT = '/library/sections';
 const DEFAULT_INVITE_HEADERS = {
   Accept: 'application/json',
   'Content-Type': 'application/json',
 };
 const userListPathCache = new Map();
+const invitePathCache = new Map();
 
 function getPlexConfig(overrideSettings) {
   if (overrideSettings && typeof overrideSettings === 'object') {
@@ -263,6 +264,42 @@ async function extractErrorMessage(response) {
 
 function getCacheKey(plex) {
   return normalizeBaseUrl(plex && plex.baseUrl);
+}
+
+function formatEndpointList(endpoints) {
+  if (!endpoints || endpoints.length === 0) {
+    return '';
+  }
+  if (endpoints.length === 1) {
+    return endpoints[0];
+  }
+  return `${endpoints.slice(0, -1).join(', ')} and ${endpoints[endpoints.length - 1]}`;
+}
+
+function getInviteEndpointsForPlex(plex) {
+  const cacheKey = getCacheKey(plex);
+  const preferredPath = cacheKey ? invitePathCache.get(cacheKey) : null;
+  const endpoints = preferredPath
+    ? [preferredPath, ...INVITE_ENDPOINTS.filter((path) => path !== preferredPath)]
+    : INVITE_ENDPOINTS;
+
+  return { endpoints, cacheKey, preferredPath };
+}
+
+function rememberInviteEndpoint(cacheKey, basePath) {
+  if (cacheKey) {
+    invitePathCache.set(cacheKey, basePath);
+  }
+}
+
+function clearInviteEndpoint(cacheKey, basePath) {
+  if (!cacheKey) {
+    return;
+  }
+  const current = invitePathCache.get(cacheKey);
+  if (!basePath || current === basePath) {
+    invitePathCache.delete(cacheKey);
+  }
 }
 
 function normalizeLibraryList(libraries) {
@@ -560,38 +597,63 @@ async function createInvite(
     librarySectionIds,
   });
 
-  let response;
-  try {
-    response = await fetch(buildUrlFromConfig(INVITE_ENDPOINT, plex), {
-      method: 'POST',
-      headers: DEFAULT_INVITE_HEADERS,
-      body: JSON.stringify(requestBody),
-    });
-  } catch (err) {
-    throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+  const { endpoints, cacheKey } = getInviteEndpointsForPlex(plex);
+  const attemptedNotFound = [];
+
+  for (const basePath of endpoints) {
+    let response;
+    try {
+      response = await fetch(buildUrlFromConfig(basePath, plex), {
+        method: 'POST',
+        headers: DEFAULT_INVITE_HEADERS,
+        body: JSON.stringify(requestBody),
+      });
+    } catch (err) {
+      throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Plex rejected the provided token.');
+    }
+
+    if (response.status === 404) {
+      attemptedNotFound.push(basePath);
+      clearInviteEndpoint(cacheKey, basePath);
+      continue;
+    }
+
+    if (response.status === 410) {
+      clearInviteEndpoint(cacheKey, basePath);
+    }
+
+    if (!response.ok) {
+      const details = await extractErrorMessage(response);
+      const statusText = response.statusText || 'Error';
+      const suffix = details ? `: ${details}` : '';
+      throw new Error(
+        `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
+      );
+    }
+
+    const data = await response.json().catch(() => ({}));
+    const mapped = mapInviteResponse(data);
+
+    if (!mapped.inviteId && !mapped.inviteUrl) {
+      throw new Error('Plex did not return an invite identifier');
+    }
+
+    rememberInviteEndpoint(cacheKey, basePath);
+    return mapped;
   }
 
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
-  }
-
-  if (!response.ok) {
-    const details = await extractErrorMessage(response);
-    const statusText = response.statusText || 'Error';
-    const suffix = details ? `: ${details}` : '';
+  if (attemptedNotFound.length) {
+    const formattedPaths = formatEndpointList(attemptedNotFound);
     throw new Error(
-      `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
+      `Plex returned 404 (Not Found) for the supported invite endpoints (${formattedPaths}). Confirm the base URL is correct and that the server supports Plex invites.`
     );
   }
 
-  const data = await response.json().catch(() => ({}));
-  const mapped = mapInviteResponse(data);
-
-  if (!mapped.inviteId && !mapped.inviteUrl) {
-    throw new Error('Plex did not return an invite identifier');
-  }
-
-  return mapped;
+  throw new Error('Unable to determine the Plex invite endpoint.');
 }
 
 async function cancelInvite(inviteId, overrideSettings) {
@@ -604,37 +666,57 @@ async function cancelInvite(inviteId, overrideSettings) {
 
   const encodedId = encodeURIComponent(String(inviteId));
 
-  let response;
-  try {
-    response = await fetch(
-      buildUrlFromConfig(`${INVITE_ENDPOINT}/${encodedId}`, plex),
-      {
-        method: 'DELETE',
-        headers: DEFAULT_INVITE_HEADERS,
-      }
-    );
-  } catch (err) {
-    throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+  const { endpoints, cacheKey } = getInviteEndpointsForPlex(plex);
+  const attemptedNotFound = [];
+
+  for (const basePath of endpoints) {
+    let response;
+    try {
+      response = await fetch(
+        buildUrlFromConfig(`${basePath}/${encodedId}`, plex),
+        {
+          method: 'DELETE',
+          headers: DEFAULT_INVITE_HEADERS,
+        }
+      );
+    } catch (err) {
+      throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Plex rejected the provided token.');
+    }
+
+    if (response.status === 404) {
+      attemptedNotFound.push(basePath);
+      clearInviteEndpoint(cacheKey, basePath);
+      continue;
+    }
+
+    if (response.status === 410) {
+      clearInviteEndpoint(cacheKey, basePath);
+      return { success: false, reason: 'Invite not found on Plex server' };
+    }
+
+    if (!response.ok) {
+      const details = await extractErrorMessage(response);
+      const statusText = response.statusText || 'Error';
+      const suffix = details ? `: ${details}` : '';
+      throw new Error(
+        `Plex invite cancellation failed with ${response.status} (${statusText})${suffix}`
+      );
+    }
+
+    rememberInviteEndpoint(cacheKey, basePath);
+    return { success: true };
   }
 
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
-  }
-
-  if (response.status === 404) {
+  if (attemptedNotFound.length) {
+    clearInviteEndpoint(cacheKey);
     return { success: false, reason: 'Invite not found on Plex server' };
   }
 
-  if (!response.ok) {
-    const details = await extractErrorMessage(response);
-    const statusText = response.statusText || 'Error';
-    const suffix = details ? `: ${details}` : '';
-    throw new Error(
-      `Plex invite cancellation failed with ${response.status} (${statusText})${suffix}`
-    );
-  }
-
-  return { success: true };
+  throw new Error('Unable to determine the Plex invite endpoint.');
 }
 
 async function verifyConnection(overrideSettings) {
@@ -643,27 +725,58 @@ async function verifyConnection(overrideSettings) {
 
   const sections = parseLibrarySectionIds(plex.librarySectionIds);
 
-  let response;
-  try {
-    response = await fetch(buildUrlFromConfig(INVITE_ENDPOINT, plex), {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-  } catch (err) {
-    throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+  const { endpoints, cacheKey } = getInviteEndpointsForPlex(plex);
+  const attemptedNotFound = [];
+  let verified = false;
+
+  for (const basePath of endpoints) {
+    let response;
+    try {
+      response = await fetch(buildUrlFromConfig(basePath, plex), {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+    } catch (err) {
+      throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Plex rejected the provided token.');
+    }
+
+    if (response.status === 404) {
+      attemptedNotFound.push(basePath);
+      clearInviteEndpoint(cacheKey, basePath);
+      continue;
+    }
+
+    if (response.status === 410) {
+      clearInviteEndpoint(cacheKey, basePath);
+    }
+
+    if (!response.ok) {
+      const details = await extractErrorMessage(response);
+      const statusText = response.statusText || 'Error';
+      const suffix = details ? `: ${details}` : '';
+      throw new Error(
+        `Failed to verify Plex invite configuration: ${response.status} (${statusText})${suffix}`
+      );
+    }
+
+    rememberInviteEndpoint(cacheKey, basePath);
+    verified = true;
+    break;
   }
 
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
-  }
+  if (!verified) {
+    if (attemptedNotFound.length) {
+      const formattedPaths = formatEndpointList(attemptedNotFound);
+      throw new Error(
+        `Failed to verify Plex invite configuration: Plex returned 404 (Not Found) for the supported invite endpoints (${formattedPaths}). Confirm the base URL is correct and that the server supports Plex invites.`
+      );
+    }
 
-  if (!response.ok) {
-    const details = await extractErrorMessage(response);
-    const statusText = response.statusText || 'Error';
-    const suffix = details ? `: ${details}` : '';
-    throw new Error(
-      `Failed to verify Plex invite configuration: ${response.status} (${statusText})${suffix}`
-    );
+    throw new Error('Unable to determine the Plex invite endpoint.');
   }
 
   const libraries = await fetchLibrarySections(plex);
