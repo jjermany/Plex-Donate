@@ -2529,12 +2529,16 @@
 
         updatePlexLibraryToggleState();
         updatePlexLibraryHelp();
-        updatePlexLibraryOptions();
+        if (plexLibraryDropdownOpen || plexLibraryOptionsDirty) {
+          updatePlexLibraryOptions();
+          plexLibraryOptionsDirty = false;
+        }
         updatePlexLibrarySummary();
         updatePlexLibraryToggleLabel();
       }
 
       let plexLibraryDropdownOpen = false;
+      let plexLibraryOptionsDirty = false;
 
       function closePlexLibraryDropdown(options = {}) {
         if (!plexLibraryDropdown) {
@@ -2560,6 +2564,7 @@
           return;
         }
         updatePlexLibraryOptions();
+        plexLibraryOptionsDirty = false;
         plexLibraryDropdown.hidden = false;
         plexLibraryDropdownOpen = true;
         plexLibraryToggle.setAttribute('aria-expanded', 'true');
@@ -2897,6 +2902,7 @@
           const response = await api('/api/admin/settings');
           state.settings = response.settings || {};
           state.plexLibraries = null;
+          plexLibraryOptionsDirty = true;
           settingsForms.forEach((form) => setFormStatus(form, ''));
         } catch (err) {
           console.error(err);
@@ -3792,6 +3798,7 @@
                           : '',
                     }))
                     .filter((library) => library.id);
+                  plexLibraryOptionsDirty = true;
                 }
                 const preferredSelection =
                   result.details && result.details.librarySectionIds
