@@ -22,28 +22,6 @@ function isConfigured() {
   return Boolean(plex.baseUrl && plex.token);
 }
 
-function normalizeBoolean(value, fallback = false) {
-  if (value === undefined || value === null) {
-    return Boolean(fallback);
-  }
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  if (typeof value === 'number') {
-    return value !== 0;
-  }
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-      return true;
-    }
-    if (['0', 'false', 'no', 'off'].includes(normalized)) {
-      return false;
-    }
-  }
-  return Boolean(value);
-}
-
 function parseLibrarySectionIds(value) {
   if (!value && value !== 0) {
     return [];
@@ -73,9 +51,6 @@ function buildInviteRequestBody({
   email,
   friendlyName,
   librarySectionIds,
-  allowSync,
-  allowCameraUpload,
-  allowChannels,
 }) {
   const sections = parseLibrarySectionIds(
     librarySectionIds !== undefined ? librarySectionIds : plex.librarySectionIds
@@ -91,15 +66,9 @@ function buildInviteRequestBody({
       uuid: plex.serverIdentifier,
     },
     settings: {
-      allowSync: normalizeBoolean(
-        allowSync !== undefined ? allowSync : plex.allowSync
-      ),
-      allowCameraUpload: normalizeBoolean(
-        allowCameraUpload !== undefined ? allowCameraUpload : plex.allowCameraUpload
-      ),
-      allowChannels: normalizeBoolean(
-        allowChannels !== undefined ? allowChannels : plex.allowChannels
-      ),
+      allowSync: false,
+      allowCameraUpload: false,
+      allowChannels: false,
     },
     libraries: sections.map((id) => ({ id })),
   };
@@ -573,14 +542,7 @@ async function revokeUser({ plexAccountId, email }) {
 }
 
 async function createInvite(
-  {
-    email,
-    friendlyName,
-    librarySectionIds,
-    allowSync,
-    allowCameraUpload,
-    allowChannels,
-  } = {},
+  { email, friendlyName, librarySectionIds } = {},
   overrideSettings
 ) {
   const plex = getPlexConfig(overrideSettings);
@@ -596,9 +558,6 @@ async function createInvite(
     email: normalizedEmail,
     friendlyName,
     librarySectionIds,
-    allowSync,
-    allowCameraUpload,
-    allowChannels,
   });
 
   let response;

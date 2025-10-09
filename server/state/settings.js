@@ -117,6 +117,12 @@ function normalizeGroup(name, values = {}, baseValues) {
     });
   }
 
+  if (name === 'plex') {
+    normalized.allowSync = false;
+    normalized.allowCameraUpload = false;
+    normalized.allowChannels = false;
+  }
+
   return normalized;
 }
 
