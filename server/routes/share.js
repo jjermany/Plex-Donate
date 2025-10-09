@@ -148,16 +148,27 @@ function isShareLinkUsed(shareLink) {
   return true;
 }
 
-function resolveInactiveShareLinkError(shareLink) {
+function resolveInactiveShareLinkError(
+  shareLink,
+  { allowUsedWithSessionToken = false, sessionToken = null } = {}
+) {
   if (!shareLink) {
     return null;
   }
 
   if (isShareLinkUsed(shareLink)) {
+    const hasValidSessionToken =
+      allowUsedWithSessionToken &&
+      sessionToken &&
+      shareLink.sessionToken &&
+      sessionToken === shareLink.sessionToken;
+
+    if (!hasValidSessionToken) {
     return {
       status: 410,
       message: 'Share link has already been used. Request a new link to continue.',
     };
+  }
   }
 
   if (isShareLinkExpired(shareLink)) {
@@ -416,7 +427,11 @@ router.get(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    const providedSessionToken = getProvidedSessionToken(req);
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink, {
+      allowUsedWithSessionToken: true,
+      sessionToken: providedSessionToken,
+    });
     if (inactiveShareLink) {
       return res
         .status(inactiveShareLink.status)
@@ -486,13 +501,6 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
-    if (inactiveShareLink) {
-      return res
-        .status(inactiveShareLink.status)
-        .json({ error: inactiveShareLink.message });
-    }
-
     let donor = null;
     if (shareLink.donorId) {
       donor = getDonorById(shareLink.donorId);
@@ -511,6 +519,16 @@ router.post(
 
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
       return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink, {
+      allowUsedWithSessionToken: true,
+      sessionToken: providedSessionToken,
+    });
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
     }
 
     if (!donor) {
@@ -743,16 +761,19 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
+    const providedSessionToken = getProvidedSessionToken(req);
+    if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
+      return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink, {
+      allowUsedWithSessionToken: true,
+      sessionToken: providedSessionToken,
+    });
     if (inactiveShareLink) {
       return res
         .status(inactiveShareLink.status)
         .json({ error: inactiveShareLink.message });
-    }
-
-    const providedSessionToken = getProvidedSessionToken(req);
-    if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
-      return res.status(401).json({ error: 'Invalid or missing share session token' });
     }
 
     const paypalSettings = settingsStore.getPaypalSettings();
@@ -855,13 +876,6 @@ router.post(
       return res.status(404).json({ error: 'Share link not found' });
     }
 
-    const inactiveShareLink = resolveInactiveShareLinkError(shareLink);
-    if (inactiveShareLink) {
-      return res
-        .status(inactiveShareLink.status)
-        .json({ error: inactiveShareLink.message });
-    }
-
     let donor = null;
     if (shareLink.donorId) {
       donor = getDonorById(shareLink.donorId);
@@ -879,6 +893,16 @@ router.post(
     const providedSessionToken = getProvidedSessionToken(req);
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
       return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    const inactiveShareLink = resolveInactiveShareLinkError(shareLink, {
+      allowUsedWithSessionToken: true,
+      sessionToken: providedSessionToken,
+    });
+    if (inactiveShareLink) {
+      return res
+        .status(inactiveShareLink.status)
+        .json({ error: inactiveShareLink.message });
     }
 
     const emailInput =
