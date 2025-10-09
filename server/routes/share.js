@@ -27,6 +27,7 @@ const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
 const { hashPassword, isPasswordStrong } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
+const emailService = require('../services/email');
 const {
   evaluateInviteCooldown,
   getInviteCreatedAtMs,
@@ -915,15 +916,39 @@ router.post(
       } = getInviteState(activeDonor.id);
       const origin = resolvePublicBaseUrl(req);
       const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+      const loginUrl = `${origin}/dashboard`;
       const invitePayload = invite
         ? {
             ...invite,
             inviteUrl:
               shareInviteDetails?.inviteUrl || invite.inviteUrl || '',
-          }
+        }
         : null;
       if (invitePayload && shareInviteDetails) {
         invitePayload.shareLink = shareInviteDetails;
+      }
+
+      try {
+        await emailService.sendAccountWelcomeEmail({
+          to: activeDonor.email,
+          name: activeDonor.name,
+          loginUrl,
+        });
+      } catch (err) {
+        logger.error('Failed to send welcome email for donor account setup', {
+          donorId: activeDonor.id,
+          shareLinkId: updatedLink.id,
+          error: err.message,
+        });
+        logEvent('share.account.welcome_email_failed', {
+          donorId: activeDonor.id,
+          shareLinkId: updatedLink.id,
+          error: err.message,
+          flow: 'existing-donor',
+        });
+        return res.status(500).json({
+          error: 'Failed to send welcome email. Please try again later.',
+        });
       }
 
       logEvent('share.account.password_set', {
@@ -1024,6 +1049,7 @@ router.post(
     } = getInviteState(activeDonor.id);
     const origin = resolvePublicBaseUrl(req);
     const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+    const loginUrl = `${origin}/dashboard`;
     const invitePayload = invite
       ? {
           ...invite,
@@ -1037,6 +1063,31 @@ router.post(
 
     if (prospect) {
       markProspectConverted(prospect.id, activeDonor.id);
+    }
+
+    try {
+      await emailService.sendAccountWelcomeEmail({
+        to: activeDonor.email,
+        name: activeDonor.name,
+        loginUrl,
+      });
+    } catch (err) {
+      logger.error('Failed to send welcome email after prospect promotion', {
+        donorId: activeDonor.id,
+        shareLinkId: updatedLink.id,
+        prospectId: prospect ? prospect.id : null,
+        error: err.message,
+      });
+      logEvent('share.account.welcome_email_failed', {
+        donorId: activeDonor.id,
+        shareLinkId: updatedLink.id,
+        prospectId: prospect ? prospect.id : null,
+        error: err.message,
+        flow: 'prospect-promotion',
+      });
+      return res.status(500).json({
+        error: 'Failed to send welcome email. Please try again later.',
+      });
     }
 
     logEvent('share.account.prospect_promoted', {

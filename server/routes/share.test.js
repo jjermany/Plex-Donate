@@ -236,8 +236,13 @@ async function createAdminSession() {
 }
 
 test('share routes handle donor and prospect flows', { concurrency: false }, async (t) => {
-  await t.test('existing donor can update account details', async () => {
+  await t.test('existing donor can update account details', async (t) => {
     resetDatabase();
+    const welcomeMock = t.mock.method(
+      emailService,
+      'sendAccountWelcomeEmail',
+      async () => {}
+    );
     const app = createApp();
     const server = await startServer(app);
 
@@ -280,17 +285,29 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(accountResponse.body.donor.name, 'Updated Name');
       assert.equal(accountResponse.body.donor.hasPassword, true);
 
+      assert.equal(welcomeMock.mock.callCount(), 1);
+      const welcomeArgs = welcomeMock.mock.calls[0].arguments[0];
+      assert.equal(welcomeArgs.to, 'updated@example.com');
+      assert.equal(welcomeArgs.name, 'Updated Name');
+      assert.equal(welcomeArgs.loginUrl, `${server.origin}/dashboard`);
+
       const row = db
         .prepare('SELECT password_hash FROM donors WHERE id = ?')
         .get(accountResponse.body.donor.id);
       assert.ok(row.password_hash && row.password_hash.startsWith('pbkdf2$'));
     } finally {
+      welcomeMock.mock.restore();
       await server.close();
     }
   });
 
-  await t.test('prospect promotion creates donor record', async () => {
+  await t.test('prospect promotion creates donor record', async (t) => {
     resetDatabase();
+    const welcomeMock = t.mock.method(
+      emailService,
+      'sendAccountWelcomeEmail',
+      async () => {}
+    );
     const app = createApp();
     const server = await startServer(app);
 
@@ -334,6 +351,12 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(accountResponse.body.donor.subscriptionId, 'I-NEW123');
       assert.equal(accountResponse.body.prospect, null);
 
+      assert.equal(welcomeMock.mock.callCount(), 1);
+      const welcomeArgs = welcomeMock.mock.calls[0].arguments[0];
+      assert.equal(welcomeArgs.to, 'future@example.com');
+      assert.equal(welcomeArgs.name, 'Future Supporter');
+      assert.equal(welcomeArgs.loginUrl, `${server.origin}/dashboard`);
+
       const updatedLink = getShareLinkByToken(shareLink.token);
       assert.equal(updatedLink.donorId, accountResponse.body.donor.id);
       assert.equal(updatedLink.prospectId, null);
@@ -346,6 +369,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         .get(accountResponse.body.donor.id);
       assert.ok(row.password_hash && row.password_hash.startsWith('pbkdf2$'));
     } finally {
+      welcomeMock.mock.restore();
       await server.close();
     }
   });
@@ -481,6 +505,12 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         })
       );
 
+      const welcomeMock = t.mock.method(
+        emailService,
+        'sendAccountWelcomeEmail',
+        async () => {}
+      );
+
       try {
         const donor = createDonor({
           email: 'refresh@example.com',
@@ -518,7 +548,14 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           '2024-01-02T03:04:05.000Z'
         );
         assert.equal(paypalMock.mock.callCount(), 1);
+        assert.equal(welcomeMock.mock.callCount(), 1);
+        const welcomeArgs = welcomeMock.mock.calls[0].arguments[0];
+        assert.equal(welcomeArgs.to, 'refresh@example.com');
+        assert.equal(welcomeArgs.name, 'Refresh Donor');
+        assert.equal(welcomeArgs.loginUrl, `${server.origin}/dashboard`);
       } finally {
+        paypalMock.mock.restore();
+        welcomeMock.mock.restore();
         await server.close();
       }
     }

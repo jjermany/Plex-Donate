@@ -70,6 +70,39 @@ async function sendInviteEmail(
   });
 }
 
+async function sendAccountWelcomeEmail(
+  { to, name, loginUrl },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  if (!loginUrl) {
+    throw new Error('loginUrl is required to send welcome email');
+  }
+
+  const recipientName = name || 'there';
+  const subject = 'Welcome to your Plex dashboard';
+  const text = `Hi ${recipientName},\n\nYour Plex Donate dashboard account is ready. Use the link below to sign in and confirm your email address:\n\n${loginUrl}\n\nIf you did not request this email or need help, reply to this message.\n\n— Plex Donate`;
+
+  const html = `
+  <p>Hi ${recipientName},</p>
+  <p>Your Plex Donate dashboard account is ready. Use the button below to sign in and confirm your email address.</p>
+  <p style="text-align:center;margin:24px 0;">
+    <a href="${loginUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Open Dashboard</a>
+  </p>
+  <p>If you need help or did not request this email, just reply to this message.</p>
+  <p style="margin-top:24px;">— Plex Donate</p>
+  `;
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function sendCancellationEmail(
   { to, name, subscriptionId, paidThrough },
   overrideSettings
@@ -120,6 +153,7 @@ async function verifyConnection(overrideSettings) {
 
 module.exports = {
   sendInviteEmail,
+  sendAccountWelcomeEmail,
   sendCancellationEmail,
   getSmtpConfig,
   verifyConnection,
