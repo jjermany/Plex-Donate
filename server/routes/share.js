@@ -946,9 +946,6 @@ router.post(
           error: err.message,
           flow: 'existing-donor',
         });
-        return res.status(500).json({
-          error: 'Failed to send welcome email. Please try again later.',
-        });
       }
 
       logEvent('share.account.password_set', {
@@ -1084,9 +1081,6 @@ router.post(
         prospectId: prospect ? prospect.id : null,
         error: err.message,
         flow: 'prospect-promotion',
-      });
-      return res.status(500).json({
-        error: 'Failed to send welcome email. Please try again later.',
       });
     }
 
