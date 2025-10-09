@@ -925,6 +925,35 @@
         color: var(--text-muted-soft);
         font-size: 0.85rem;
       }
+
+      .dashboard-toast {
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin: 0 0 16px;
+        box-shadow: var(--panel-shadow);
+        font-weight: 600;
+      }
+
+      .dashboard-toast[data-state='success'] {
+        border-color: rgba(34, 197, 94, 0.35);
+        color: var(--status-active-color);
+      }
+
+      .dashboard-toast[data-state='error'] {
+        border-color: rgba(248, 113, 113, 0.35);
+        color: var(--status-danger-color);
+      }
+
+      #plex-status-note {
+        margin: 12px 0 0;
+        font-size: 0.9rem;
+      }
+
+      #plex-status-note[data-state='error'] {
+        color: var(--status-danger-color);
+      }
     </style>
   </head>
   <body>
@@ -938,6 +967,7 @@
           <button id="logout-button" class="hidden" type="button">Log out</button>
         </div>
       </header>
+      <div id="dashboard-toast" class="dashboard-toast" hidden aria-live="polite"></div>
 
       <section id="login-panel" class="panel login-panel">
         <h2>Admin sign in</h2>
@@ -1088,6 +1118,7 @@
               </div>
               <button id="refresh-button" type="button" class="secondary">Refresh</button>
             </div>
+            <p id="plex-status-note" class="muted-text" hidden></p>
             <div style="overflow-x:auto;">
               <table id="subscribers-table">
                 <thead>
@@ -1265,7 +1296,10 @@
           </form>
 
           <form class="settings-form" data-group="plex">
-            <h3>Plex (optional)</h3>
+            <h3>Plex invites</h3>
+            <p class="muted-text subtle-text" style="margin:0 0 12px;">
+              Connect Plex Donate to your server so you can send invites without leaving the dashboard.
+            </p>
             <div class="field-grid">
               <label>
                 Server URL
@@ -1327,7 +1361,7 @@
             <div class="form-actions">
               <button type="submit" class="secondary">Save Plex settings</button>
               <button type="button" data-action="test">Test Plex connection</button>
-              <button type="button" data-action="test-invite">Send test invite</button>
+              <button type="button" data-action="test-invite">Send Plex test invite</button>
             </div>
           </form>
         </section>
@@ -1357,7 +1391,7 @@
                 data-action="invite"
                 role="menuitem"
               >
-                Generate invite
+                Send Plex invite
               </button>
               <button
                 type="button"
@@ -1439,10 +1473,12 @@
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
+      const dashboardToast = document.getElementById('dashboard-toast');
       const adminAccountPanel = document.getElementById('admin-account-panel');
       const adminCredentialsForm = document.getElementById('admin-credentials-form');
       const adminAccountDescription = document.getElementById('admin-account-description');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
+      const plexStatusNote = document.getElementById('plex-status-note');
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
       const eventsList = document.getElementById('events-list');
@@ -1623,6 +1659,7 @@
         paypalPlanManageUrl: '',
         paypalPlanLoading: false,
         adminUsername: 'admin',
+        plex: null,
       };
 
       function setLoginStatus(message = '', stateAttr = '') {
@@ -1641,6 +1678,7 @@
       let dashboardDataPromise = null;
 
       const statusClearTimers = new WeakMap();
+      let toastTimerId = null;
 
       function stopDashboardAutoRefresh() {
         if (autoRefreshTimerId) {
@@ -2047,6 +2085,39 @@
         statusClearTimers.set(form, timer);
       }
 
+      function showDashboardToast(message, stateAttr = 'success', duration = 4000) {
+        if (!dashboardToast) {
+          return;
+        }
+
+        if (toastTimerId) {
+          clearTimeout(toastTimerId);
+          toastTimerId = null;
+        }
+
+        if (!message) {
+          dashboardToast.textContent = '';
+          dashboardToast.hidden = true;
+          delete dashboardToast.dataset.state;
+          return;
+        }
+
+        dashboardToast.textContent = message;
+        if (stateAttr) {
+          dashboardToast.dataset.state = stateAttr;
+        } else {
+          delete dashboardToast.dataset.state;
+        }
+        dashboardToast.hidden = false;
+
+        toastTimerId = setTimeout(() => {
+          dashboardToast.textContent = '';
+          dashboardToast.hidden = true;
+          delete dashboardToast.dataset.state;
+          toastTimerId = null;
+        }, duration);
+      }
+
       function getFormPayload(form) {
         const payload = {};
         form.querySelectorAll('[name]').forEach((input) => {
@@ -2391,8 +2462,27 @@
 
       function renderSubscribers() {
         closeSubscriberActionMenu();
+        if (plexStatusNote) {
+          plexStatusNote.textContent = '';
+          plexStatusNote.hidden = true;
+          delete plexStatusNote.dataset.state;
+          const plexState = state.plex;
+          if (plexState) {
+            if (!plexState.configured) {
+              plexStatusNote.textContent =
+                'Configure Plex settings to send invites from this dashboard.';
+              plexStatusNote.hidden = false;
+            } else if (plexState.error) {
+              plexStatusNote.textContent = `Unable to refresh Plex members: ${plexState.error}`;
+              plexStatusNote.dataset.state = 'error';
+              plexStatusNote.hidden = false;
+            }
+          }
+        }
+
+        const donors = Array.isArray(state.donors) ? state.donors : [];
         subscribersTable.innerHTML = '';
-        if (state.donors.length === 0) {
+        if (donors.length === 0) {
           const row = document.createElement('tr');
           const cell = document.createElement('td');
           cell.colSpan = 5;
@@ -2404,7 +2494,8 @@
         }
 
         const template = document.getElementById('subscriber-row');
-        state.donors.forEach((donor) => {
+        const plexState = state.plex;
+        donors.forEach((donor) => {
           const clone = template.content.cloneNode(true);
           const row = clone.querySelector('tr');
           row.dataset.id = donor.id;
@@ -2469,6 +2560,19 @@
 
           const invites = Array.isArray(donor.invites) ? donor.invites : [];
           const inviteParts = [];
+          if (donor.plexShareState === 'shared') {
+            inviteParts.push(
+              '<span class="badge badge-visited" title="This subscriber already has Plex access.">Plex shared</span>'
+            );
+          } else if (donor.plexShareState === 'pending') {
+            inviteParts.push(
+              '<span class="badge badge-note" title="A Plex invite is pending acceptance.">Plex invite pending</span>'
+            );
+          } else if (donor.needsPlexInvite) {
+            inviteParts.push(
+              '<span class="badge badge-revoked" title="Send a Plex invite to grant access.">Needs Plex invite</span>'
+            );
+          }
           if (invites.length > 0) {
             const invite = invites[0];
             if (invite.plexInviteUrl) {
@@ -2517,11 +2621,23 @@
           const hasShareUrl = Boolean(shareUrl);
 
           if (inviteButton) {
-            const hasEmail = Boolean(donor.email);
-            inviteButton.disabled = !hasEmail;
-            inviteButton.title = hasEmail
-              ? 'Generate a new Plex invite'
-              : 'Add an email address to generate an invite';
+            const canInvite = Boolean(donor.needsPlexInvite);
+            inviteButton.disabled = !canInvite;
+            let inviteTitle = '';
+            if (!plexState || plexState.configured === false) {
+              inviteTitle = 'Configure Plex settings to send invites.';
+            } else if (!donor.email) {
+              inviteTitle = 'Add an email address to send a Plex invite.';
+            } else if (donor.plexShared) {
+              inviteTitle = 'Subscriber already has Plex access.';
+            } else if (donor.plexPending) {
+              inviteTitle = 'A Plex invite has already been sent and is pending acceptance.';
+            } else if (canInvite) {
+              inviteTitle = 'Send a Plex invite to this subscriber.';
+            } else {
+              inviteTitle = 'Plex invite is not available for this subscriber right now.';
+            }
+            inviteButton.title = inviteTitle;
           }
 
           if (shareButton) {
@@ -2699,9 +2815,11 @@
                 })
               : [];
             state.donors = donorsFromApi;
+            state.plex = donorsResponse.plex || null;
           } catch (err) {
             console.error(err);
             state.donors = [];
+            state.plex = null;
           }
           try {
             const eventsResponse = await api('/api/admin/events');
@@ -3265,7 +3383,30 @@
         let requiresReload = true;
         try {
           if (action === 'invite') {
-            await api(`/api/admin/subscribers/${donorId}/invite`, { method: 'POST' });
+            requiresReload = false;
+            const response = await api(`/api/admin/subscribers/${donorId}/invite`, {
+              method: 'POST',
+            });
+            if (response && response.plex) {
+              state.plex = response.plex;
+            }
+            if (response && response.donor) {
+              const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+              const index = donors.findIndex(
+                (item) => String(item.id) === String(response.donor.id)
+              );
+              if (index !== -1) {
+                donors[index] = { ...donors[index], ...response.donor };
+              } else {
+                donors.push(response.donor);
+              }
+              state.donors = donors;
+            } else {
+              requiresReload = true;
+            }
+            const successMessage =
+              (response && response.message) || 'Plex invite created successfully.';
+            showDashboardToast(successMessage, 'success');
           } else if (action === 'share' || action === 'share-generate') {
             const regenerate = action === 'share-generate' ? true : event.shiftKey;
             const options = { method: 'POST' };
@@ -3352,7 +3493,8 @@
             render();
           }
         } catch (err) {
-          alert(err.message);
+          console.error(err);
+          showDashboardToast(err.message || 'Action failed', 'error', 6000);
         } finally {
           button.disabled = false;
         }
