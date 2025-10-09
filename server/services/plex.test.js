@@ -65,6 +65,11 @@ test('plexService.createInvite posts to Plex API', async () => {
       calls[0].options.headers['Content-Type'],
       'application/json'
     );
+    assert.equal(
+      calls[0].options.headers['X-Plex-Client-Identifier'],
+      'plex-donate-server-uuid'
+    );
+    assert.equal(calls[0].options.headers['X-Plex-Token'], 'token123');
     const payload = JSON.parse(calls[0].options.body);
     assert.deepEqual(payload, {
       email: 'friend@example.com',
@@ -228,6 +233,11 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       'https://plex.tv/api/servers/server-uuid/shared_servers?X-Plex-Token=token123'
     );
     assert.equal(calls[0].options.method, 'GET');
+    assert.equal(
+      calls[0].options.headers['X-Plex-Client-Identifier'],
+      'plex-donate-server-uuid'
+    );
+    assert.equal(calls[0].options.headers['X-Plex-Token'], 'token123');
     assert.equal(
       calls[1].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
