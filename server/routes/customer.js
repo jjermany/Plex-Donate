@@ -1,9 +1,12 @@
 const express = require('express');
+const { nanoid } = require('nanoid');
 const {
   getDonorById,
   getLatestActiveInviteForDonor,
   getLatestInviteForDonor,
   createInvite: createInviteRecord,
+  createProspect,
+  createOrUpdateShareLink,
   logEvent,
   updateDonorContact,
   getDonorAuthByEmail,
@@ -75,6 +78,75 @@ router.use((req, res, next) => {
 
   next();
 });
+
+function resolvePublicBaseUrl(req) {
+  let configured = '';
+  try {
+    const appSettings = settingsStore.getAppSettings();
+    configured =
+      appSettings && appSettings.publicBaseUrl
+        ? String(appSettings.publicBaseUrl).trim()
+        : '';
+  } catch (err) {
+    configured = '';
+  }
+
+  if (configured && /^https?:\/\//i.test(configured)) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+}
+
+function buildShareInviteDetails(shareInvite, origin) {
+  if (!shareInvite) {
+    return null;
+  }
+
+  const details = {
+    id: shareInvite.id,
+    token: shareInvite.token,
+    createdAt: shareInvite.createdAt || null,
+    lastUsedAt: shareInvite.lastUsedAt || null,
+    expiresAt: shareInvite.expiresAt || null,
+    usedAt: shareInvite.usedAt || null,
+  };
+
+  if (origin) {
+    details.url = `${origin}/share/${shareInvite.token}`;
+  }
+
+  return details;
+}
+
+function isShareInviteExpired(shareInvite) {
+  if (!shareInvite || !shareInvite.expiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(shareInvite.expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    return false;
+  }
+
+  return Date.now() >= expiresAtMs;
+}
+
+function isShareInviteUsed(shareInvite) {
+  if (!shareInvite) {
+    return false;
+  }
+  if (!shareInvite.usedAt) {
+    return false;
+  }
+
+  const usedAtMs = Date.parse(shareInvite.usedAt);
+  if (!Number.isFinite(usedAtMs)) {
+    return Boolean(shareInvite.usedAt);
+  }
+
+  return true;
+}
 
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
@@ -971,11 +1043,18 @@ router.post(
       latestInvite,
       inviteLimitReached,
       nextInviteAvailableAt,
+      shareInvite,
     } = getInviteState(donor.id);
-    let invite = activeInviteFromState;
+    let invite = activeInviteFromState || latestInvite || null;
+    const origin = resolvePublicBaseUrl(req);
+    const currentShareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+    const shareInviteReusable =
+      shareInvite &&
+      !isShareInviteUsed(shareInvite) &&
+      !isShareInviteExpired(shareInvite);
     const canReuseInvite =
       invite &&
-      invite.wizarrInviteUrl &&
+      shareInviteReusable &&
       !invite.revokedAt &&
       invite.recipientEmail &&
       invite.recipientEmail.toLowerCase() === requestedEmail.toLowerCase();
@@ -1016,12 +1095,23 @@ router.post(
       logEvent('invite.customer.reused', {
         donorId: donor.id,
         inviteId: invite.id,
+        shareInviteId: shareInvite ? shareInvite.id : null,
       });
       const pendingPlexLink = getPendingPlexLink(req, activeDonor);
       req.customer.donor = activeDonor;
+      const invitePayload = invite
+        ? {
+            ...invite,
+            wizarrInviteUrl:
+              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && currentShareInviteDetails) {
+        invitePayload.shareLink = currentShareInviteDetails;
+      }
       const response = buildDashboardResponse({
         donor: activeDonor,
-        invite,
+        invite: invitePayload,
         pendingPlexLink,
         inviteLimitReached: true,
         nextInviteAvailableAt,
@@ -1035,9 +1125,19 @@ router.post(
     if (inviteLimitReached) {
       const pendingPlexLink = getPendingPlexLink(req, activeDonor);
       req.customer.donor = activeDonor;
+      const invitePayload = invite
+        ? {
+            ...invite,
+            wizarrInviteUrl:
+              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && currentShareInviteDetails) {
+        invitePayload.shareLink = currentShareInviteDetails;
+      }
       const payload = buildDashboardResponse({
         donor: activeDonor,
-        invite: invite || latestInvite || null,
+        invite: invitePayload,
         pendingPlexLink,
         inviteLimitReached: true,
         nextInviteAvailableAt,
@@ -1065,34 +1165,20 @@ router.post(
     }
     const note = providedNote || noteParts.join(' ');
 
-    let inviteData;
-    try {
-      inviteData = await wizarrService.createInvite({
-        email: requestedEmail,
-        note,
-        expiresInDays:
-          req.body && Number.isFinite(Number(req.body.expiresInDays))
-            ? Number(req.body.expiresInDays)
-            : undefined,
-        extraFields: {
-          plex_account_id: activeDonor.plexAccountId || undefined,
-          plexAccountId: activeDonor.plexAccountId || undefined,
-          plex_email: activeDonor.plexEmail || undefined,
-          plexEmail: activeDonor.plexEmail || undefined,
-        },
-      });
-    } catch (err) {
-      logger.warn('Failed to create invite via customer dashboard', err.message);
-      return res.status(500).json({
-        error: 'Failed to create Wizarr invite.',
-        details: err.message,
-      });
-    }
-
+    const prospectRecord = createProspect({
+      email: requestedEmail,
+      name: requestedName,
+      note,
+    });
+    const shareInviteRecord = createOrUpdateShareLink({
+      prospectId: prospectRecord.id,
+      token: nanoid(36),
+    });
+    const shareInviteDetails = buildShareInviteDetails(shareInviteRecord, origin);
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
-      code: inviteData.inviteCode,
-      url: inviteData.inviteUrl,
+      code: shareInviteRecord.token,
+      url: shareInviteDetails ? shareInviteDetails.url : '',
       recipientEmail: requestedEmail,
       note,
       plexAccountId: activeDonor.plexAccountId,
@@ -1102,15 +1188,23 @@ router.post(
     logEvent('invite.customer.generated', {
       donorId: donor.id,
       inviteId: inviteRecord.id,
+      shareInviteId: shareInviteRecord.id,
     });
 
     const pendingPlexLink = getPendingPlexLink(req, activeDonor);
     req.customer.donor = activeDonor;
     const { nextInviteAvailableAt: updatedNextInviteAvailableAt } =
       evaluateInviteCooldown(inviteRecord);
+    const invitePayload = {
+      ...inviteRecord,
+      wizarrInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+    };
+    if (shareInviteDetails) {
+      invitePayload.shareLink = shareInviteDetails;
+    }
     const response = buildDashboardResponse({
       donor: activeDonor,
-      invite: inviteRecord,
+      invite: invitePayload,
       pendingPlexLink,
       inviteLimitReached: true,
       nextInviteAvailableAt: updatedNextInviteAvailableAt,

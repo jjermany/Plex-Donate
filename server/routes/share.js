@@ -1,4 +1,5 @@
 const express = require('express');
+const { nanoid } = require('nanoid');
 const {
   getShareLinkByToken,
   getDonorById,
@@ -7,6 +8,8 @@ const {
   getLatestActiveInviteForDonor,
   getLatestInviteForDonor,
   createInvite: createInviteRecord,
+  createProspect,
+  createOrUpdateShareLink,
   markShareLinkUsed,
   logEvent,
   updateDonorContact,
@@ -21,7 +24,6 @@ const {
   setDonorAccessExpirationBySubscription,
 } = require('../db');
 const settingsStore = require('../state/settings');
-const wizarrService = require('../services/wizarr');
 const logger = require('../utils/logger');
 const { hashPassword, isPasswordStrong } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
@@ -46,6 +48,75 @@ function asyncHandler(handler) {
 }
 
 router.use(express.json());
+
+function resolvePublicBaseUrl(req) {
+  let configured = '';
+  try {
+    const appSettings = settingsStore.getAppSettings();
+    configured =
+      appSettings && appSettings.publicBaseUrl
+        ? String(appSettings.publicBaseUrl).trim()
+        : '';
+  } catch (err) {
+    configured = '';
+  }
+
+  if (configured && /^https?:\/\//i.test(configured)) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
+}
+
+function buildShareInviteDetails(shareInvite, origin) {
+  if (!shareInvite) {
+    return null;
+  }
+
+  const details = {
+    id: shareInvite.id,
+    token: shareInvite.token,
+    createdAt: shareInvite.createdAt || null,
+    lastUsedAt: shareInvite.lastUsedAt || null,
+    expiresAt: shareInvite.expiresAt || null,
+    usedAt: shareInvite.usedAt || null,
+  };
+
+  if (origin) {
+    details.url = `${origin}/share/${shareInvite.token}`;
+  }
+
+  return details;
+}
+
+function isShareInviteExpired(shareInvite) {
+  if (!shareInvite || !shareInvite.expiresAt) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(shareInvite.expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    return false;
+  }
+
+  return Date.now() >= expiresAtMs;
+}
+
+function isShareInviteUsed(shareInvite) {
+  if (!shareInvite) {
+    return false;
+  }
+  if (!shareInvite.usedAt) {
+    return false;
+  }
+
+  const usedAtMs = Date.parse(shareInvite.usedAt);
+  if (!Number.isFinite(usedAtMs)) {
+    return Boolean(shareInvite.usedAt);
+  }
+
+  return true;
+}
 
 function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
@@ -105,12 +176,16 @@ function getInviteState(donorId) {
       ? Boolean(activeInvite)
       : cooldownActive
     : false;
+  const shareInviteLink = mostRecentInvite && mostRecentInvite.wizarrInviteCode
+    ? getShareLinkByToken(mostRecentInvite.wizarrInviteCode)
+    : null;
 
   return {
     activeInvite: activeInvite || null,
     latestInvite: mostRecentInvite || null,
     inviteLimitReached,
     nextInviteAvailableAt,
+    shareInvite: shareInviteLink || null,
   };
 }
 
@@ -138,6 +213,7 @@ function buildShareResponse({
   prospect,
   inviteLimitReached = Boolean(invite),
   nextInviteAvailableAt = null,
+  shareInvite = null,
 }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
@@ -194,6 +270,7 @@ function buildShareResponse({
         : typeof nextInviteAvailableAt === 'string'
         ? nextInviteAvailableAt
         : null,
+    shareInvite: shareInvite ? { ...shareInvite } : null,
   };
 }
 
@@ -302,17 +379,36 @@ router.get(
     }
 
     if (donor) {
-      const { activeInvite: invite, inviteLimitReached, nextInviteAvailableAt } =
-        getInviteState(donor.id);
+      const {
+        activeInvite,
+        latestInvite,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+        shareInvite,
+      } = getInviteState(donor.id);
+      const origin = resolvePublicBaseUrl(req);
+      const inviteForResponse = activeInvite || latestInvite || null;
+      const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+      const invitePayload = inviteForResponse
+        ? {
+            ...inviteForResponse,
+            wizarrInviteUrl:
+              shareInviteDetails?.url || inviteForResponse.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && shareInviteDetails) {
+        invitePayload.shareLink = shareInviteDetails;
+      }
 
       return res.json(
         buildShareResponse({
           shareLink,
           donor,
-          invite,
+          invite: invitePayload,
           prospect: null,
           inviteLimitReached,
           nextInviteAvailableAt,
+          shareInvite: shareInviteDetails,
         })
       );
     }
@@ -388,11 +484,18 @@ router.post(
       latestInvite,
       inviteLimitReached,
       nextInviteAvailableAt,
+      shareInvite,
     } = getInviteState(donor.id);
-    let invite = inviteFromState;
+    let invite = inviteFromState || latestInvite || null;
+    const origin = resolvePublicBaseUrl(req);
+    const currentShareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+    const shareInviteReusable =
+      shareInvite &&
+      !isShareInviteUsed(shareInvite) &&
+      !isShareInviteExpired(shareInvite);
     const canReuseInvite =
       invite &&
-      invite.wizarrInviteUrl &&
+      shareInviteReusable &&
       !invite.revokedAt &&
       invite.recipientEmail &&
       invite.recipientEmail.toLowerCase() === requestedEmail.toLowerCase();
@@ -453,18 +556,28 @@ router.post(
           plexEmail: activeDonor.plexEmail,
         });
       }
-      const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
       logEvent('invite.share.reused', {
         donorId: donor.id,
         inviteId: invite.id,
-        shareLinkId: updatedLink.id,
+        shareInviteId: shareInvite ? shareInvite.id : null,
       });
+      const invitePayload = invite
+        ? {
+            ...invite,
+            wizarrInviteUrl:
+              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && currentShareInviteDetails) {
+        invitePayload.shareLink = currentShareInviteDetails;
+      }
       const response = buildShareResponse({
-        shareLink: updatedLink,
+        shareLink,
         donor: activeDonor,
-        invite,
+        invite: invitePayload,
         inviteLimitReached: true,
         nextInviteAvailableAt,
+        shareInvite: currentShareInviteDetails,
       });
       if (warnings.length > 0) {
         response.warnings = warnings;
@@ -473,13 +586,24 @@ router.post(
     }
 
     if (inviteLimitReached) {
+      const invitePayload = invite
+        ? {
+            ...invite,
+            wizarrInviteUrl:
+              currentShareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && currentShareInviteDetails) {
+        invitePayload.shareLink = currentShareInviteDetails;
+      }
       const payload = buildShareResponse({
         shareLink,
         donor: activeDonor,
-        invite: invite || latestInvite || null,
+        invite: invitePayload,
         prospect: null,
         inviteLimitReached: true,
         nextInviteAvailableAt,
+        shareInvite: currentShareInviteDetails,
       });
       if (warnings.length > 0) {
         payload.warnings = warnings;
@@ -491,56 +615,52 @@ router.post(
       });
     }
 
-    let inviteData;
-    try {
-      inviteData = await wizarrService.createInvite({
-        email: requestedEmail,
-        note,
-        expiresInDays:
-          req.body && Number.isFinite(Number(req.body.expiresInDays))
-            ? Number(req.body.expiresInDays)
-            : undefined,
-        extraFields: {
-          plex_account_id: activeDonor.plexAccountId || undefined,
-          plexAccountId: activeDonor.plexAccountId || undefined,
-          plex_email: activeDonor.plexEmail || undefined,
-          plexEmail: activeDonor.plexEmail || undefined,
-        },
-      });
-    } catch (err) {
-      logger.warn('Failed to create invite via share link', err.message);
-      return res
-        .status(500)
-        .json({ error: 'Failed to create Wizarr invite', details: err.message });
-    }
-
+    const prospectRecord = createProspect({
+      email: requestedEmail,
+      name: requestedName,
+      note,
+    });
+    const shareInviteRecord = createOrUpdateShareLink({
+      prospectId: prospectRecord.id,
+      token: nanoid(36),
+    });
+    const shareInviteDetails = buildShareInviteDetails(
+      shareInviteRecord,
+      origin
+    );
     const inviteRecord = createInviteRecord({
       donorId: donor.id,
-      code: inviteData.inviteCode,
-      url: inviteData.inviteUrl,
+      code: shareInviteRecord.token,
+      url: shareInviteDetails ? shareInviteDetails.url : '',
       recipientEmail: requestedEmail,
       note,
       plexAccountId: activeDonor.plexAccountId,
       plexEmail: activeDonor.plexEmail,
     });
 
-    const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
-
     logEvent('invite.share.generated', {
       donorId: donor.id,
       inviteId: inviteRecord.id,
-      shareLinkId: updatedLink.id,
+      shareInviteId: shareInviteRecord.id,
     });
 
     const { nextInviteAvailableAt: updatedNextInviteAvailableAt } =
       evaluateInviteCooldown(inviteRecord);
+    const invitePayload = {
+      ...inviteRecord,
+      wizarrInviteUrl: shareInviteDetails ? shareInviteDetails.url : '',
+    };
+    if (shareInviteDetails) {
+      invitePayload.shareLink = shareInviteDetails;
+    }
     const response = buildShareResponse({
-      shareLink: updatedLink,
+      shareLink,
       donor: activeDonor,
-      invite: inviteRecord,
+      invite: invitePayload,
       prospect: null,
       inviteLimitReached: true,
       nextInviteAvailableAt: updatedNextInviteAvailableAt,
+      shareInvite: shareInviteDetails,
     });
     if (warnings.length > 0) {
       response.warnings = warnings;
@@ -791,7 +911,20 @@ router.post(
         activeInvite: invite,
         inviteLimitReached,
         nextInviteAvailableAt,
+        shareInvite,
       } = getInviteState(activeDonor.id);
+      const origin = resolvePublicBaseUrl(req);
+      const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+      const invitePayload = invite
+        ? {
+            ...invite,
+            wizarrInviteUrl:
+              shareInviteDetails?.url || invite.wizarrInviteUrl || '',
+          }
+        : null;
+      if (invitePayload && shareInviteDetails) {
+        invitePayload.shareLink = shareInviteDetails;
+      }
 
       logEvent('share.account.password_set', {
         donorId: activeDonor.id,
@@ -802,10 +935,11 @@ router.post(
         buildShareResponse({
           shareLink: updatedLink,
           donor: activeDonor,
-          invite,
+          invite: invitePayload,
           prospect: null,
           inviteLimitReached,
           nextInviteAvailableAt,
+          shareInvite: shareInviteDetails,
         })
       );
     }
@@ -886,7 +1020,20 @@ router.post(
       activeInvite: invite,
       inviteLimitReached,
       nextInviteAvailableAt,
+      shareInvite,
     } = getInviteState(activeDonor.id);
+    const origin = resolvePublicBaseUrl(req);
+    const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+    const invitePayload = invite
+      ? {
+          ...invite,
+          wizarrInviteUrl:
+            shareInviteDetails?.url || invite.wizarrInviteUrl || '',
+        }
+      : null;
+    if (invitePayload && shareInviteDetails) {
+      invitePayload.shareLink = shareInviteDetails;
+    }
 
     if (prospect) {
       markProspectConverted(prospect.id, activeDonor.id);
@@ -902,10 +1049,11 @@ router.post(
       buildShareResponse({
         shareLink: updatedLink,
         donor: activeDonor,
-        invite,
+        invite: invitePayload,
         prospect: null,
         inviteLimitReached,
         nextInviteAvailableAt,
+        shareInvite: shareInviteDetails,
       })
     );
   })
