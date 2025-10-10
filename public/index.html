@@ -1389,18 +1389,6 @@
                 Plex token
                 <input name="token" type="password" autocomplete="new-password" />
               </label>
-              <label>
-                Server UUID
-                <input
-                  name="serverIdentifier"
-                  type="text"
-                  placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                />
-                <span class="muted-text subtle-text">
-                  Enter your Plex machine identifier; Plex Donate will resolve the numeric
-                  server ID automatically.
-                </span>
-              </label>
               <div class="library-selector" data-library-picker>
                 <label class="library-selector-label">Library access</label>
                 <input
@@ -2884,13 +2872,9 @@
         if (!settings || !settings.plex) {
           return null;
         }
-        const { baseUrl, token, serverIdentifier } = settings.plex;
+        const { baseUrl, token } = settings.plex;
         const normalize = (value) => (value == null ? '' : String(value));
-        return [
-          normalize(baseUrl),
-          normalize(token),
-          normalize(serverIdentifier),
-        ].join('::');
+        return [normalize(baseUrl), normalize(token)].join('::');
       }
 
       async function loadSettings() {
