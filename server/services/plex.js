@@ -432,6 +432,56 @@ function parseServerListPayload(payload) {
   return parseServerListFromXml(trimmed);
 }
 
+function findServerMatch(servers, normalizedIdentifier) {
+  if (!Array.isArray(servers) || !servers.length) {
+    return null;
+  }
+
+  const matches = (value) =>
+    typeof value === 'string' && value.trim().toLowerCase() === normalizedIdentifier;
+
+  for (const server of servers) {
+    if (!server || typeof server !== 'object') {
+      continue;
+    }
+    const candidates = [
+      server.machineIdentifier,
+      server.clientIdentifier,
+      server.id != null ? String(server.id) : null,
+      server.uuid,
+    ];
+
+    if (candidates.some(matches)) {
+      return server;
+    }
+  }
+
+  return null;
+}
+
+function summarizeServerIdentifiers(servers, limit = 10) {
+  if (!Array.isArray(servers) || !servers.length) {
+    return [];
+  }
+
+  return servers.slice(0, limit).reduce((acc, server) => {
+    if (!server || typeof server !== 'object') {
+      return acc;
+    }
+
+    acc.push({
+      name: server.name || server.friendlyName || server.device || 'unknown',
+      machineIdentifier: server.machineIdentifier || null,
+      clientIdentifier: server.clientIdentifier || null,
+      id: server.id || null,
+      uuid: server.uuid || null,
+      provides: server.provides || null,
+    });
+
+    return acc;
+  }, []);
+}
+
 async function resolveServerId(plex) {
   if (!plex || !plex.serverIdentifier) {
     throw new Error('Plex server UUID must be configured to create invites');
@@ -453,6 +503,7 @@ async function resolveServerId(plex) {
       'X-Plex-Token': plex.token,
     });
     delete headers['Content-Type'];
+    headers.Accept = 'application/json';
 
     response = await fetch(buildPlexTvUrl('/api/servers', plex), {
       headers,
@@ -477,55 +528,48 @@ async function resolveServerId(plex) {
   const payload = await response.text();
   const servers = parseServerListPayload(payload);
   const normalizedIdentifier = machineIdentifier.toLowerCase();
-  const machineMatch = servers.find((server) => {
-    if (!server) {
-      return false;
-    }
-    const candidate = server.machineIdentifier
-      ? String(server.machineIdentifier).trim()
-      : '';
-    if (!candidate) {
-      return false;
-    }
-    return candidate.toLowerCase() === normalizedIdentifier;
-  });
+  const serverCandidates = Array.isArray(servers)
+    ? servers.filter((server) => {
+        if (!server || typeof server !== 'object') {
+          return false;
+        }
+        const provides = (server.provides && String(server.provides)) || '';
+        const normalizedProvides = provides.toLowerCase();
+        return (
+          normalizedProvides.includes('server') ||
+          normalizedProvides.includes('plex media server')
+        );
+      })
+    : [];
 
-  let serverId = null;
-  if (machineMatch && machineMatch.id !== undefined && machineMatch.id !== null) {
-    serverId = String(machineMatch.id).trim();
-  }
+  const match =
+    findServerMatch(serverCandidates, normalizedIdentifier) ||
+    findServerMatch(servers, normalizedIdentifier);
 
-  if (!serverId) {
-    const idMatch = servers.find((server) => {
-      if (!server || server.id === undefined || server.id === null) {
-        return false;
-      }
-      const candidate = String(server.id).trim();
-      if (!candidate) {
-        return false;
-      }
-      return candidate.toLowerCase() === normalizedIdentifier;
-    });
-
-    if (idMatch) {
-      const candidate = String(idMatch.id).trim();
-      if (candidate) {
-        serverId = candidate;
-      }
-    }
-  }
-
-  if (!serverId) {
+  if (!match) {
+    const sample = summarizeServerIdentifiers(servers);
     throw new Error(
-      'Unable to resolve Plex server id for the configured machine identifier.'
+      `Unable to resolve Plex server id for the configured machine identifier "${machineIdentifier}". Visible servers: ${JSON.stringify(
+        sample
+      )}`
+    );
+  }
+
+  const resolvedId = String(match.id || match.server_id || match.serverId || '').trim();
+  if (!resolvedId) {
+    const sample = summarizeServerIdentifiers([match]);
+    throw new Error(
+      `Matched server but no numeric "id" field was found to use with the invite API. Matched: ${JSON.stringify(
+        sample
+      )}`
     );
   }
 
   if (cacheKey) {
-    serverIdCache.set(cacheKey, serverId);
+    serverIdCache.set(cacheKey, resolvedId);
   }
 
-  return serverId;
+  return resolvedId;
 }
 
 async function buildSharedServersPath(plex) {
