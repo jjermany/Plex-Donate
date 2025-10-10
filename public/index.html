@@ -2354,7 +2354,10 @@
         const availableCount = Array.isArray(state.plexLibraries)
           ? state.plexLibraries.length
           : 0;
-        const disabled = availableCount === 0;
+        if (Array.isArray(state.plexLibraries)) {
+          hasCachedPlexLibraries = availableCount > 0;
+        }
+        const disabled = availableCount === 0 && !hasCachedPlexLibraries;
         plexLibraryToggle.disabled = disabled;
         if (disabled) {
           plexLibraryToggle.setAttribute('aria-expanded', 'false');
@@ -2545,6 +2548,7 @@
 
       let plexLibraryDropdownOpen = false;
       let plexLibraryOptionsDirty = false;
+      let hasCachedPlexLibraries = false;
 
       function closePlexLibraryDropdown(options = {}) {
         if (!plexLibraryDropdown) {
@@ -2902,14 +2906,34 @@
         }
       }
 
+      function getPlexCredentialSignature(settings) {
+        if (!settings || !settings.plex) {
+          return null;
+        }
+        const { baseUrl, token, serverIdentifier } = settings.plex;
+        const normalize = (value) => (value == null ? '' : String(value));
+        return [
+          normalize(baseUrl),
+          normalize(token),
+          normalize(serverIdentifier),
+        ].join('::');
+      }
+
       async function loadSettings() {
         if (!settingsPanel) {
           return;
         }
         try {
+          const previousSignature = getPlexCredentialSignature(state.settings);
           const response = await api('/api/admin/settings');
-          state.settings = response.settings || {};
-          state.plexLibraries = null;
+          const nextSettings = response.settings || {};
+          const nextSignature = getPlexCredentialSignature(nextSettings);
+          const credentialsChanged = previousSignature !== nextSignature;
+          state.settings = nextSettings;
+          if (credentialsChanged) {
+            state.plexLibraries = null;
+            hasCachedPlexLibraries = false;
+          }
           plexLibraryOptionsDirty = true;
           settingsForms.forEach((form) => setFormStatus(form, ''));
         } catch (err) {
@@ -3806,6 +3830,7 @@
                           : '',
                     }))
                     .filter((library) => library.id);
+                  hasCachedPlexLibraries = state.plexLibraries.length > 0;
                   plexLibraryOptionsDirty = true;
                 }
                 const preferredSelection =
