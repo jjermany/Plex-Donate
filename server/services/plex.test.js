@@ -72,15 +72,17 @@ test('plexService.createInvite posts to Plex API', async () => {
     assert.equal(calls[0].options.headers['X-Plex-Token'], 'token123');
     const payload = JSON.parse(calls[0].options.body);
     assert.deepEqual(payload, {
-      email: 'friend@example.com',
-      friendlyName: 'Friend Example',
-      server: { uuid: 'server-uuid' },
-      settings: {
-        allowSync: false,
-        allowCameraUpload: false,
-        allowChannels: false,
+      server_id: 'server-uuid',
+      shared_server: {
+        library_section_ids: ['1', '2'],
+        invited_email: 'friend@example.com',
+        friendly_name: 'Friend Example',
       },
-      libraries: [{ id: '1' }, { id: '2' }],
+      sharing_settings: {
+        allow_sync: '1',
+        allow_camera_upload: '0',
+        allow_channels: '1',
+      },
     });
 
     assert.equal(result.inviteId, 'INV-123');

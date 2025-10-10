@@ -71,6 +71,50 @@ function resetDatabase() {
   `);
 }
 
+function parseLibrarySectionIds(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => String(entry).trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  if (!value && value !== 0) {
+    return [];
+  }
+
+  return String(value)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function buildExpectedInviteRequest(payload, plexConfig) {
+  const sections = parseLibrarySectionIds(
+    Object.prototype.hasOwnProperty.call(payload, 'librarySectionIds')
+      ? payload.librarySectionIds
+      : plexConfig.librarySectionIds
+  );
+
+  const request = {
+    server_id: plexConfig.serverIdentifier,
+    shared_server: {
+      library_section_ids: sections,
+      invited_email: payload.email,
+    },
+    sharing_settings: {
+      allow_sync: plexConfig.allowSync ? '1' : '0',
+      allow_camera_upload: plexConfig.allowCameraUpload ? '1' : '0',
+      allow_channels: plexConfig.allowChannels ? '1' : '0',
+    },
+  };
+
+  if (payload.friendlyName) {
+    request.shared_server.friendly_name = payload.friendlyName;
+  }
+
+  return request;
+}
+
 class FetchAgent {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
@@ -342,9 +386,10 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
 
   const originalCreateInvite = plexService.createInvite;
   const originalListUsers = plexService.listUsers;
-  let createInvitePayload = null;
+  let createInviteRequest = null;
   plexService.createInvite = async (payload) => {
-    createInvitePayload = payload;
+    const plexConfig = settingsStore.getPlexSettings();
+    createInviteRequest = buildExpectedInviteRequest(payload, plexConfig);
     return {
       inviteId: 'plex-123',
       inviteUrl: 'https://plex.local/invite/plex-123',
@@ -368,8 +413,18 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.equal(body.invite.plexInviteId, 'plex-123');
   assert.ok(body.invite.inviteUrl);
   assert.ok(body.message.includes('Plex invite'));
-  assert.ok(createInvitePayload);
-  assert.equal(createInvitePayload.email, donor.email);
+  assert.ok(createInviteRequest);
+  assert.equal(createInviteRequest.server_id, 'server-456');
+  assert.deepEqual(createInviteRequest.shared_server, {
+    library_section_ids: ['3', '4'],
+    invited_email: donor.email,
+    friendly_name: donor.name,
+  });
+  assert.deepEqual(createInviteRequest.sharing_settings, {
+    allow_sync: '0',
+    allow_camera_upload: '0',
+    allow_channels: '0',
+  });
 
   const donors = listDonorsWithDetails();
   const updated = donors.find((item) => item.id === donor.id);
@@ -398,8 +453,9 @@ test('POST /api/admin/settings/plex/test-invite uses Plex invite helper', async 
 
   const originalCreateInvite = plexService.createInvite;
   let createInviteRequest = null;
-  plexService.createInvite = async (payload) => {
-    createInviteRequest = payload;
+  plexService.createInvite = async (payload, overrideConfig) => {
+    const plexConfig = overrideConfig || settingsStore.getPlexSettings();
+    createInviteRequest = buildExpectedInviteRequest(payload, plexConfig);
     return {
       inviteId: 'plex-test',
       inviteUrl: 'https://plex.local/invite/plex-test',
@@ -441,7 +497,17 @@ test('POST /api/admin/settings/plex/test-invite uses Plex invite helper', async 
   assert.equal(body.success, true);
   assert.ok(body.message.includes('Plex'));
   assert.ok(createInviteRequest);
-  assert.equal(createInviteRequest.email, 'tester@example.com');
+  assert.equal(createInviteRequest.server_id, 'server-789');
+  assert.deepEqual(createInviteRequest.shared_server, {
+    library_section_ids: ['5', '6'],
+    invited_email: 'tester@example.com',
+    friendly_name: 'Test Invite',
+  });
+  assert.deepEqual(createInviteRequest.sharing_settings, {
+    allow_sync: '0',
+    allow_camera_upload: '0',
+    allow_channels: '0',
+  });
   assert.ok(inviteEmailPayload);
   assert.equal(inviteEmailPayload.to, 'tester@example.com');
   assert.equal(inviteEmailPayload.inviteUrl, 'https://plex.local/invite/plex-test');
