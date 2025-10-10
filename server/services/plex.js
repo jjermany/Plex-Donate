@@ -1223,15 +1223,47 @@ function parseServerSectionsPayload(payload) {
     return [];
   }
 
-  const keys = new Set();
-  const pushKey = (value) => {
+  const ids = new Set();
+  const pushId = (value) => {
     if (value === undefined || value === null) {
       return;
     }
+
     const normalized = String(value).trim();
-    if (normalized) {
-      keys.add(normalized);
+    if (!normalized) {
+      return;
     }
+
+    if (/^\d+$/.test(normalized)) {
+      ids.add(normalized);
+      return;
+    }
+
+    const trimmed = normalized.split(/[?#]/)[0].replace(/\/+$/, '');
+    const match = trimmed.match(/(?:^|\/)(\d+)$/);
+    if (match && match[1]) {
+      ids.add(match[1]);
+    }
+  };
+
+  const pushSectionLike = (section) => {
+    if (!section) {
+      return;
+    }
+
+    if (typeof section === 'object') {
+      if (Object.prototype.hasOwnProperty.call(section, 'id')) {
+        pushId(section.id);
+      }
+
+      if (Object.prototype.hasOwnProperty.call(section, 'key')) {
+        pushId(section.key);
+      }
+
+      return;
+    }
+
+    pushId(section);
   };
 
   try {
@@ -1253,14 +1285,12 @@ function parseServerSectionsPayload(payload) {
         );
 
         sections.forEach((section) => {
-          if (section && typeof section === 'object') {
-            pushKey(section.key);
-          }
+          pushSectionLike(section);
         });
       });
 
-      if (keys.size) {
-        return Array.from(keys);
+      if (ids.size) {
+        return Array.from(ids);
       }
     }
   } catch (err) {
@@ -1272,14 +1302,17 @@ function parseServerSectionsPayload(payload) {
   while ((match = pattern.exec(payload))) {
     const tag = match[0];
     tag.replace(/([\w-]+)="([^"]*)"/g, (_, attribute, value) => {
-      if (String(attribute || '').toLowerCase() === 'key') {
-        pushKey(value);
+      const attr = String(attribute || '').toLowerCase();
+      if (attr === 'id') {
+        pushId(value);
+      } else if (attr === 'key') {
+        pushId(value);
       }
       return '';
     });
   }
 
-  return Array.from(keys);
+  return Array.from(ids);
 }
 
 async function fetchSectionKeysFromPlexServer(plex, descriptor) {
@@ -1316,14 +1349,14 @@ async function fetchSectionKeysFromPlexServer(plex, descriptor) {
   }
 
   const body = await response.text();
-  const sectionKeys = parseServerSectionsPayload(body);
-  if (!sectionKeys.length) {
+  const sectionIds = parseServerSectionsPayload(body);
+  if (!sectionIds.length) {
     throw new Error(
       'Plex did not return any library sections for the selected server; verify the server is reachable and published.'
     );
   }
 
-  return sectionKeys.map((key) => String(key));
+  return sectionIds.map((id) => String(id));
 }
 
 async function fetchLibrarySections(plex) {
