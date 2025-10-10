@@ -201,6 +201,155 @@ test('plexService.createInvite throws when Plex server id cannot be resolved', a
   );
 });
 
+test('getOrResolveServerIdentifier prefers /api/resources host match', async () => {
+  const calls = [];
+  await withMockedFetch(
+    async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              {
+                name: 'Primary PMS',
+                provides: 'server',
+                clientIdentifier: 'primary-server',
+                connections: [
+                  { uri: 'https://other.example:32400' },
+                  { uri: 'https://plex.example:32400' },
+                ],
+              },
+              {
+                name: 'Secondary PMS',
+                provides: 'server',
+                clientIdentifier: 'secondary-server',
+                connections: [{ uri: 'https://another.example:32400' }],
+              },
+            ]),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    async (plexService) => {
+      const identifier = await plexService.getOrResolveServerIdentifier({
+        baseUrl: 'https://plex.example:32400',
+        token: 'token123',
+      });
+
+      assert.equal(identifier, 'primary-server');
+      assert.equal(calls.length, 1);
+    }
+  );
+});
+
+test('getOrResolveServerIdentifier falls back to /api/servers when resources are ambiguous', async () => {
+  const calls = [];
+  await withMockedFetch(
+    async (url) => {
+      calls.push(url);
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              {
+                name: 'Primary PMS',
+                provides: 'server',
+                clientIdentifier: 'primary-server',
+                connections: [{ uri: 'https://other.example:32400' }],
+              },
+              {
+                name: 'Secondary PMS',
+                provides: 'server',
+                clientIdentifier: 'secondary-server',
+                connections: [{ uri: 'https://another.example:32400' }],
+              },
+            ]),
+        };
+      }
+
+      if (url.startsWith('https://plex.tv/api/servers')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Server: [{ machineIdentifier: 'fallback-server' }],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    async (plexService) => {
+      const identifier = await plexService.getOrResolveServerIdentifier({
+        baseUrl: 'https://plex.example:32400',
+        token: 'token123',
+      });
+
+      assert.equal(identifier, 'fallback-server');
+      assert.deepEqual(
+        calls.filter((url) => url.startsWith('https://plex.tv/api/')),
+        [
+          'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123',
+          'https://plex.tv/api/servers?X-Plex-Token=token123',
+        ]
+      );
+    }
+  );
+});
+
+test('getOrResolveServerIdentifier errors when multiple servers remain ambiguous', async () => {
+  await withMockedFetch(
+    async (url) => {
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              { provides: 'server', clientIdentifier: 'one' },
+              { provides: 'server', clientIdentifier: 'two' },
+            ]),
+        };
+      }
+
+      if (url.startsWith('https://plex.tv/api/servers')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Server: [
+                  { machineIdentifier: 'one' },
+                  { machineIdentifier: 'two' },
+                ],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    async (plexService) => {
+      await assert.rejects(
+        () =>
+          plexService.getOrResolveServerIdentifier({
+            token: 'token123',
+          }),
+        /Multiple Plex servers found/
+      );
+    }
+  );
+});
+
 test('plexService.createInvite throws when Plex omits invite id', async () => {
   await withMockedFetch(
     async (url) => {
@@ -454,7 +603,7 @@ test('plexService resolves numeric server identifiers using server id fallback',
     };
 
     const verifyResult = await plexService.verifyConnection(settings);
-    assert.equal(verifyResult.details.serverIdentifier, 12345);
+    assert.equal(verifyResult.details.serverIdentifier, '12345');
     assert.deepEqual(verifyResult.details.librarySectionIds, ['1', '2']);
     assert.equal(verifyResult.details.inviteEndpointAvailable, true);
     assert.deepEqual(verifyResult.libraries, [
