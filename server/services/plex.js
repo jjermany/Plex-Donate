@@ -1582,6 +1582,13 @@ async function createInvite(
   }
 
   const descriptor = await resolveServerDescriptor(plex);
+  const machineIdentifier =
+    descriptor.device?.clientIdentifier || descriptor.machineIdentifier || plex.serverIdentifier;
+
+  if (!machineIdentifier) {
+    throw new Error('Unable to determine Plex machine identifier for invites');
+  }
+
   const requestedSections = parseLibrarySectionIds(
     librarySectionIds !== undefined ? librarySectionIds : plex.librarySectionIds
   ).map((id) => String(id));
@@ -1607,8 +1614,7 @@ async function createInvite(
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
 
   const v2Body = {
-    machineIdentifier:
-      descriptor.device?.clientIdentifier || descriptor.machineIdentifier || plex.serverIdentifier,
+    machineIdentifier,
     librarySectionIds: finalSectionIds,
     invitedEmail: normalizedEmail,
     ...(normalizedFriendlyName ? { friendlyName: normalizedFriendlyName } : {}),
@@ -1621,10 +1627,7 @@ async function createInvite(
 
   const v2Url =
     `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
-    new URLSearchParams({
-      'X-Plex-Client-Identifier': getClientIdentifier(plex),
-      'X-Plex-Token': plex.token,
-    }).toString();
+    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
 
   let response;
   try {
@@ -1638,17 +1641,20 @@ async function createInvite(
   }
 
   if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
+    const details = await extractErrorMessage(response);
+    const suffix = details ? ` Details: ${details}` : '';
+    throw new Error(`Plex rejected the provided token.${suffix}`);
   }
 
   if (!response.ok) {
-    const bodyText = await response.text();
+    let bodyText = await response.text().catch(() => '');
     const looksNotFound =
       response.status === 404 ||
-      /code"\s*:\s*1002/i.test(bodyText) ||
+      /"code"\s*:\s*1002/.test(bodyText) ||
       /not\s*found/i.test(bodyText);
+
     const legacyPayload = {
-      server_id: descriptor.legacyNumericId || undefined,
+      server_id: descriptor.legacyNumericId ? String(descriptor.legacyNumericId) : undefined,
       shared_server: {
         library_section_ids: finalSectionIds,
         invited_email: normalizedEmail,
@@ -1674,38 +1680,65 @@ async function createInvite(
       } catch (err) {
         throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
       }
+
+      if (response.status === 401 || response.status === 403) {
+        const details = await extractErrorMessage(response);
+        const suffix = details ? ` Details: ${details}` : '';
+        throw new Error(`Plex rejected the provided token.${suffix}`);
+      }
+
+      if (!response.ok) {
+        bodyText = await response.text().catch(() => bodyText);
+      } else {
+        bodyText = '';
+      }
     }
 
     if ((!response || !response.ok) && looksNotFound) {
-      const machineId =
-        descriptor.device?.clientIdentifier || descriptor.machineIdentifier || plex.serverIdentifier;
+      const legacyByMachinePayload = {
+        ...legacyPayload,
+        server_id: undefined,
+      };
 
       try {
         response = await fetch(
-          buildPlexTvUrl(LEGACY_BY_MACHINEID_PATH(machineId), plex),
+          buildPlexTvUrl(LEGACY_BY_MACHINEID_PATH(machineIdentifier), plex),
           {
             method: 'POST',
             headers: sharedHeaders,
-            body: JSON.stringify(legacyPayload),
+            body: JSON.stringify(legacyByMachinePayload),
           }
         );
       } catch (err) {
         throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
       }
+
+      if (response.status === 401 || response.status === 403) {
+        const details = await extractErrorMessage(response);
+        const suffix = details ? ` Details: ${details}` : '';
+        throw new Error(`Plex rejected the provided token.${suffix}`);
+      }
+
+      if (!response.ok) {
+        bodyText = await response.text().catch(() => bodyText);
+      } else {
+        bodyText = '';
+      }
     }
 
     if (!response || !response.ok) {
-      const statusText = (response && response.statusText) || 'Error';
+      const statusText = response ? response.statusText || 'Error' : 'Error';
+      const suffix = bodyText ? `: ${bodyText}` : '';
       throw new Error(
-        `Plex invite creation failed with ${response ? response.status : '???'} (${statusText})${
-          bodyText ? `: ${bodyText}` : ''
-        }`
+        `Plex invite creation failed with ${response ? response.status : '???'} (${statusText})${suffix}`
       );
     }
   }
 
   if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
+    const details = await extractErrorMessage(response);
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(`Plex rejected the provided token${suffix}`);
   }
 
   if (!response.ok) {
@@ -1717,7 +1750,13 @@ async function createInvite(
     );
   }
 
-  const data = await response.json().catch(() => ({}));
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (err) {
+    data = {};
+  }
+
   const mapped = mapInviteResponse(data);
 
   if (!mapped.inviteId && !mapped.inviteUrl) {
