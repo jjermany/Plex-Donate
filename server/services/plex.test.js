@@ -378,6 +378,110 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
   });
 });
 
+test('plexService resolves numeric server identifiers using server id fallback', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/servers?')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Server: [{ id: 12345, machineIdentifier: 'unrelated-server-uuid' }],
+            },
+          }),
+      };
+    }
+    if (url.includes('/api/servers/12345/shared_servers')) {
+      if ((options.method || 'GET') === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          json: async () => ({
+            invitation: {
+              id: 'INV-456',
+              uri: 'https://plex.example/invite/INV-456',
+              status: 'pending',
+              created_at: '2024-01-01T00:00:00Z',
+              libraries: [{ id: 1, title: 'Movies' }],
+            },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: async () => ({ invitations: [] }),
+        text: async () => '',
+      };
+    }
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '/library/sections/1', title: 'Movies' },
+                { key: '/library/sections/2', title: 'TV Shows' },
+              ],
+            },
+          }),
+      };
+    }
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const settings = {
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 12345,
+      librarySectionIds: '1,2',
+      allowSync: true,
+      allowCameraUpload: false,
+      allowChannels: true,
+    };
+
+    const verifyResult = await plexService.verifyConnection(settings);
+    assert.equal(verifyResult.details.serverIdentifier, 12345);
+    assert.deepEqual(verifyResult.details.librarySectionIds, ['1', '2']);
+    assert.equal(verifyResult.details.inviteEndpointAvailable, true);
+    assert.deepEqual(verifyResult.libraries, [
+      { id: '1', title: 'Movies' },
+      { id: '2', title: 'TV Shows' },
+    ]);
+
+    const inviteResult = await plexService.createInvite(
+      {
+        email: 'friend@example.com',
+        friendlyName: 'Friend Example',
+      },
+      settings
+    );
+
+    assert.equal(inviteResult.inviteId, 'INV-456');
+    assert.equal(inviteResult.inviteUrl, 'https://plex.example/invite/INV-456');
+    assert.equal(inviteResult.status, 'pending');
+    assert.equal(inviteResult.invitedAt, '2024-01-01T00:00:00.000Z');
+    assert.deepEqual(inviteResult.sharedLibraries, [{ id: '1', title: 'Movies' }]);
+
+    const postCall = calls.find((call) => (call.options.method || 'GET') === 'POST');
+    assert(postCall, 'Expected a POST request to shared servers endpoint');
+    assert.equal(
+      postCall.url,
+      'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
+    );
+    const payload = JSON.parse(postCall.options.body);
+    assert.equal(payload.server_id, '12345');
+  });
+});
+
 test('plexService.verifyConnection falls back when shared server endpoint is missing', async () => {
   const calls = [];
   await withMockedFetch(async (url, options) => {

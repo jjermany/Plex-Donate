@@ -313,8 +313,12 @@ function normalizeServerEntry(entry) {
       ? entry.id
       : entry.serverID !== undefined && entry.serverID !== null
       ? entry.serverID
+      : entry.serverId !== undefined && entry.serverId !== null
+      ? entry.serverId
       : entry.server_id !== undefined && entry.server_id !== null
       ? entry.server_id
+      : entry.serverid !== undefined && entry.serverid !== null
+      ? entry.serverid
       : null;
 
   const machineIdentifierCandidate =
@@ -467,7 +471,8 @@ async function resolveServerId(plex) {
 
   const payload = await response.text();
   const servers = parseServerListPayload(payload);
-  const match = servers.find((server) => {
+  const normalizedIdentifier = machineIdentifier.toLowerCase();
+  const machineMatch = servers.find((server) => {
     if (!server) {
       return false;
     }
@@ -477,16 +482,31 @@ async function resolveServerId(plex) {
     if (!candidate) {
       return false;
     }
-    return candidate.toLowerCase() === machineIdentifier.toLowerCase();
+    return candidate.toLowerCase() === normalizedIdentifier;
   });
 
-  if (!match || !match.id) {
-    throw new Error(
-      'Unable to resolve Plex server id for the configured machine identifier.'
-    );
+  let serverId = null;
+  if (machineMatch && machineMatch.id !== undefined && machineMatch.id !== null) {
+    serverId = String(machineMatch.id).trim();
   }
 
-  const serverId = String(match.id).trim();
+  if (!serverId) {
+    const idMatch = servers.find((server) => {
+      if (!server || server.id === undefined || server.id === null) {
+        return false;
+      }
+      const candidate = String(server.id).trim();
+      if (!candidate) {
+        return false;
+      }
+      return candidate.toLowerCase() === normalizedIdentifier;
+    });
+
+    if (idMatch) {
+      serverId = machineIdentifier;
+    }
+  }
+
   if (!serverId) {
     throw new Error(
       'Unable to resolve Plex server id for the configured machine identifier.'
