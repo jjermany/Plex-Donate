@@ -64,7 +64,8 @@ Plex invites require the following values:
 
 - **Server URL**: the base URL used to reach your Plex server (e.g. `https://plex.example.com`).
 - **Plex token**: generate a long-lived token from Plex and paste it here.
-- **Server UUID**: the `machineIdentifier` for the Plex server that should share libraries.
+- **Server UUID**: the `machineIdentifier` for the Plex server that should share libraries. Plex Donate now resolves the numeric
+  server id automatically, so you can continue pasting the machine identifier from Plex.
 - **Library section IDs**: a comma-separated list of section IDs to share with donors.
 - **Allow sync/camera uploads/channels**: toggle the permissions that should be applied when creating an invite.
 
