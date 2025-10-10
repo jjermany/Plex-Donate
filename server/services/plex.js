@@ -326,7 +326,7 @@ function buildPlexTvUrl(pathname, plex) {
   return `${baseUrl}${separator}X-Plex-Token=${encodeURIComponent(plex.token)}`;
 }
 
-function normalizeServerEntry(entry) {
+function normalizeServerEntry(entry, defaults = {}) {
   if (!entry || typeof entry !== 'object') {
     return null;
   }
@@ -349,6 +349,7 @@ function normalizeServerEntry(entry) {
     entry.machine_identifier ||
     entry.machineID ||
     entry.machineid ||
+    entry.machine_id ||
     entry.uuid ||
     entry.clientIdentifier ||
     entry.clientidentifier ||
@@ -360,12 +361,46 @@ function normalizeServerEntry(entry) {
   const machineIdentifier = machineIdentifierCandidate
     ? String(machineIdentifierCandidate).trim()
     : null;
+  const clientIdentifier = entry.clientIdentifier
+    ? String(entry.clientIdentifier).trim()
+    : entry.clientidentifier
+    ? String(entry.clientidentifier).trim()
+    : entry.client_id
+    ? String(entry.client_id).trim()
+    : entry.clientID
+    ? String(entry.clientID).trim()
+    : null;
+  const uuid = entry.uuid ? String(entry.uuid).trim() : null;
+  const providesRaw =
+    entry.provides !== undefined && entry.provides !== null
+      ? entry.provides
+      : defaults.defaultProvides !== undefined
+      ? defaults.defaultProvides
+      : null;
+  const provides =
+    providesRaw !== null && providesRaw !== undefined
+      ? String(providesRaw).trim()
+      : null;
+  const nameCandidate =
+    entry.name ||
+    entry.friendlyName ||
+    entry.device ||
+    defaults.defaultName ||
+    null;
+  const name = nameCandidate ? String(nameCandidate).trim() : 'unknown';
 
-  if (!id && !machineIdentifier) {
+  if (!id && !machineIdentifier && !clientIdentifier && !uuid) {
     return null;
   }
 
-  return { id, machineIdentifier };
+  return {
+    id,
+    machineIdentifier,
+    clientIdentifier,
+    uuid,
+    provides,
+    name,
+  };
 }
 
 function flattenServerEntries(value) {
@@ -383,6 +418,12 @@ function flattenServerEntries(value) {
 }
 
 function parseServerListFromObject(data) {
+  if (Array.isArray(data)) {
+    return data
+      .map((entry) => normalizeServerEntry(entry, { defaultProvides: 'server' }))
+      .filter(Boolean);
+  }
+
   if (!data || typeof data !== 'object') {
     return [];
   }
@@ -405,11 +446,23 @@ function parseServerListFromObject(data) {
 
   if (!rawEntries.length) {
     return flattenServerEntries(container)
-      .map((entry) => normalizeServerEntry(entry))
+      .map((entry) => normalizeServerEntry(entry, { defaultProvides: 'server' }))
       .filter(Boolean);
   }
 
-  return rawEntries.map((entry) => normalizeServerEntry(entry)).filter(Boolean);
+  return rawEntries
+    .map((entry) => normalizeServerEntry(entry, { defaultProvides: 'server' }))
+    .filter(Boolean);
+}
+
+function extractXmlAttribute(tag, key) {
+  if (!tag) {
+    return null;
+  }
+
+  const pattern = new RegExp(`${key}="([^"]*)"`, 'i');
+  const match = pattern.exec(tag);
+  return match ? match[1] : null;
 }
 
 function parseServerListFromXml(payload) {
@@ -417,19 +470,62 @@ function parseServerListFromXml(payload) {
     return [];
   }
 
-  const servers = [];
-  const pattern = /<Server\b[^>]*>/gi;
+  const xml = String(payload);
+  const trimmed = xml.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const containerMatch = /<MediaContainer[\s\S]*?>([\s\S]*?)<\/MediaContainer>/i.exec(trimmed);
+  const body = containerMatch ? containerMatch[1] : trimmed;
+
+  const results = [];
+  const serverPattern = /<Server\b[^>]*\/?>(?:<\/Server>)?/gi;
   let match;
-  while ((match = pattern.exec(payload))) {
+
+  while ((match = serverPattern.exec(body))) {
+    const tag = match[0] || '';
+    const rawAttributes = tag
+      .replace(/^<Server\b/i, '')
+      .replace(/\/?>(?:\s*<\/Server>)?$/i, '');
     const attributes = {};
-    match[0].replace(/([\w-]+)="([^"]*)"/g, (_, key, value) => {
+
+    rawAttributes.replace(/([\w:-]+)="([^"]*)"/g, (_, key, value) => {
       attributes[key] = value;
       return '';
     });
-    servers.push(attributes);
+
+    if (attributes.id == null) {
+      const idValue = extractXmlAttribute(rawAttributes, 'id');
+      if (idValue != null) {
+        attributes.id = idValue;
+      }
+    }
+
+    if (attributes.machineIdentifier == null) {
+      const machine = extractXmlAttribute(rawAttributes, 'machineIdentifier');
+      if (machine != null) {
+        attributes.machineIdentifier = machine;
+      }
+    }
+
+    if (attributes.clientIdentifier == null) {
+      const client = extractXmlAttribute(rawAttributes, 'clientIdentifier');
+      if (client != null) {
+        attributes.clientIdentifier = client;
+      }
+    }
+
+    if (attributes.provides == null) {
+      attributes.provides = 'server';
+    }
+
+    results.push(attributes);
   }
 
-  return servers.map((entry) => normalizeServerEntry(entry)).filter(Boolean);
+  return results
+    .map((entry) => normalizeServerEntry(entry, { defaultProvides: 'server' }))
+    .filter(Boolean);
 }
 
 function parseServerListPayload(payload) {
@@ -444,7 +540,12 @@ function parseServerListPayload(payload) {
 
   try {
     const data = JSON.parse(trimmed);
-    const servers = parseServerListFromObject(data);
+    const servers = Array.isArray(data)
+      ? data
+          .map((entry) => normalizeServerEntry(entry, { defaultProvides: 'server' }))
+          .filter(Boolean)
+      : parseServerListFromObject(data);
+
     if (servers.length) {
       return servers;
     }
@@ -729,18 +830,24 @@ function findServerMatch(servers, normalizedIdentifier) {
     return null;
   }
 
-  const matches = (value) =>
-    typeof value === 'string' && value.trim().toLowerCase() === normalizedIdentifier;
+  const matches = (value) => {
+    const normalized = normalizeId(value);
+    return normalized && normalized === normalizedIdentifier;
+  };
 
   for (const server of servers) {
     if (!server || typeof server !== 'object') {
       continue;
     }
+
     const candidates = [
       server.machineIdentifier,
       server.clientIdentifier,
-      server.id != null ? String(server.id) : null,
       server.uuid,
+      server.id,
+      server.server_id,
+      server.serverId,
+      server.serverID,
     ];
 
     if (candidates.some(matches)) {
@@ -795,7 +902,7 @@ async function resolveServerId(plex) {
       'X-Plex-Token': plex.token,
     });
     delete headers['Content-Type'];
-    headers.Accept = 'application/json';
+    headers.Accept = headers.Accept || 'application/json';
 
     response = await fetch(buildPlexTvUrl('/api/servers', plex), {
       headers,
@@ -819,7 +926,10 @@ async function resolveServerId(plex) {
 
   const payload = await response.text();
   const servers = parseServerListPayload(payload);
-  const normalizedIdentifier = machineIdentifier.toLowerCase();
+  const normalizedIdentifier = normalizeId(machineIdentifier);
+  if (!normalizedIdentifier) {
+    throw new Error('Plex server UUID must be configured to create invites');
+  }
   const serverCandidates = Array.isArray(servers)
     ? servers.filter((server) => {
         if (!server || typeof server !== 'object') {
