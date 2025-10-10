@@ -6,6 +6,7 @@ const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users
 const LIBRARY_SECTIONS_ENDPOINT = '/library/sections';
 const PLEX_TV_BASE_URL = 'https://plex.tv';
 const userListPathCache = new Map();
+const serverIdCache = new Map();
 
 function getPlexConfig(overrideSettings) {
   if (overrideSettings && typeof overrideSettings === 'object') {
@@ -43,7 +44,7 @@ function ensureInviteConfiguration(plex) {
   }
 }
 
-function buildInviteRequestBody({
+async function buildInviteRequestBody({
   plex,
   email,
   friendlyName,
@@ -68,8 +69,10 @@ function buildInviteRequestBody({
 
   const serializeBoolean = (value) => (value ? '1' : '0');
 
+  const serverId = await resolveServerId(plex);
+
   return {
-    server_id: plex.serverIdentifier,
+    server_id: serverId,
     shared_server: sharedServer,
     sharing_settings: {
       allow_sync: serializeBoolean(plex.allowSync),
@@ -264,6 +267,23 @@ function getCacheKey(plex) {
   return normalizeBaseUrl(plex && plex.baseUrl);
 }
 
+function getServerIdCacheKey(plex) {
+  if (!plex) {
+    return null;
+  }
+
+  const token = plex.token ? String(plex.token).trim() : '';
+  const identifier = plex.serverIdentifier
+    ? String(plex.serverIdentifier).trim()
+    : '';
+
+  if (!token || !identifier) {
+    return null;
+  }
+
+  return `${token}:${identifier}`;
+}
+
 function buildPlexTvUrl(pathname, plex) {
   if (!plex || !plex.token) {
     throw new Error('Plex token is not configured');
@@ -283,17 +303,215 @@ function buildPlexTvUrl(pathname, plex) {
   return `${baseUrl}${separator}X-Plex-Token=${encodeURIComponent(plex.token)}`;
 }
 
-function buildSharedServersPath(plex) {
+function normalizeServerEntry(entry) {
+  if (!entry || typeof entry !== 'object') {
+    return null;
+  }
+
+  const idCandidate =
+    entry.id !== undefined && entry.id !== null
+      ? entry.id
+      : entry.serverID !== undefined && entry.serverID !== null
+      ? entry.serverID
+      : entry.server_id !== undefined && entry.server_id !== null
+      ? entry.server_id
+      : null;
+
+  const machineIdentifierCandidate =
+    entry.machineIdentifier ||
+    entry.machine_identifier ||
+    entry.machineID ||
+    entry.machineid ||
+    entry.uuid ||
+    entry.clientIdentifier ||
+    entry.clientidentifier ||
+    entry.client_id ||
+    entry.clientID ||
+    null;
+
+  const id = idCandidate != null ? String(idCandidate).trim() : null;
+  const machineIdentifier = machineIdentifierCandidate
+    ? String(machineIdentifierCandidate).trim()
+    : null;
+
+  if (!id && !machineIdentifier) {
+    return null;
+  }
+
+  return { id, machineIdentifier };
+}
+
+function flattenServerEntries(value) {
+  return coerceArray(value).flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+
+    if (entry.Server || entry.server) {
+      return flattenServerEntries(entry.Server || entry.server);
+    }
+
+    return [entry];
+  });
+}
+
+function parseServerListFromObject(data) {
+  if (!data || typeof data !== 'object') {
+    return [];
+  }
+
+  const container =
+    data.MediaContainer || data.mediaContainer || data.container || data;
+
+  const rawEntries = [
+    container.Server,
+    container.server,
+    container.Servers,
+    container.servers,
+    container.Items,
+    container.items,
+    container.children,
+    container.Children,
+  ]
+    .flatMap((value) => flattenServerEntries(value))
+    .filter((entry) => entry && typeof entry === 'object');
+
+  if (!rawEntries.length) {
+    return flattenServerEntries(container)
+      .map((entry) => normalizeServerEntry(entry))
+      .filter(Boolean);
+  }
+
+  return rawEntries.map((entry) => normalizeServerEntry(entry)).filter(Boolean);
+}
+
+function parseServerListFromXml(payload) {
+  if (!payload) {
+    return [];
+  }
+
+  const servers = [];
+  const pattern = /<Server\b[^>]*>/gi;
+  let match;
+  while ((match = pattern.exec(payload))) {
+    const attributes = {};
+    match[0].replace(/([\w-]+)="([^"]*)"/g, (_, key, value) => {
+      attributes[key] = value;
+      return '';
+    });
+    servers.push(attributes);
+  }
+
+  return servers.map((entry) => normalizeServerEntry(entry)).filter(Boolean);
+}
+
+function parseServerListPayload(payload) {
+  if (!payload) {
+    return [];
+  }
+
+  const trimmed = String(payload).trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(trimmed);
+    const servers = parseServerListFromObject(data);
+    if (servers.length) {
+      return servers;
+    }
+  } catch (err) {
+    // Ignore JSON parsing errors and fall back to XML parsing.
+  }
+
+  return parseServerListFromXml(trimmed);
+}
+
+async function resolveServerId(plex) {
   if (!plex || !plex.serverIdentifier) {
     throw new Error('Plex server UUID must be configured to create invites');
   }
 
-  const serverId = encodeURIComponent(String(plex.serverIdentifier).trim());
-  return `/api/servers/${serverId}/shared_servers`;
+  const machineIdentifier = String(plex.serverIdentifier).trim();
+  if (!machineIdentifier) {
+    throw new Error('Plex server UUID must be configured to create invites');
+  }
+
+  const cacheKey = getServerIdCacheKey(plex);
+  if (cacheKey && serverIdCache.has(cacheKey)) {
+    return serverIdCache.get(cacheKey);
+  }
+
+  let response;
+  try {
+    response = await fetch(buildPlexTvUrl('/api/servers', plex), {
+      headers: { Accept: 'application/json' },
+    });
+  } catch (err) {
+    throw new Error(`Failed to resolve Plex server id: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to resolve Plex server id: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const payload = await response.text();
+  const servers = parseServerListPayload(payload);
+  const match = servers.find((server) => {
+    if (!server) {
+      return false;
+    }
+    const candidate = server.machineIdentifier
+      ? String(server.machineIdentifier).trim()
+      : '';
+    if (!candidate) {
+      return false;
+    }
+    return candidate.toLowerCase() === machineIdentifier.toLowerCase();
+  });
+
+  if (!match || !match.id) {
+    throw new Error(
+      'Unable to resolve Plex server id for the configured machine identifier.'
+    );
+  }
+
+  const serverId = String(match.id).trim();
+  if (!serverId) {
+    throw new Error(
+      'Unable to resolve Plex server id for the configured machine identifier.'
+    );
+  }
+
+  if (cacheKey) {
+    serverIdCache.set(cacheKey, serverId);
+  }
+
+  return serverId;
 }
 
-function buildSharedServerUrl(plex, inviteId) {
-  const basePath = buildSharedServersPath(plex);
+async function buildSharedServersPath(plex) {
+  if (!plex || !plex.serverIdentifier) {
+    throw new Error('Plex server UUID must be configured to create invites');
+  }
+
+  const serverId = await resolveServerId(plex);
+  const encodedId = encodeURIComponent(String(serverId));
+  return `/api/servers/${encodedId}/shared_servers`;
+}
+
+async function buildSharedServerUrl(plex, inviteId) {
+  const basePath = await buildSharedServersPath(plex);
   if (inviteId === undefined || inviteId === null) {
     return buildPlexTvUrl(basePath, plex);
   }
@@ -617,7 +835,7 @@ async function createInvite(
     throw new Error('Recipient email is required to create Plex invites');
   }
 
-  const requestBody = buildInviteRequestBody({
+  const requestBody = await buildInviteRequestBody({
     plex,
     email: normalizedEmail,
     friendlyName,
@@ -626,7 +844,8 @@ async function createInvite(
 
   let response;
   try {
-    response = await fetch(buildSharedServerUrl(plex), {
+    const sharedServerUrl = await buildSharedServerUrl(plex);
+    response = await fetch(sharedServerUrl, {
       method: 'POST',
       headers: buildSharedServerHeaders(plex, {
         'Content-Type': 'application/json',
@@ -674,7 +893,8 @@ async function cancelInvite(inviteId, overrideSettings) {
 
   let response;
   try {
-    response = await fetch(buildSharedServerUrl(plex, inviteId), {
+    const sharedServerUrl = await buildSharedServerUrl(plex, inviteId);
+    response = await fetch(sharedServerUrl, {
       method: 'DELETE',
       headers: buildSharedServerHeaders(plex),
     });
@@ -712,7 +932,8 @@ async function verifyConnection(overrideSettings) {
 
   let response;
   try {
-    response = await fetch(buildSharedServerUrl(plex), {
+    const sharedServerUrl = await buildSharedServerUrl(plex);
+    response = await fetch(sharedServerUrl, {
       method: 'GET',
       headers: buildSharedServerHeaders(plex),
     });
