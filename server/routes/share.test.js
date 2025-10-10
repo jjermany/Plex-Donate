@@ -317,8 +317,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           body: {
             email: 'updated@example.com',
             name: 'Updated Name',
-            password: 'password123',
-            confirmPassword: 'password123',
+            password: 'password1234',
+            confirmPassword: 'password1234',
             sessionToken: shareLink.sessionToken,
           },
         }
@@ -381,8 +381,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           body: {
             email: 'future@example.com',
             name: 'Future Supporter',
-            password: 'password123',
-            confirmPassword: 'password123',
+            password: 'password1234',
+            confirmPassword: 'password1234',
             subscriptionId: 'I-NEW123',
             sessionToken: shareLink.sessionToken,
           },
@@ -577,8 +577,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
             body: {
               email: 'refresh@example.com',
               name: 'Refresh Donor',
-              password: 'supersecure',
-              confirmPassword: 'supersecure',
+              password: 'supersecure1',
+              confirmPassword: 'supersecure1',
               sessionToken: shareLink.sessionToken,
             },
           }

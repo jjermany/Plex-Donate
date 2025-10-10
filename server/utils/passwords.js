@@ -5,6 +5,7 @@ const PBKDF2_ITERATIONS = 210000;
 const PBKDF2_KEY_LENGTH = 64;
 const SALT_LENGTH = 16;
 const PASSWORD_PREFIX = 'pbkdf2';
+const MIN_PASSWORD_LENGTH = 12;
 
 function serializeHash(iterations, salt, derivedKey) {
   return [
@@ -146,7 +147,7 @@ function isPasswordStrong(password) {
     return false;
   }
   const trimmed = password.trim();
-  if (trimmed.length < 8) {
+  if (trimmed.length < MIN_PASSWORD_LENGTH) {
     return false;
   }
   return true;
@@ -158,4 +159,5 @@ module.exports = {
   verifyPassword,
   verifyPasswordSync,
   isPasswordStrong,
+  MIN_PASSWORD_LENGTH,
 };
