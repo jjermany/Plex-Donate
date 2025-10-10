@@ -449,8 +449,13 @@ async function resolveServerId(plex) {
 
   let response;
   try {
+    const headers = buildPlexClientHeaders(getClientIdentifier(plex), {
+      'X-Plex-Token': plex.token,
+    });
+    delete headers['Content-Type'];
+
     response = await fetch(buildPlexTvUrl('/api/servers', plex), {
-      headers: { Accept: 'application/json' },
+      headers,
     });
   } catch (err) {
     throw new Error(`Failed to resolve Plex server id: ${err.message}`);
