@@ -8,6 +8,25 @@ const PLEX_TV_BASE_URL = 'https://plex.tv';
 const userListPathCache = new Map();
 const serverIdCache = new Map();
 
+function normalizeId(value) {
+  return String(value == null ? '' : value)
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, '');
+}
+
+function hostFromUrl(url) {
+  if (!url) {
+    return '';
+  }
+
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch (err) {
+    return '';
+  }
+}
+
 function getPlexConfig(overrideSettings) {
   if (overrideSettings && typeof overrideSettings === 'object') {
     return overrideSettings;
@@ -35,10 +54,14 @@ function parseLibrarySectionIds(value) {
     .filter((entry) => entry.length > 0);
 }
 
-function ensureInviteConfiguration(plex) {
+function ensureBaseConfiguration(plex) {
   if (!plex.baseUrl || !plex.token) {
     throw new Error('Plex base URL and token must be configured');
   }
+}
+
+function ensureInviteConfiguration(plex) {
+  ensureBaseConfiguration(plex);
   if (!plex.serverIdentifier) {
     throw new Error('Plex server UUID must be configured to create invites');
   }
@@ -430,6 +453,275 @@ function parseServerListPayload(payload) {
   }
 
   return parseServerListFromXml(trimmed);
+}
+
+function parseResourcesPayload(payload) {
+  if (!payload) {
+    return [];
+  }
+
+  const trimmed = String(payload).trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const mapConnections = (rawConnections) =>
+    (Array.isArray(rawConnections) ? rawConnections : [])
+      .map((connection) => {
+        if (!connection || typeof connection !== 'object') {
+          return null;
+        }
+
+        const uri =
+          connection.uri ||
+          connection.address ||
+          connection.host ||
+          connection.relay ||
+          '';
+        return { uri: uri ? String(uri) : '' };
+      })
+      .filter(Boolean);
+
+  const mapDevice = (device) => {
+    if (!device || typeof device !== 'object') {
+      return null;
+    }
+
+    return {
+      name: device.name || device.product || device.device || 'unknown',
+      provides: String(device.provides || '').toLowerCase(),
+      clientIdentifier: device.clientIdentifier || null,
+      connections: mapConnections(device.connections || device.Connection),
+    };
+  };
+
+  try {
+    const json = JSON.parse(trimmed);
+    if (Array.isArray(json)) {
+      return json.map(mapDevice).filter(Boolean);
+    }
+
+    const devices = json && json.MediaContainer && json.MediaContainer.Device;
+    if (Array.isArray(devices)) {
+      return devices.map(mapDevice).filter(Boolean);
+    }
+  } catch (err) {
+    // fall back to XML parsing
+  }
+
+  const devices = [];
+  const devicePattern = /<Device\b([^>]+)>([\s\S]*?)<\/Device>/gi;
+  const attr = (source, key) => {
+    const match = new RegExp(`${key}="([^"]*)"`, 'i').exec(source);
+    return match ? match[1] : null;
+  };
+  const connectionPattern = /<Connection\b([^>]+?)\/?>(?:<\/Connection>)?/gi;
+
+  let deviceMatch;
+  while ((deviceMatch = devicePattern.exec(trimmed))) {
+    const deviceAttributes = deviceMatch[1] || '';
+    const inner = deviceMatch[2] || '';
+    const provides = String(attr(deviceAttributes, 'provides') || '').toLowerCase();
+    const clientIdentifier = attr(deviceAttributes, 'clientIdentifier');
+    const name =
+      attr(deviceAttributes, 'name') ||
+      attr(deviceAttributes, 'product') ||
+      attr(deviceAttributes, 'device') ||
+      'unknown';
+
+    const connections = [];
+    let connectionMatch;
+    while ((connectionMatch = connectionPattern.exec(inner))) {
+      const connectionAttributes = connectionMatch[1] || '';
+      const uri =
+        attr(connectionAttributes, 'uri') ||
+        attr(connectionAttributes, 'address') ||
+        attr(connectionAttributes, 'host') ||
+        attr(connectionAttributes, 'relay') ||
+        '';
+      connections.push({ uri: uri ? String(uri) : '' });
+    }
+
+    devices.push({
+      name,
+      provides,
+      clientIdentifier,
+      connections,
+    });
+  }
+
+  return devices;
+}
+
+async function fetchPlexResources(plex) {
+  const headers = buildPlexClientHeaders(getClientIdentifier(plex), {
+    'X-Plex-Token': plex.token,
+  });
+  delete headers['Content-Type'];
+  headers.Accept = headers.Accept || 'application/json';
+
+  const url = buildPlexTvUrl('/api/resources?includeHttps=1&includeRelay=1', plex);
+  let response;
+  try {
+    response = await fetch(url, { headers });
+  } catch (err) {
+    throw new Error(`Failed to fetch Plex resources: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to fetch Plex resources: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const payload = await response.text();
+  return parseResourcesPayload(payload);
+}
+
+function detectServerFromResources(resources, baseUrlHost) {
+  const entries = Array.isArray(resources) ? resources : [];
+  const serverDevices = entries.filter((device) => {
+    if (!device || typeof device !== 'object') {
+      return false;
+    }
+
+    return String(device.provides || '').includes('server');
+  });
+
+  if (!serverDevices.length) {
+    return null;
+  }
+
+  if (baseUrlHost) {
+    for (const device of serverDevices) {
+      if (!device || !Array.isArray(device.connections)) {
+        continue;
+      }
+
+      const hasMatch = device.connections.some((connection) => {
+        if (!connection || !connection.uri) {
+          return false;
+        }
+        return hostFromUrl(connection.uri) === baseUrlHost;
+      });
+
+      if (hasMatch && device.clientIdentifier) {
+        return { type: 'clientIdentifier', value: device.clientIdentifier, source: device };
+      }
+    }
+  }
+
+  if (serverDevices.length === 1) {
+    const device = serverDevices[0];
+    if (device && device.clientIdentifier) {
+      return { type: 'clientIdentifier', value: device.clientIdentifier, source: device };
+    }
+  }
+
+  return { type: 'ambiguous', candidates: serverDevices };
+}
+
+async function fetchPlexServers(plex) {
+  const headers = buildPlexClientHeaders(getClientIdentifier(plex), {
+    'X-Plex-Token': plex.token,
+  });
+  delete headers['Content-Type'];
+  headers.Accept = headers.Accept || 'application/json';
+
+  let response;
+  try {
+    response = await fetch(buildPlexTvUrl('/api/servers', plex), { headers });
+  } catch (err) {
+    throw new Error(`Failed to resolve Plex server id: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to resolve Plex server id: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const payload = await response.text();
+  return parseServerListPayload(payload);
+}
+
+function detectServerFromServers(servers) {
+  const list = Array.isArray(servers) ? servers.filter(Boolean) : [];
+  if (list.length === 1) {
+    const entry = list[0];
+    const value = entry.machineIdentifier || entry.clientIdentifier || null;
+    if (value) {
+      return { type: 'machineIdentifier', value, source: entry };
+    }
+  }
+
+  return null;
+}
+
+async function getOrResolveServerIdentifier(plex) {
+  if (plex && plex.serverIdentifier) {
+    const normalized = normalizeId(plex.serverIdentifier);
+    if (normalized) {
+      return String(plex.serverIdentifier).trim();
+    }
+  }
+
+  const baseUrlHost = hostFromUrl(plex && plex.baseUrl);
+
+  try {
+    const resources = await fetchPlexResources(plex);
+    const detected = detectServerFromResources(resources, baseUrlHost);
+    if (detected && detected.type === 'clientIdentifier' && detected.value) {
+      const normalized = normalizeId(detected.value);
+      if (normalized) {
+        return String(detected.value).trim();
+      }
+    }
+
+    if (detected && detected.type === 'ambiguous') {
+      // fall through to /api/servers to disambiguate
+    }
+  } catch (err) {
+    // Ignore and fall back to /api/servers
+  }
+
+  try {
+    const servers = await fetchPlexServers(plex);
+    const detected = detectServerFromServers(servers);
+    if (detected && detected.value) {
+      const normalized = normalizeId(detected.value);
+      if (normalized) {
+        return String(detected.value).trim();
+      }
+    }
+
+    const sample = summarizeServerIdentifiers(servers, 5);
+    if (sample.length > 1) {
+      throw new Error(
+        `Multiple Plex servers found; set \"serverIdentifier\" or provide \"baseUrl\" to disambiguate. Candidates: ${JSON.stringify(
+          sample
+        )}`
+      );
+    }
+  } catch (err) {
+    throw new Error(`Failed to auto-detect Plex server identifier: ${err.message}`);
+  }
+
+  throw new Error('Failed to auto-detect Plex server identifier: No matching server found.');
 }
 
 function findServerMatch(servers, normalizedIdentifier) {
@@ -900,6 +1192,9 @@ async function createInvite(
   overrideSettings
 ) {
   const plex = getPlexConfig(overrideSettings);
+  ensureBaseConfiguration(plex);
+
+  plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
   ensureInviteConfiguration(plex);
 
   const normalizedEmail = email ? String(email).trim() : '';
@@ -961,6 +1256,9 @@ async function cancelInvite(inviteId, overrideSettings) {
   }
 
   const plex = getPlexConfig(overrideSettings);
+  ensureBaseConfiguration(plex);
+
+  plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
   ensureInviteConfiguration(plex);
 
   let response;
@@ -996,6 +1294,9 @@ async function cancelInvite(inviteId, overrideSettings) {
 
 async function verifyConnection(overrideSettings) {
   const plex = getPlexConfig(overrideSettings);
+  ensureBaseConfiguration(plex);
+
+  plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
   ensureInviteConfiguration(plex);
 
   const sections = parseLibrarySectionIds(plex.librarySectionIds);
@@ -1055,4 +1356,5 @@ module.exports = {
   revokeUser,
   revokeUserByEmail,
   verifyConnection,
+  getOrResolveServerIdentifier,
 };
