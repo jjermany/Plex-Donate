@@ -1582,8 +1582,24 @@ async function createInvite(
   }
 
   const descriptor = await resolveServerDescriptor(plex);
-  const machineIdentifier =
-    descriptor.device?.clientIdentifier || descriptor.machineIdentifier || plex.serverIdentifier;
+  const machineIdentifierCandidates = [];
+  for (const candidate of [
+    descriptor.device?.clientIdentifier,
+    descriptor.device?.machineIdentifier,
+    descriptor.machineIdentifier,
+    plex.serverIdentifier,
+  ]) {
+    const normalizedCandidate =
+      candidate === undefined || candidate === null ? '' : String(candidate).trim();
+    if (!normalizedCandidate) {
+      continue;
+    }
+    if (!machineIdentifierCandidates.includes(normalizedCandidate)) {
+      machineIdentifierCandidates.push(normalizedCandidate);
+    }
+  }
+
+  const machineIdentifier = machineIdentifierCandidates[0];
 
   if (!machineIdentifier) {
     throw new Error('Unable to determine Plex machine identifier for invites');
@@ -1700,29 +1716,45 @@ async function createInvite(
         server_id: undefined,
       };
 
-      try {
-        response = await fetch(
-          buildPlexTvUrl(LEGACY_BY_MACHINEID_PATH(machineIdentifier), plex),
-          {
-            method: 'POST',
-            headers: sharedHeaders,
-            body: JSON.stringify(legacyByMachinePayload),
-          }
-        );
-      } catch (err) {
-        throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+      let lastMachineAttemptError = null;
+
+      for (const candidate of machineIdentifierCandidates.slice(1)) {
+        let machineResponse;
+        try {
+          machineResponse = await fetch(
+            buildPlexTvUrl(LEGACY_BY_MACHINEID_PATH(candidate), plex),
+            {
+              method: 'POST',
+              headers: sharedHeaders,
+              body: JSON.stringify(legacyByMachinePayload),
+            }
+          );
+        } catch (err) {
+          throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+        }
+
+        if (machineResponse.status === 401 || machineResponse.status === 403) {
+          const details = await extractErrorMessage(machineResponse);
+          const suffix = details ? ` Details: ${details}` : '';
+          throw new Error(`Plex rejected the provided token.${suffix}`);
+        }
+
+        if (machineResponse.ok) {
+          response = machineResponse;
+          bodyText = '';
+          break;
+        }
+
+        const attemptBodyText = await machineResponse.text().catch(() => '');
+        lastMachineAttemptError = {
+          response: machineResponse,
+          bodyText: attemptBodyText || bodyText,
+        };
       }
 
-      if (response.status === 401 || response.status === 403) {
-        const details = await extractErrorMessage(response);
-        const suffix = details ? ` Details: ${details}` : '';
-        throw new Error(`Plex rejected the provided token.${suffix}`);
-      }
-
-      if (!response.ok) {
-        bodyText = await response.text().catch(() => bodyText);
-      } else {
-        bodyText = '';
+      if ((!response || !response.ok) && lastMachineAttemptError) {
+        response = lastMachineAttemptError.response;
+        bodyText = lastMachineAttemptError.bodyText || bodyText;
       }
     }
 
