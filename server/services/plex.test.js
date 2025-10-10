@@ -774,12 +774,12 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
         text: async () => '',
       };
     }
-    if (/^https\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/.test(url)) {
+    if (url.startsWith('https://plex.tv/api/servers/server-uuid?')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          '<MediaContainer><Server><Section key="1" title="Movies"/><Section key="2" title="TV"/></Server></MediaContainer>',
+          '<MediaContainer><Server><Section id="10" key="/library/sections/1" title="Movies"/><Section id="12" key="/library/sections/2" title="TV"/></Server></MediaContainer>',
       };
     }
     if (url.includes('/library/sections')) {
@@ -807,7 +807,7 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -824,17 +824,21 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       'plex-donate-server-uuid'
     );
     assert.equal(calls[2].options.headers['X-Plex-Token'], 'token123');
-    assert.equal(
+    assert.match(
       calls[3].url,
+      /^https:\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
-    assert.equal(calls[3].options.method || 'GET', 'GET');
+    assert.equal(calls[4].options.method || 'GET', 'GET');
     assert.equal(result.details.serverIdentifier, 'server-uuid');
-    assert.deepEqual(result.details.librarySectionIds, ['1', '2']);
+    assert.deepEqual(result.details.librarySectionIds, ['10', '12']);
     assert.equal(result.details.inviteEndpointAvailable, true);
     assert.deepEqual(result.libraries, [
-      { id: '1', title: 'Movies' },
-      { id: '2', title: 'TV Shows' },
+      { id: '10', title: 'Movies' },
+      { id: '12', title: 'TV Shows' },
     ]);
     assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
@@ -876,12 +880,12 @@ test('plexService.verifyConnection handles v2 shared servers when legacy id is m
       };
     }
 
-    if (/^https\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/.test(url)) {
+    if (url.startsWith('https://plex.tv/api/servers/server-uuid?')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          '<MediaContainer><Server><Section key="1" title="Movies"/><Section key="2" title="TV"/></Server></MediaContainer>',
+          '<MediaContainer><Server><Section id="10" key="/library/sections/1" title="Movies"/><Section id="12" key="/library/sections/2" title="TV"/></Server></MediaContainer>',
       };
     }
     if (url.includes('/library/sections')) {
@@ -910,7 +914,7 @@ test('plexService.verifyConnection handles v2 shared servers when legacy id is m
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 3);
+    assert.equal(calls.length, 4);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -919,8 +923,17 @@ test('plexService.verifyConnection handles v2 shared servers when legacy id is m
     assert.equal(calls[1].options.headers.Accept, undefined);
     assert.equal(
       calls[2].url,
+      'https://plex.tv/api/servers/server-uuid?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[3].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
+    assert.deepEqual(result.details.librarySectionIds, ['10', '12']);
+    assert.deepEqual(result.libraries, [
+      { id: '10', title: 'Movies' },
+      { id: '12', title: 'TV Shows' },
+    ]);
     assert.equal(result.details.inviteEndpointAvailable, true);
     assert.equal(result.details.inviteEndpointVersion, 'v2');
   });
@@ -968,12 +981,12 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
         text: async () => '',
       };
     }
-    if (/^https\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/.test(url)) {
+    if (url.startsWith('https://plex.tv/api/servers/server-uuid?')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          '<MediaContainer><Server><Section key="1" title="Movies"/><Section key="2" title="TV"/></Server></MediaContainer>',
+          '<MediaContainer><Server><Section id="10" key="/library/sections/1" title="Movies"/><Section id="12" key="/library/sections/2" title="TV"/></Server></MediaContainer>',
       };
     }
     if (url.includes('/library/sections')) {
@@ -1001,7 +1014,7 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -1013,9 +1026,18 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
     );
     assert.equal(
       calls[3].url,
+      'https://plex.tv/api/servers/server-uuid?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
+    assert.deepEqual(result.details.librarySectionIds, ['10', '12']);
+    assert.deepEqual(result.libraries, [
+      { id: '10', title: 'Movies' },
+      { id: '12', title: 'TV Shows' },
+    ]);
     assert.equal(result.details.inviteEndpointAvailable, false);
     assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
@@ -1063,12 +1085,12 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
         text: async () => '',
       };
     }
-    if (/^https\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/.test(url)) {
+    if (url.startsWith('https://plex.tv/api/servers/server-uuid?')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          '<MediaContainer><Server><Section key="1" title="Movies"/><Section key="2" title="TV"/></Server></MediaContainer>',
+          '<MediaContainer><Server><Section id="10" key="/library/sections/1" title="Movies"/><Section id="12" key="/library/sections/2" title="TV"/></Server></MediaContainer>',
       };
     }
     if (url.includes('/library/sections')) {
@@ -1096,7 +1118,7 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -1108,9 +1130,18 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
     );
     assert.equal(
       calls[3].url,
+      'https://plex.tv/api/servers/server-uuid?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
+    assert.deepEqual(result.details.librarySectionIds, ['10', '12']);
+    assert.deepEqual(result.libraries, [
+      { id: '10', title: 'Movies' },
+      { id: '12', title: 'TV Shows' },
+    ]);
     assert.equal(result.details.inviteEndpointAvailable, false);
     assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
@@ -1159,12 +1190,12 @@ test('plexService.verifyConnection parses XML library list responses', async () 
         text: async () => '',
       };
     }
-    if (/^https\/\/plex\.tv\/api\/servers\/[^/]+\?X-Plex-Token=token123$/.test(url)) {
+    if (url.startsWith('https://plex.tv/api/servers/server-uuid?')) {
       return {
         ok: true,
         status: 200,
         text: async () =>
-          '<MediaContainer><Server><Section key="1" title="Movies"/><Section key="2" title="TV"/></Server></MediaContainer>',
+          '<MediaContainer><Server><Section id="105" key="/library/sections/5" title="Kids"/><Section id="109" key="/library/sections/9" title="Music"/></Server></MediaContainer>',
       };
     }
     if (url.includes('/library/sections')) {
@@ -1199,12 +1230,16 @@ test('plexService.verifyConnection parses XML library list responses', async () 
     );
     assert.equal(
       calls[3].url,
+      'https://plex.tv/api/servers/server-uuid?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.details.inviteEndpointAvailable, true);
     assert.deepEqual(result.libraries, [
-      { id: '5', title: 'Kids' },
-      { id: '9', title: 'Music' },
+      { id: '105', title: 'Kids' },
+      { id: '109', title: 'Music' },
     ]);
     assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });

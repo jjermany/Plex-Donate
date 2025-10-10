@@ -1243,31 +1243,62 @@ function parseLibrarySectionsPayload(payload) {
   return normalizeLibraryList(directories);
 }
 
-function parseServerSectionsPayload(payload) {
-  if (!payload) {
-    return [];
+function normalizeSectionKeyParts(value) {
+  const raw = value === undefined || value === null ? '' : String(value).trim();
+  if (!raw) {
+    return { raw: '', sanitized: '', numeric: '' };
   }
 
-  const ids = new Set();
-  const pushId = (value) => {
+  const sanitized = raw.split(/[?#]/)[0].replace(/\/+$/, '');
+  const numericMatch = sanitized.match(/(?:^|\/)(\d+)$/);
+  const numeric = numericMatch && numericMatch[1] ? numericMatch[1] : '';
+
+  return { raw, sanitized: sanitized || raw, numeric };
+}
+
+function parseServerSectionsPayload(payload) {
+  if (!payload) {
+    return { sectionIds: [], keyToIdMap: {} };
+  }
+
+  const sectionIds = new Set();
+  const keyToIdMap = new Map();
+
+  const addSectionId = (value) => {
     if (value === undefined || value === null) {
-      return;
+      return null;
     }
 
     const normalized = String(value).trim();
     if (!normalized) {
+      return null;
+    }
+
+    sectionIds.add(normalized);
+    return normalized;
+  };
+
+  const recordKeyMapping = (keyCandidate, idValue) => {
+    if (idValue === undefined || idValue === null) {
       return;
     }
 
-    if (/^\d+$/.test(normalized)) {
-      ids.add(normalized);
+    const normalizedId = String(idValue).trim();
+    if (!normalizedId) {
       return;
     }
 
-    const trimmed = normalized.split(/[?#]/)[0].replace(/\/+$/, '');
-    const match = trimmed.match(/(?:^|\/)(\d+)$/);
-    if (match && match[1]) {
-      ids.add(match[1]);
+    const parts = normalizeSectionKeyParts(keyCandidate);
+    if (!parts.raw) {
+      return;
+    }
+
+    keyToIdMap.set(parts.raw, normalizedId);
+    if (parts.sanitized && parts.sanitized !== parts.raw) {
+      keyToIdMap.set(parts.sanitized, normalizedId);
+    }
+    if (parts.numeric) {
+      keyToIdMap.set(parts.numeric, normalizedId);
     }
   };
 
@@ -1282,9 +1313,7 @@ function parseServerSectionsPayload(payload) {
       const hasUsableId =
         idValue !== undefined && idValue !== null && String(idValue).trim() !== '';
 
-      if (hasUsableId) {
-        pushId(idValue);
-      }
+      const normalizedId = hasUsableId ? addSectionId(idValue) : null;
 
       const keyCandidate =
         Object.prototype.hasOwnProperty.call(section, 'key')
@@ -1293,14 +1322,25 @@ function parseServerSectionsPayload(payload) {
           ? section.Key
           : undefined;
 
-      if (!hasUsableId && keyCandidate !== undefined) {
-        pushId(keyCandidate);
+      if (normalizedId) {
+        recordKeyMapping(keyCandidate, normalizedId);
+      } else if (keyCandidate !== undefined) {
+        const keyParts = normalizeSectionKeyParts(keyCandidate);
+        if (keyParts.numeric) {
+          const fallbackId = addSectionId(keyParts.numeric);
+          if (fallbackId) {
+            recordKeyMapping(keyCandidate, fallbackId);
+          }
+        }
       }
 
       return;
     }
 
-    pushId(section);
+    const fallbackId = addSectionId(section);
+    if (fallbackId) {
+      recordKeyMapping(section, fallbackId);
+    }
   };
 
   try {
@@ -1318,6 +1358,7 @@ function parseServerSectionsPayload(payload) {
           (server && (server.Section || server.section)) ||
             (server && (server.Sections || server.sections)) ||
             (server && (server.Directory || server.directory)) ||
+            (server && (server.Metadata || server.metadata)) ||
             []
         );
 
@@ -1325,10 +1366,6 @@ function parseServerSectionsPayload(payload) {
           pushSectionLike(section);
         });
       });
-
-      if (ids.size) {
-        return Array.from(ids);
-      }
     }
   } catch (err) {
     // Ignore JSON parsing errors and fall back to XML parsing.
@@ -1348,7 +1385,25 @@ function parseServerSectionsPayload(payload) {
     });
   }
 
-  return Array.from(ids);
+  const normalizedKeyToIdMap = Object.fromEntries(
+    Array.from(keyToIdMap.entries()).map(([key, value]) => [String(key), String(value)])
+  );
+
+  const normalizedSectionIds = Array.from(sectionIds).map((id) => String(id));
+  normalizedSectionIds.forEach((id) => {
+    normalizedKeyToIdMap[id] = id;
+  });
+
+  const mapValues = Object.values(normalizedKeyToIdMap);
+  const uniqueMapValues = Array.from(new Set(mapValues));
+  const finalSectionIds = normalizedSectionIds.length
+    ? normalizedSectionIds
+    : uniqueMapValues;
+
+  return {
+    sectionIds: finalSectionIds,
+    keyToIdMap: normalizedKeyToIdMap,
+  };
 }
 
 async function fetchSectionKeysFromPlexServer(plex, descriptor) {
@@ -1385,14 +1440,67 @@ async function fetchSectionKeysFromPlexServer(plex, descriptor) {
   }
 
   const body = await response.text();
-  const sectionIds = parseServerSectionsPayload(body);
-  if (!sectionIds.length) {
+  const { sectionIds, keyToIdMap } = parseServerSectionsPayload(body);
+
+  const normalizedSectionIds = Array.from(new Set(sectionIds.map((id) => String(id).trim()))).filter(
+    Boolean
+  );
+
+  const fallbackSectionIds =
+    normalizedSectionIds.length > 0
+      ? normalizedSectionIds
+      : Array.from(
+          new Set(
+            Object.values(keyToIdMap || {}).map((value) => String(value).trim()).filter(Boolean)
+          )
+        );
+
+  if (!fallbackSectionIds.length) {
     throw new Error(
       'Plex did not return any library sections for the selected server; verify the server is reachable and published.'
     );
   }
 
-  return sectionIds.map((id) => String(id));
+  return {
+    sectionIds: fallbackSectionIds,
+    keyToIdMap: keyToIdMap || {},
+  };
+}
+
+function resolveSectionSelectionId(rawValue, availableIdsSet, keyToIdMap = {}) {
+  const parts = normalizeSectionKeyParts(rawValue);
+  const candidates = [parts.raw, parts.sanitized, parts.numeric].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (availableIdsSet.has(candidate)) {
+      return candidate;
+    }
+
+    const mapped = keyToIdMap[candidate];
+    if (mapped !== undefined && mapped !== null) {
+      const normalizedMapped = String(mapped).trim();
+      if (!normalizedMapped) {
+        continue;
+      }
+
+      if (availableIdsSet.has(normalizedMapped)) {
+        return normalizedMapped;
+      }
+
+      const mappedParts = normalizeSectionKeyParts(normalizedMapped);
+      if (mappedParts.raw && availableIdsSet.has(mappedParts.raw)) {
+        return mappedParts.raw;
+      }
+
+      if (mappedParts.numeric && availableIdsSet.has(mappedParts.numeric)) {
+        return mappedParts.numeric;
+      }
+
+      return normalizedMapped;
+    }
+  }
+
+  return null;
 }
 
 async function resolveInvitedIdByEmail(plex, email) {
@@ -1897,17 +2005,48 @@ async function createInvite(
     librarySectionIds !== undefined ? librarySectionIds : plex.librarySectionIds
   ).map((id) => String(id));
 
-  const availableSectionIds = await fetchSectionKeysFromPlexServer(plex, descriptor);
-  const normalizedAvailableSectionIds = availableSectionIds.map((id) => String(id));
-  const finalSectionIds = requestedSections.length
-    ? requestedSections.filter((id) => normalizedAvailableSectionIds.includes(String(id)))
-    : normalizedAvailableSectionIds;
+  const { sectionIds: availableSectionIds, keyToIdMap } = await fetchSectionKeysFromPlexServer(
+    plex,
+    descriptor
+  );
+
+  const normalizedAvailableSectionIds = Array.from(
+    new Set(availableSectionIds.map((id) => String(id).trim()))
+  ).filter(Boolean);
+  const availableSectionIdsSet = new Set(normalizedAvailableSectionIds);
+
+  const resolvedRequestedSections = Array.from(
+    new Set(
+      requestedSections
+        .map((id) => resolveSectionSelectionId(id, availableSectionIdsSet, keyToIdMap))
+        .filter(Boolean)
+    )
+  );
+
+  const fallbackSectionIds =
+    normalizedAvailableSectionIds.length > 0
+      ? normalizedAvailableSectionIds
+      : Array.from(
+          new Set(
+            Object.values(keyToIdMap || {}).map((value) => String(value).trim()).filter(Boolean)
+          )
+        );
+
+  const hasRequestedSections = requestedSections.length > 0;
+  const finalSectionIds = hasRequestedSections
+    ? resolvedRequestedSections
+    : fallbackSectionIds;
+
+  const availableForMessage =
+    normalizedAvailableSectionIds.length > 0
+      ? normalizedAvailableSectionIds
+      : fallbackSectionIds;
 
   if (!finalSectionIds.length) {
     throw new Error(
       `None of the requested librarySectionIds exist on the Plex server. Requested=${JSON.stringify(
         requestedSections
-      )} Available=${JSON.stringify(normalizedAvailableSectionIds)}`
+      )} Available=${JSON.stringify(availableForMessage)}`
     );
   }
 
@@ -2099,6 +2238,35 @@ async function verifyConnection(overrideSettings) {
     inviteEndpointAvailable = true;
   }
 
+  const { sectionIds: availableSectionIds, keyToIdMap } = await fetchSectionKeysFromPlexServer(
+    plex,
+    descriptor
+  );
+  const normalizedAvailableSectionIds = Array.from(
+    new Set(availableSectionIds.map((id) => String(id).trim()))
+  ).filter(Boolean);
+  const fallbackAvailableSectionIds =
+    normalizedAvailableSectionIds.length > 0
+      ? normalizedAvailableSectionIds
+      : Array.from(
+          new Set(
+            Object.values(keyToIdMap || {}).map((value) => String(value).trim()).filter(Boolean)
+          )
+        );
+  const availableSectionIdsSet = new Set(fallbackAvailableSectionIds);
+
+  const migratedConfiguredSections = sections
+    .map((id) => {
+      const normalized = id === undefined || id === null ? '' : String(id).trim();
+      if (!normalized) {
+        return null;
+      }
+      return (
+        resolveSectionSelectionId(normalized, availableSectionIdsSet, keyToIdMap) || normalized
+      );
+    })
+    .filter(Boolean);
+
   const libraries = await fetchLibrarySections(plex);
   if (!libraries.length) {
     throw new Error(
@@ -2106,15 +2274,39 @@ async function verifyConnection(overrideSettings) {
     );
   }
 
+  const remappedLibraries = [];
+  const seenLibraryIds = new Set();
+  libraries.forEach((library) => {
+    if (!library || typeof library !== 'object') {
+      return;
+    }
+
+    const rawId = library.id === undefined || library.id === null ? '' : String(library.id).trim();
+    const resolvedId =
+      resolveSectionSelectionId(rawId, availableSectionIdsSet, keyToIdMap) || rawId;
+    const normalizedId = resolvedId ? String(resolvedId).trim() : '';
+
+    if (!normalizedId) {
+      return;
+    }
+
+    if (seenLibraryIds.has(normalizedId)) {
+      return;
+    }
+
+    seenLibraryIds.add(normalizedId);
+    remappedLibraries.push({ ...library, id: normalizedId });
+  });
+
   return {
     message: 'Plex invite configuration verified successfully.',
     details: {
       serverIdentifier: plex.serverIdentifier,
-      librarySectionIds: sections,
+      librarySectionIds: migratedConfiguredSections,
       inviteEndpointAvailable,
       inviteEndpointVersion,
     },
-    libraries,
+    libraries: remappedLibraries,
   };
 }
 
