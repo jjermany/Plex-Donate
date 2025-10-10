@@ -219,6 +219,10 @@ function buildExpectedInviteRequest(payload, plexConfig = {}) {
     request.shared_server.friendly_name = payload.friendlyName;
   }
 
+  if (payload.invitedId) {
+    request.shared_server.invited_id = payload.invitedId;
+  }
+
   return request;
 }
 
@@ -1006,6 +1010,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     assert.equal(savedPlex.allowChannels, false);
 
     const inviteCalls = [];
+    const authCalls = [];
     const emailCalls = [];
     const cancelCalls = [];
 
@@ -1013,6 +1018,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     const originalCancelInvite = plexService.cancelInvite;
     const originalSendInviteEmail = emailService.sendInviteEmail;
     const originalGetSmtpConfig = emailService.getSmtpConfig;
+    const originalAuthenticateAccount = plexService.authenticateAccount;
 
     plexService.createInvite = async (payload, overrideConfig) => {
       const plexConfig = overrideConfig || settingsStore.getPlexSettings();
@@ -1026,6 +1032,10 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         status: 'pending',
         sharedLibraries: [{ id: '1', title: 'Movies' }],
       };
+    };
+    plexService.authenticateAccount = async (credentials, overrideConfig) => {
+      authCalls.push({ credentials, overrideConfig });
+      return { invitedId: 'INVITED-2001' };
     };
     plexService.cancelInvite = async (id) => {
       cancelCalls.push(id);
@@ -1051,6 +1061,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           headers: { 'x-csrf-token': csrfToken },
           body: {
             email: 'tester@example.com',
+            password: 'correcthorsebatterystaple',
             name: 'Tester Example',
             note: 'Integration check',
             overrides: {
@@ -1079,6 +1090,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           library_section_ids: ['7', '8'],
           invited_email: 'tester@example.com',
           friendly_name: 'Tester Example',
+          invited_id: 'INVITED-2001',
         },
         sharing_settings: {
           allow_sync: '0',
@@ -1122,12 +1134,20 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.deepEqual(eventPayload.invite.sharedLibraries, [
         { id: '1', title: 'Movies' },
       ]);
+      assert.equal(authCalls.length, 1);
+      assert.equal(authCalls[0].credentials.email, 'tester@example.com');
+      assert.equal(
+        authCalls[0].credentials.password,
+        'correcthorsebatterystaple'
+      );
+      assert.equal(authCalls[0].overrideConfig.baseUrl, 'https://plex.preview');
     } finally {
       await server.close();
       plexService.createInvite = originalCreateInvite;
       plexService.cancelInvite = originalCancelInvite;
       emailService.sendInviteEmail = originalSendInviteEmail;
       emailService.getSmtpConfig = originalGetSmtpConfig;
+      plexService.authenticateAccount = originalAuthenticateAccount;
     }
   });
 
@@ -1135,6 +1155,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     resetDatabase();
 
     const inviteCalls = [];
+    const authCalls = [];
     const cancelCalls = [];
     let emailAttempts = 0;
 
@@ -1142,6 +1163,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     const originalCancelInvite = plexService.cancelInvite;
     const originalSendInviteEmail = emailService.sendInviteEmail;
     const originalGetSmtpConfig = emailService.getSmtpConfig;
+    const originalAuthenticateAccount = plexService.authenticateAccount;
 
     plexService.createInvite = async (payload, overrideConfig) => {
       const plexConfig = overrideConfig || settingsStore.getPlexSettings();
@@ -1150,6 +1172,10 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         inviteId: 'INV-FAIL',
         inviteUrl: 'https://plex.example/invite/INV-FAIL',
       };
+    };
+    plexService.authenticateAccount = async (credentials) => {
+      authCalls.push(credentials);
+      return { invitedId: 'INVITED-FAIL' };
     };
     plexService.cancelInvite = async (id) => {
       cancelCalls.push(id);
@@ -1174,7 +1200,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         '/api/admin/settings/plex/test-invite',
         {
           headers: { 'x-csrf-token': csrfToken },
-          body: { email: 'failure@example.com' },
+          body: { email: 'failure@example.com', password: 'correcthorsebatterystaple' },
         }
       );
 
@@ -1186,8 +1212,11 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         'failure@example.com'
       );
       assert.equal(inviteCalls[0].shared_server.friendly_name, 'Test Invite');
+      assert.equal(inviteCalls[0].shared_server.invited_id, 'INVITED-FAIL');
       assert.equal(emailAttempts, 1);
       assert.deepEqual(cancelCalls, ['INV-FAIL']);
+      assert.equal(authCalls.length, 1);
+      assert.equal(authCalls[0].email, 'failure@example.com');
 
       const eventCount = db
         .prepare('SELECT COUNT(*) AS count FROM events WHERE event_type = ?')
@@ -1199,6 +1228,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       plexService.cancelInvite = originalCancelInvite;
       emailService.sendInviteEmail = originalSendInviteEmail;
       emailService.getSmtpConfig = originalGetSmtpConfig;
+      plexService.authenticateAccount = originalAuthenticateAccount;
     }
   });
 });

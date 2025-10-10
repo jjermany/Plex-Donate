@@ -676,6 +676,14 @@ router.post(
 
     const noteRaw = body.note;
     const nameRaw = body.name;
+    const passwordRaw = body.password;
+    const password = typeof passwordRaw === 'string' ? passwordRaw : '';
+    if (!password.trim()) {
+      return res.status(400).json({
+        error: 'Enter the Plex password for the test invite email.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
     const overrides =
       body && body.overrides && typeof body.overrides === 'object'
         ? body.overrides
@@ -710,11 +718,30 @@ router.post(
     }
 
     let invite;
+    let invitedId;
+    try {
+      const authResult = await plexService.authenticateAccount(
+        { email, password },
+        plexConfig
+      );
+      invitedId = authResult && authResult.invitedId;
+      if (!invitedId) {
+        throw new Error('Plex did not return an invited id for this account.');
+      }
+    } catch (err) {
+      logger.warn('Failed to authenticate Plex test invite account', err.message);
+      return res.status(400).json({
+        error: err.message || 'Failed to authenticate Plex account',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
     try {
       invite = await plexService.createInvite(
         {
           email,
           friendlyName: name,
+          invitedId,
         },
         plexConfig
       );
