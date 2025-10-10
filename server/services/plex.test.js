@@ -21,10 +21,45 @@ async function withMockedFetch(mockImpl, run) {
   }
 }
 
-test('plexService.createInvite posts to Plex API using resolved server id', async () => {
+test('plexService.createInvite falls back to legacy when v2 reports server not found', async () => {
   const calls = [];
-  await withMockedFetch(async (url, options) => {
+  await withMockedFetch(async (url, options = {}) => {
     calls.push({ url, options });
+
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
+
+    if (url === 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken') {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '1', title: 'Movies' },
+                { key: '2', title: 'TV' },
+              ],
+            },
+          }),
+      };
+    }
+
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -32,12 +67,18 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
         text: async () =>
           JSON.stringify({
             MediaContainer: {
-              Server: [
-                { id: 12345, machineIdentifier: 'server-uuid' },
-                { id: 67890, machineIdentifier: 'other-server' },
-              ],
+              Server: [{ id: 12345, machineIdentifier: 'server-uuid' }],
             },
           }),
+      };
+    }
+
+    if (url.startsWith('https://plex.tv/api/v2/shared_servers')) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => 'Plex server was not found',
       };
     }
 
@@ -71,41 +112,48 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
         baseUrl: 'https://plex.local',
         token: 'token123',
         serverIdentifier: 'server-uuid',
-        librarySectionIds: '1, 2',
+        librarySectionIds: '1, 3',
         allowSync: true,
         allowCameraUpload: false,
         allowChannels: true,
       }
     );
 
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.method || 'GET', 'GET');
-    assert.equal(calls[0].options.headers.Accept, undefined);
+    assert.equal(calls.length, 5);
     assert.equal(
-      calls[0].options.headers['X-Plex-Client-Identifier'],
-      'plex-donate-server-uuid'
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
     );
-    assert.equal(calls[0].options.headers['X-Plex-Token'], 'token123');
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[2].url, 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken');
     assert.equal(
-      calls[1].url,
+      calls[3].url,
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123&X-Plex-Client-Identifier=plex-donate-server-uuid'
+    );
+    assert.equal(calls[3].options.method, 'POST');
+    const v2Payload = JSON.parse(calls[3].options.body);
+    assert.deepEqual(v2Payload, {
+      machineIdentifier: 'server-uuid',
+      librarySectionIds: ['1'],
+      settings: {
+        allowSync: '1',
+        allowCameraUpload: '0',
+        allowChannels: '1',
+      },
+      invitedEmail: 'friend@example.com',
+      friendlyName: 'Friend Example',
+    });
+
+    assert.equal(
+      calls[4].url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
     );
-    assert.equal(calls[1].options.method, 'POST');
-    assert.equal(
-      calls[1].options.headers['Content-Type'],
-      'application/json'
-    );
-    assert.equal(
-      calls[1].options.headers['X-Plex-Client-Identifier'],
-      'plex-donate-server-uuid'
-    );
-    assert.equal(calls[1].options.headers['X-Plex-Token'], 'token123');
-    const payload = JSON.parse(calls[1].options.body);
-    assert.deepEqual(payload, {
+    assert.equal(calls[4].options.method, 'POST');
+    const legacyPayload = JSON.parse(calls[4].options.body);
+    assert.deepEqual(legacyPayload, {
       server_id: '12345',
       shared_server: {
-        library_section_ids: ['1', '2'],
+        library_section_ids: ['1'],
         invited_email: 'friend@example.com',
         friendly_name: 'Friend Example',
       },
@@ -124,10 +172,47 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
   });
 });
 
-test('plexService.createInvite uses v2 shared servers endpoint when id is missing', async () => {
+test('plexService.createInvite succeeds with v2 using resources clientIdentifier', async () => {
   const calls = [];
-  await withMockedFetch(async (url, options) => {
+  await withMockedFetch(async (url, options = {}) => {
     calls.push({ url, options });
+
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [
+                { uri: 'https://pms.example:32400' },
+                { uri: 'http://fallback:32400' },
+              ],
+            },
+          ]),
+      };
+    }
+
+    if (url === 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken') {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '1', title: 'Movies' },
+                { key: '2', title: 'TV' },
+              ],
+            },
+          }),
+      };
+    }
 
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
@@ -136,10 +221,7 @@ test('plexService.createInvite uses v2 shared servers endpoint when id is missin
         text: async () =>
           JSON.stringify({
             MediaContainer: {
-              Server: [
-                { machineIdentifier: 'server-uuid' },
-                { machineIdentifier: 'other-server' },
-              ],
+              Server: [{ machineIdentifier: 'server-uuid' }],
             },
           }),
       };
@@ -155,7 +237,7 @@ test('plexService.createInvite uses v2 shared servers endpoint when id is missin
             uri: 'https://plex.example/invite/INV-456',
             status: 'pending',
             created_at: '2024-01-02T00:00:00Z',
-            libraries: [{ id: 1, title: 'Movies' }],
+            libraries: [{ id: 2, title: 'TV' }],
           },
         }),
       };
@@ -172,27 +254,28 @@ test('plexService.createInvite uses v2 shared servers endpoint when id is missin
         baseUrl: 'https://plex.local',
         token: 'token123',
         serverIdentifier: 'server-uuid',
-        librarySectionIds: ['1', '2'],
+        librarySectionIds: ['2'],
         allowSync: false,
         allowCameraUpload: false,
         allowChannels: true,
       }
     );
 
-    assert.equal(calls.length, 2);
+    assert.equal(calls.length, 4);
     assert.equal(
-      calls[1].url,
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[2].url, 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken');
+    assert.equal(
+      calls[3].url,
       'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123&X-Plex-Client-Identifier=plex-donate-server-uuid'
     );
-    assert.equal(calls[1].options.method, 'POST');
-    assert.equal(
-      calls[1].options.headers['X-Plex-Client-Identifier'],
-      'plex-donate-server-uuid'
-    );
-    const payload = JSON.parse(calls[1].options.body);
+    const payload = JSON.parse(calls[3].options.body);
     assert.deepEqual(payload, {
       machineIdentifier: 'server-uuid',
-      librarySectionIds: ['1', '2'],
+      librarySectionIds: ['2'],
       settings: {
         allowSync: '0',
         allowCameraUpload: '0',
@@ -205,12 +288,44 @@ test('plexService.createInvite uses v2 shared servers endpoint when id is missin
     assert.equal(result.inviteId, 'INV-456');
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-456');
     assert.equal(result.status, 'pending');
+    assert.deepEqual(result.sharedLibraries, [{ id: '2', title: 'TV' }]);
   });
 });
 
 test('plexService.createInvite throws when Plex invite endpoint returns 404', async () => {
   await withMockedFetch(
     async (url) => {
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              {
+                name: 'Primary PMS',
+                provides: 'server',
+                clientIdentifier: 'server-uuid',
+                owned: 1,
+                accessToken: 'serverAccessToken',
+                connections: [{ uri: 'https://pms.example:32400' }],
+              },
+            ]),
+        };
+      }
+
+      if (url === 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Directory: [{ key: '1', title: 'Movies' }],
+              },
+            }),
+        };
+      }
+
       if (url.startsWith('https://plex.tv/api/servers?')) {
         return {
           ok: true,
@@ -218,7 +333,7 @@ test('plexService.createInvite throws when Plex invite endpoint returns 404', as
           text: async () =>
             JSON.stringify({
               MediaContainer: {
-                Server: [{ id: 12345, machineIdentifier: 'server-uuid' }],
+                Server: [{ machineIdentifier: 'server-uuid' }],
               },
             }),
         };
@@ -228,7 +343,7 @@ test('plexService.createInvite throws when Plex invite endpoint returns 404', as
         ok: false,
         status: 404,
         statusText: 'Not Found',
-        text: async () => '',
+        text: async () => 'Unhandled error',
       };
     },
     async (plexService) => {
@@ -243,7 +358,7 @@ test('plexService.createInvite throws when Plex invite endpoint returns 404', as
               librarySectionIds: '1',
             }
           ),
-        /Plex server was not found/
+        /Plex invite creation failed with 404/
       );
     }
   );
@@ -252,14 +367,31 @@ test('plexService.createInvite throws when Plex invite endpoint returns 404', as
 test('plexService.createInvite throws when Plex server id cannot be resolved', async () => {
   await withMockedFetch(
     async (url) => {
-      if (url.startsWith('https://plex.tv/api/servers?')) {
+      if (url.startsWith('https://plex.tv/api/resources')) {
         return {
           ok: true,
           status: 200,
           text: async () =>
             JSON.stringify({
               MediaContainer: {
-                Server: [{ id: 54321, machineIdentifier: 'another-server' }],
+                Device: [
+                  {
+                    name: 'Another PMS',
+                    provides: 'server',
+                    clientIdentifier: 'another-server',
+                    owned: 1,
+                    accessToken: 'other',
+                    connections: [{ uri: 'https://other.example:32400' }],
+                  },
+                  {
+                    name: 'Secondary PMS',
+                    provides: 'server',
+                    clientIdentifier: 'secondary-server',
+                    owned: 1,
+                    accessToken: 'second',
+                    connections: [{ uri: 'https://second.example:32400' }],
+                  },
+                ],
               },
             }),
         };
@@ -279,7 +411,7 @@ test('plexService.createInvite throws when Plex server id cannot be resolved', a
               librarySectionIds: '1',
             }
           ),
-        /Unable to resolve Plex server id/
+        /was not found in \/api\/resources/
       );
     }
   );
@@ -437,6 +569,41 @@ test('getOrResolveServerIdentifier errors when multiple servers remain ambiguous
 test('plexService.createInvite throws when Plex omits invite id', async () => {
   await withMockedFetch(
     async (url) => {
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Device: [
+                  {
+                    name: 'Primary PMS',
+                    provides: 'server',
+                    clientIdentifier: 'server-uuid',
+                    owned: 1,
+                    accessToken: 'serverAccessToken',
+                    connections: [{ uri: 'https://pms.example:32400' }],
+                  },
+                ],
+              },
+            }),
+        };
+      }
+
+      if (url === 'https://pms.example:32400/library/sections?X-Plex-Token=serverAccessToken') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Directory: [{ key: '1', title: 'Movies' }],
+              },
+            }),
+        };
+      }
+
       if (url.startsWith('https://plex.tv/api/servers?')) {
         return {
           ok: true,
@@ -444,7 +611,7 @@ test('plexService.createInvite throws when Plex omits invite id', async () => {
           text: async () =>
             JSON.stringify({
               MediaContainer: {
-                Server: [{ id: 12345, machineIdentifier: 'server-uuid' }],
+                Server: [{ machineIdentifier: 'server-uuid' }],
               },
             }),
         };
@@ -478,6 +645,24 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
+
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -522,24 +707,46 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
       reason: 'Invite not found on Plex server',
     });
 
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.headers.Accept, undefined);
+    assert.equal(calls.length, 4);
     assert.equal(
-      calls[1].url,
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[1].options.headers.Accept, undefined);
+    assert.equal(
+      calls[2].url,
       'https://plex.tv/api/servers/12345/shared_servers/INV-123?X-Plex-Token=token123'
     );
     assert.equal(
-      calls[2].url,
+      calls[3].url,
       'https://plex.tv/api/servers/12345/shared_servers/INV-MISSING?X-Plex-Token=token123'
     );
-    assert.equal(calls[1].options.method, 'DELETE');
+    assert.equal(calls[2].options.method, 'DELETE');
   });
 });
 
 test('plexService.cancelInvite rejects when legacy server id is unavailable', async () => {
   await withMockedFetch(
     async (url) => {
+      if (url.startsWith('https://plex.tv/api/resources')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([
+              {
+                name: 'Primary PMS',
+                provides: 'server',
+                clientIdentifier: 'server-uuid',
+                owned: 1,
+                accessToken: 'serverAccessToken',
+                connections: [{ uri: 'https://pms.example:32400' }],
+              },
+            ]),
+        };
+      }
+
       if (url.startsWith('https://plex.tv/api/servers?')) {
         return {
           ok: true,
@@ -574,6 +781,23 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -621,24 +845,28 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.headers.Accept, undefined);
+    assert.equal(calls.length, 4);
     assert.equal(
-      calls[1].url,
-      'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
     );
-    assert.equal(calls[1].options.method, 'GET');
-    assert.equal(
-      calls[1].options.headers['X-Plex-Client-Identifier'],
-      'plex-donate-server-uuid'
-    );
-    assert.equal(calls[1].options.headers['X-Plex-Token'], 'token123');
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[1].options.headers.Accept, undefined);
     assert.equal(
       calls[2].url,
+      'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
+    );
+    assert.equal(calls[2].options.method, 'GET');
+    assert.equal(
+      calls[2].options.headers['X-Plex-Client-Identifier'],
+      'plex-donate-server-uuid'
+    );
+    assert.equal(calls[2].options.headers['X-Plex-Token'], 'token123');
+    assert.equal(
+      calls[3].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
-    assert.equal(calls[2].options.method || 'GET', 'GET');
+    assert.equal(calls[3].options.method || 'GET', 'GET');
     assert.equal(result.details.serverIdentifier, 'server-uuid');
     assert.deepEqual(result.details.librarySectionIds, ['1', '2']);
     assert.equal(result.details.inviteEndpointAvailable, true);
@@ -654,6 +882,23 @@ test('plexService.verifyConnection handles v2 shared servers when legacy id is m
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
 
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
@@ -695,11 +940,15 @@ test('plexService.verifyConnection handles v2 shared servers when legacy id is m
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.headers.Accept, undefined);
+    assert.equal(calls.length, 3);
     assert.equal(
-      calls[1].url,
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[1].options.headers.Accept, undefined);
+    assert.equal(
+      calls[2].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.details.inviteEndpointAvailable, true);
@@ -711,6 +960,32 @@ test('plexService resolves numeric server identifiers using server id fallback',
   const calls = [];
   await withMockedFetch(async (url, options = {}) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              machineIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
+    if (url.startsWith('https://plex.tv/api/v2/shared_servers')) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => 'Plex server was not found',
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -800,13 +1075,18 @@ test('plexService resolves numeric server identifiers using server id fallback',
     assert.equal(inviteResult.invitedAt, '2024-01-01T00:00:00.000Z');
     assert.deepEqual(inviteResult.sharedLibraries, [{ id: '1', title: 'Movies' }]);
 
-    const postCall = calls.find((call) => (call.options.method || 'GET') === 'POST');
-    assert(postCall, 'Expected a POST request to shared servers endpoint');
+    const postCalls = calls.filter((call) => (call.options.method || 'GET') === 'POST');
+    assert.equal(postCalls.length, 2);
     assert.equal(
-      postCall.url,
+      postCalls[0].url,
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123&X-Plex-Client-Identifier=plex-donate-12345'
+    );
+    const legacyPost = postCalls[1];
+    assert.equal(
+      legacyPost.url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
     );
-    const payload = JSON.parse(postCall.options.body);
+    const payload = JSON.parse(legacyPost.options.body);
     assert.equal(payload.server_id, '12345');
   });
 });
@@ -815,6 +1095,32 @@ test('plexService preserves server id casing when falling back to id match', asy
   const calls = [];
   await withMockedFetch(async (url, options = {}) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'different-machine-identifier',
+              machineIdentifier: 'different-machine-identifier',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
+    if (url.startsWith('https://plex.tv/api/v2/shared_servers')) {
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => 'Plex server was not found',
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -893,13 +1199,18 @@ test('plexService preserves server id casing when falling back to id match', asy
     );
 
     assert.equal(inviteResult.inviteId, 'INV-789');
-    const postCall = calls.find((call) => (call.options.method || 'GET') === 'POST');
-    assert(postCall, 'Expected a POST request to shared servers endpoint');
+    const postCalls = calls.filter((call) => (call.options.method || 'GET') === 'POST');
+    assert.equal(postCalls.length, 2);
     assert.equal(
-      postCall.url,
+      postCalls[0].url,
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123&X-Plex-Client-Identifier=plex-donate-server-id-12345'
+    );
+    const legacyPost = postCalls[1];
+    assert.equal(
+      legacyPost.url,
       'https://plex.tv/api/servers/SERVER-ID-12345/shared_servers?X-Plex-Token=token123'
     );
-    const payload = JSON.parse(postCall.options.body);
+    const payload = JSON.parse(legacyPost.options.body);
     assert.equal(payload.server_id, 'SERVER-ID-12345');
   });
 });
@@ -908,6 +1219,23 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -954,14 +1282,18 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls.length, 4);
     assert.equal(
-      calls[1].url,
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(
+      calls[2].url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
     );
     assert.equal(
-      calls[2].url,
+      calls[3].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
@@ -974,6 +1306,23 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -1020,14 +1369,18 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
       librarySectionIds: '1,2',
     });
 
-    assert.equal(calls.length, 3);
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls.length, 4);
     assert.equal(
-      calls[1].url,
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
+    assert.equal(calls[1].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(
+      calls[2].url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
     );
     assert.equal(
-      calls[2].url,
+      calls[3].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
@@ -1040,6 +1393,23 @@ test('plexService.verifyConnection parses XML library list responses', async () 
   const calls = [];
   await withMockedFetch(async (url, options) => {
     calls.push({ url, options });
+    if (url.startsWith('https://plex.tv/api/resources')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'Primary PMS',
+              provides: 'server',
+              clientIdentifier: 'server-uuid',
+              owned: 1,
+              accessToken: 'serverAccessToken',
+              connections: [{ uri: 'https://pms.example:32400' }],
+            },
+          ]),
+      };
+    }
     if (url.startsWith('https://plex.tv/api/servers?')) {
       return {
         ok: true,
@@ -1080,13 +1450,20 @@ test('plexService.verifyConnection parses XML library list responses', async () 
       librarySectionIds: '',
     });
 
-    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(
+      calls[0].url,
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    );
     assert.equal(
       calls[1].url,
-      'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
+      'https://plex.tv/api/servers?X-Plex-Token=token123'
     );
     assert.equal(
       calls[2].url,
+      'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[3].url,
       'https://plex.local/library/sections?X-Plex-Token=token123'
     );
     assert.equal(result.details.inviteEndpointAvailable, true);

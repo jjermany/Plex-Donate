@@ -14,6 +14,8 @@ const V2_SHARED_SERVERS_PATH = '/api/v2/shared_servers';
 
 const serializeBool = (value) => (value ? '1' : '0');
 
+const to01 = (value) => (value ? '1' : '0');
+
 const asStringArray = (value) => {
   if (!value && value !== 0) {
     return [];
@@ -46,6 +48,82 @@ function hostFromUrl(url) {
   } catch (err) {
     return '';
   }
+}
+
+function isHttps(url) {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch (err) {
+    return false;
+  }
+}
+
+function mapConnectionUri(connection) {
+  if (!connection) {
+    return null;
+  }
+
+  if (typeof connection === 'string') {
+    return connection;
+  }
+
+  return (
+    connection.uri ||
+    connection.address ||
+    connection.host ||
+    null
+  );
+}
+
+function pickPrimaryConnection(device) {
+  const rawConnections = Array.isArray(device && device.connections)
+    ? device.connections
+    : [];
+
+  const uris = rawConnections
+    .map((connection) => mapConnectionUri(connection))
+    .filter(Boolean);
+
+  if (!uris.length) {
+    return null;
+  }
+
+  const scored = uris
+    .map((uri) => {
+      const host = hostFromUrl(uri);
+      const normalizedHost = host || '';
+      const score =
+        (isHttps(uri) ? 10 : 0) +
+        (normalizedHost.startsWith('192.168.') ||
+        normalizedHost.startsWith('10.') ||
+        normalizedHost.startsWith('172.16.') ||
+        normalizedHost.startsWith('172.17.') ||
+        normalizedHost.startsWith('172.18.') ||
+        normalizedHost.startsWith('172.19.') ||
+        normalizedHost.startsWith('172.20.') ||
+        normalizedHost.startsWith('172.21.') ||
+        normalizedHost.startsWith('172.22.') ||
+        normalizedHost.startsWith('172.23.') ||
+        normalizedHost.startsWith('172.24.') ||
+        normalizedHost.startsWith('172.25.') ||
+        normalizedHost.startsWith('172.26.') ||
+        normalizedHost.startsWith('172.27.') ||
+        normalizedHost.startsWith('172.28.') ||
+        normalizedHost.startsWith('172.29.') ||
+        normalizedHost.startsWith('172.30.') ||
+        normalizedHost.startsWith('172.31.')
+          ? 2
+          : 0);
+
+      return { uri, score };
+    })
+    .sort((a, b) => b.score - a.score);
+
+  return scored[0] ? scored[0].uri : null;
 }
 
 function getPlexConfig(overrideSettings) {
@@ -564,6 +642,12 @@ function parseResourcesPayload(payload) {
       name: device.name || device.product || device.device || 'unknown',
       provides: String(device.provides || '').toLowerCase(),
       clientIdentifier: device.clientIdentifier || null,
+      machineIdentifier: device.machineIdentifier || null,
+      accessToken: device.accessToken || null,
+      owned:
+        device.owned !== undefined && device.owned !== null
+          ? String(device.owned).trim().toLowerCase()
+          : null,
       connections: mapConnections(device.connections || device.Connection),
     };
   };
@@ -596,11 +680,14 @@ function parseResourcesPayload(payload) {
     const inner = deviceMatch[2] || '';
     const provides = String(attr(deviceAttributes, 'provides') || '').toLowerCase();
     const clientIdentifier = attr(deviceAttributes, 'clientIdentifier');
+    const machineIdentifier = attr(deviceAttributes, 'machineIdentifier');
     const name =
       attr(deviceAttributes, 'name') ||
       attr(deviceAttributes, 'product') ||
       attr(deviceAttributes, 'device') ||
       'unknown';
+    const accessToken = attr(deviceAttributes, 'accessToken');
+    const ownedAttr = attr(deviceAttributes, 'owned');
 
     const connections = [];
     let connectionMatch;
@@ -619,6 +706,9 @@ function parseResourcesPayload(payload) {
       name,
       provides,
       clientIdentifier,
+      machineIdentifier,
+      accessToken,
+      owned: ownedAttr ? ownedAttr.toLowerCase() : null,
       connections,
     });
   }
@@ -888,77 +978,108 @@ async function resolveServerDescriptor(plex) {
     return serverDescriptorCache.get(cacheKey);
   }
 
-  let servers;
-  try {
-    servers = await fetchPlexServers(plex);
-  } catch (err) {
-    throw new Error(`Failed to resolve Plex server id: ${err.message}`);
-  }
-
   const normalizedIdentifier = normalizeId(machineIdentifier);
   if (!normalizedIdentifier) {
     throw new Error('Plex server UUID must be configured to create invites');
   }
 
-  const serverCandidates = Array.isArray(servers)
-    ? servers.filter((server) => {
-        if (!server || typeof server !== 'object') {
+  let resources;
+  try {
+    resources = await fetchPlexResources(plex);
+  } catch (err) {
+    throw new Error(`Failed to resolve Plex server via /api/resources: ${err.message}`);
+  }
+
+  const serversFromResources = Array.isArray(resources)
+    ? resources.filter((device) => {
+        if (!device || typeof device !== 'object') {
           return false;
         }
-        const provides = (server.provides && String(server.provides)) || '';
-        const normalizedProvides = provides.toLowerCase();
-        return (
-          normalizedProvides.includes('server') ||
-          normalizedProvides.includes('plex media server')
-        );
+
+        return String(device.provides || '').toLowerCase().includes('server');
       })
     : [];
 
-  const match =
-    findServerMatch(serverCandidates, normalizedIdentifier) ||
-    findServerMatch(servers, normalizedIdentifier);
-
-  if (!match) {
-    const sample = summarizeServerIdentifiers(servers);
+  if (!serversFromResources.length) {
     throw new Error(
-      `Unable to resolve Plex server id for the configured machine identifier "${machineIdentifier}". Visible servers: ${JSON.stringify(
-        sample
-      )}`
+      'No Plex servers were returned from /api/resources. Confirm the token owns the server and that it is published.'
+    );
+  }
+
+  const ownedServers = serversFromResources.filter((device) => {
+    if (device.owned === undefined || device.owned === null) {
+      return true;
+    }
+    return String(device.owned).trim() === '1';
+  });
+
+  const candidates = ownedServers.length ? ownedServers : serversFromResources;
+  let matchedDevice = candidates.find((device) => {
+    const possible = [device.clientIdentifier, device.machineIdentifier];
+    return possible.some((value) => normalizeId(value) === normalizedIdentifier);
+  });
+
+  if (!matchedDevice && candidates.length === 1) {
+    matchedDevice = candidates[0];
+  }
+
+  if (!matchedDevice) {
+    const sample = candidates.slice(0, 5).map((device) => ({
+      name: device.name || 'unknown',
+      clientIdentifier: device.clientIdentifier || null,
+      owned: device.owned || null,
+    }));
+    throw new Error(
+      `Plex server identifier "${machineIdentifier}" was not found in /api/resources. Owned servers: ${JSON.stringify(sample)}`
     );
   }
 
   if (
-    match.owned !== undefined &&
-    match.owned !== null &&
-    String(match.owned).trim() &&
-    String(match.owned).trim() !== '1'
+    matchedDevice.owned !== undefined &&
+    matchedDevice.owned !== null &&
+    String(matchedDevice.owned).trim() !== '1'
   ) {
-    const sample = summarizeServerIdentifiers([match]);
     throw new Error(
-      `Plex token does not own server "${match.name || 'unknown'}". Visible: ${JSON.stringify(
-        sample
-      )}`
+      `Plex token does not own server "${matchedDevice.name || 'unknown'}". Ensure the PMS is claimed by this account.`
     );
   }
 
-  const descriptor = {
-    machineIdentifier: match.machineIdentifier
-      ? String(match.machineIdentifier).trim()
-      : machineIdentifier,
-    legacyServerId: match.id
-      ? String(match.id).trim()
-      : match.server_id
-      ? String(match.server_id).trim()
-      : match.serverId
-      ? String(match.serverId).trim()
-      : null,
-    name: match.name || match.friendlyName || 'unknown',
-    clientIdentifier: match.clientIdentifier || null,
-  };
+  let legacyServerId = null;
+  try {
+    const servers = await fetchPlexServers(plex);
+    const match =
+      findServerMatch(servers, normalizedIdentifier) ||
+      findServerMatch(
+        Array.isArray(servers)
+          ? servers.filter((server) =>
+              server && typeof server === 'object'
+                ? String(server.provides || '').toLowerCase().includes('server')
+                : false
+            )
+          : [],
+        normalizedIdentifier
+      );
 
-  if (!descriptor.legacyServerId) {
-    descriptor.legacyServerId = null;
+    if (match && match.id != null) {
+      legacyServerId = String(match.id).trim();
+    } else if (match && match.server_id != null) {
+      legacyServerId = String(match.server_id).trim();
+    } else if (match && match.serverId != null) {
+      legacyServerId = String(match.serverId).trim();
+    }
+  } catch (err) {
+    // Ignore failure; legacy id is only required for fallback paths.
   }
+
+  const descriptor = {
+    machineIdentifier: matchedDevice.clientIdentifier
+      ? String(matchedDevice.clientIdentifier).trim()
+      : machineIdentifier,
+    legacyServerId: legacyServerId || null,
+    name: matchedDevice.name || 'unknown',
+    clientIdentifier: matchedDevice.clientIdentifier || null,
+    device: matchedDevice,
+  };
 
   if (cacheKey) {
     serverDescriptorCache.set(cacheKey, descriptor);
@@ -1093,6 +1214,52 @@ function parseLibrarySectionsPayload(payload) {
   }
 
   return normalizeLibraryList(directories);
+}
+
+async function fetchSectionIdsFromPms(device) {
+  if (!device) {
+    throw new Error('Unable to determine Plex server details from /api/resources.');
+  }
+
+  if (!device.accessToken) {
+    throw new Error(
+      'Plex resources did not include an access token for the server; ensure the server is owned and published.'
+    );
+  }
+
+  const baseUri = pickPrimaryConnection(device);
+  if (!baseUri) {
+    throw new Error('No reachable Plex connection URI was found in /api/resources.');
+  }
+
+  const normalizedBase = String(baseUri).replace(/\/+$/, '');
+  const url = `${normalizedBase}${LIBRARY_SECTIONS_ENDPOINT}?X-Plex-Token=${encodeURIComponent(
+    device.accessToken
+  )}`;
+
+  let response;
+  try {
+    response = await fetch(url, { method: 'GET' });
+  } catch (err) {
+    throw new Error(`Failed to query Plex library sections from ${url}: ${err.message}`);
+  }
+
+  if (!response.ok) {
+    const statusText = response.statusText || 'Error';
+    throw new Error(
+      `Failed to query Plex library sections from ${url}: ${response.status} (${statusText})`
+    );
+  }
+
+  const body = await response.text();
+  const libraries = parseLibrarySectionsPayload(body);
+  if (!libraries.length) {
+    throw new Error(
+      'Plex did not return any library sections for the selected server; verify the server is reachable and published.'
+    );
+  }
+
+  return libraries.map((library) => library.id);
 }
 
 async function fetchLibrarySections(plex) {
@@ -1318,22 +1485,67 @@ async function createInvite(
   }
 
   const descriptor = await resolveServerDescriptor(plex);
-  const sections = parseLibrarySectionIds(
+  const requestedSections = parseLibrarySectionIds(
     librarySectionIds !== undefined ? librarySectionIds : plex.librarySectionIds
   );
 
-  if (!sections.length) {
-    throw new Error('At least one Plex library section ID must be configured');
+  const availableSectionIds = await fetchSectionIdsFromPms(descriptor.device);
+  const finalSectionIds = requestedSections.length
+    ? requestedSections.filter((id) => availableSectionIds.includes(String(id)))
+    : availableSectionIds;
+
+  if (!finalSectionIds.length) {
+    throw new Error(
+      `None of the requested librarySectionIds exist on the Plex server. Requested=${JSON.stringify(
+        requestedSections
+      )} Available=${JSON.stringify(availableSectionIds)}`
+    );
+  }
+
+  const sharedHeaders = buildSharedServerHeaders(plex, {
+    'Content-Type': 'application/json',
+  });
+
+  const v2Payload = {
+    machineIdentifier:
+      descriptor.clientIdentifier || descriptor.machineIdentifier || plex.serverIdentifier,
+    librarySectionIds: finalSectionIds,
+    settings: {
+      allowSync: serializeBool(plex.allowSync),
+      allowCameraUpload: serializeBool(plex.allowCameraUpload),
+      allowChannels: serializeBool(plex.allowChannels),
+    },
+    invitedEmail: normalizedEmail,
+  };
+
+  if (friendlyName) {
+    v2Payload.friendlyName = String(friendlyName).trim();
   }
 
   let response;
   try {
-    if (descriptor.legacyServerId) {
-      const sharedServerUrl = await buildSharedServerUrl(plex);
-      const payload = {
+    response = await fetch(buildV2SharedServerUrl(plex), {
+      method: 'POST',
+      headers: sharedHeaders,
+      body: JSON.stringify(v2Payload),
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (response.status === 404 || response.status === 400) {
+    const bodyText = await response.text();
+    const serverNotFound = /server was not found/i.test(bodyText || '');
+
+    if (serverNotFound && descriptor.legacyServerId) {
+      const legacyPayload = {
         server_id: descriptor.legacyServerId,
         shared_server: {
-          library_section_ids: sections,
+          library_section_ids: finalSectionIds,
           invited_email: normalizedEmail,
           ...(friendlyName
             ? { friendly_name: String(friendlyName).trim() }
@@ -1346,47 +1558,35 @@ async function createInvite(
         },
       };
 
-      response = await fetch(sharedServerUrl, {
-        method: 'POST',
-        headers: buildSharedServerHeaders(plex, {
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify(payload),
-      });
-    } else {
-      const payload = {
-        machineIdentifier: descriptor.machineIdentifier,
-        librarySectionIds: sections,
-        settings: {
-          allowSync: serializeBool(plex.allowSync),
-          allowCameraUpload: serializeBool(plex.allowCameraUpload),
-          allowChannels: serializeBool(plex.allowChannels),
-        },
-        invitedEmail: normalizedEmail,
-      };
-
-      if (friendlyName) {
-        payload.friendlyName = String(friendlyName).trim();
+      try {
+        response = await fetch(
+          buildPlexTvUrl(LEGACY_SHARED_SERVERS_PATH(descriptor.legacyServerId), plex),
+          {
+            method: 'POST',
+            headers: sharedHeaders,
+            body: JSON.stringify(legacyPayload),
+          }
+        );
+      } catch (err) {
+        throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
       }
-
-      response = await fetch(buildV2SharedServerUrl(plex), {
-        method: 'POST',
-        headers: buildSharedServerHeaders(plex, {
-          'Content-Type': 'application/json',
-        }),
-        body: JSON.stringify(payload),
-      });
+    } else if (serverNotFound && !descriptor.legacyServerId) {
+      throw new Error(
+        `Plex server was not found by the v2 invite API. Verify the server is owned, published online, and that the librarySectionIds belong to it. Payload=${JSON.stringify(
+          v2Payload
+        )}`
+      );
+    } else {
+      const statusText = response.statusText || 'Error';
+      const suffix = bodyText ? `: ${bodyText}` : '';
+      throw new Error(
+        `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
+      );
     }
-  } catch (err) {
-    throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
   }
 
   if (response.status === 401 || response.status === 403) {
     throw new Error('Plex rejected the provided token.');
-  }
-
-  if (response.status === 404 || response.status === 410) {
-    throw new Error('Plex server was not found when creating invite.');
   }
 
   if (!response.ok) {
