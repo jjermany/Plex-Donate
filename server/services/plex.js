@@ -1718,7 +1718,10 @@ async function createInvite(
 
       let lastMachineAttemptError = null;
 
-      for (const candidate of machineIdentifierCandidates.slice(1)) {
+      for (const candidate of machineIdentifierCandidates) {
+        if (!candidate) {
+          continue;
+        }
         let machineResponse;
         try {
           machineResponse = await fetch(
