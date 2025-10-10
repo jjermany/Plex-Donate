@@ -81,7 +81,7 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
     assert.equal(calls.length, 2);
     assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
     assert.equal(calls[0].options.method || 'GET', 'GET');
-    assert.equal(calls[0].options.headers.Accept, 'application/json');
+    assert.equal(calls[0].options.headers.Accept, undefined);
     assert.equal(
       calls[0].options.headers['X-Plex-Client-Identifier'],
       'plex-donate-server-uuid'
@@ -121,6 +121,89 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
     assert.equal(result.status, 'pending');
     assert.equal(result.invitedAt, '2024-01-01T00:00:00.000Z');
     assert.deepEqual(result.sharedLibraries, [{ id: '1', title: 'Movies' }]);
+  });
+});
+
+test('plexService.createInvite uses v2 shared servers endpoint when id is missing', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+
+    if (url.startsWith('https://plex.tv/api/servers?')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Server: [
+                { machineIdentifier: 'server-uuid' },
+                { machineIdentifier: 'other-server' },
+              ],
+            },
+          }),
+      };
+    }
+
+    if (url.startsWith('https://plex.tv/api/v2/shared_servers')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          invitation: {
+            id: 'INV-456',
+            uri: 'https://plex.example/invite/INV-456',
+            status: 'pending',
+            created_at: '2024-01-02T00:00:00Z',
+            libraries: [{ id: 1, title: 'Movies' }],
+          },
+        }),
+      };
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.createInvite(
+      {
+        email: 'friend@example.com',
+        friendlyName: 'Friend Example',
+      },
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'server-uuid',
+        librarySectionIds: ['1', '2'],
+        allowSync: false,
+        allowCameraUpload: false,
+        allowChannels: true,
+      }
+    );
+
+    assert.equal(calls.length, 2);
+    assert.equal(
+      calls[1].url,
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123&X-Plex-Client-Identifier=plex-donate-server-uuid'
+    );
+    assert.equal(calls[1].options.method, 'POST');
+    assert.equal(
+      calls[1].options.headers['X-Plex-Client-Identifier'],
+      'plex-donate-server-uuid'
+    );
+    const payload = JSON.parse(calls[1].options.body);
+    assert.deepEqual(payload, {
+      machineIdentifier: 'server-uuid',
+      librarySectionIds: ['1', '2'],
+      settings: {
+        allowTuners: true,
+        allowSync: false,
+      },
+      invitedEmail: 'friend@example.com',
+      friendlyName: 'Friend Example',
+    });
+
+    assert.equal(result.inviteId, 'INV-456');
+    assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-456');
+    assert.equal(result.status, 'pending');
   });
 });
 
@@ -440,7 +523,7 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
 
     assert.equal(calls.length, 3);
     assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.headers.Accept, 'application/json');
+    assert.equal(calls[0].options.headers.Accept, undefined);
     assert.equal(
       calls[1].url,
       'https://plex.tv/api/servers/12345/shared_servers/INV-123?X-Plex-Token=token123'
@@ -451,6 +534,39 @@ test('plexService.cancelInvite cancels invites and handles 404', async () => {
     );
     assert.equal(calls[1].options.method, 'DELETE');
   });
+});
+
+test('plexService.cancelInvite rejects when legacy server id is unavailable', async () => {
+  await withMockedFetch(
+    async (url) => {
+      if (url.startsWith('https://plex.tv/api/servers?')) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({
+              MediaContainer: {
+                Server: [{ machineIdentifier: 'server-uuid' }],
+              },
+            }),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+    async (plexService) => {
+      await assert.rejects(
+        () =>
+          plexService.cancelInvite('INV-123', {
+            baseUrl: 'https://plex.local',
+            token: 'token123',
+            serverIdentifier: 'server-uuid',
+            librarySectionIds: '1',
+          }),
+        /cancelling invites is not supported/i
+      );
+    }
+  );
 });
 
 test('plexService.verifyConnection checks invite endpoint and loads libraries', async () => {
@@ -506,7 +622,7 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
 
     assert.equal(calls.length, 3);
     assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
-    assert.equal(calls[0].options.headers.Accept, 'application/json');
+    assert.equal(calls[0].options.headers.Accept, undefined);
     assert.equal(
       calls[1].url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
@@ -529,6 +645,64 @@ test('plexService.verifyConnection checks invite endpoint and loads libraries', 
       { id: '1', title: 'Movies' },
       { id: '2', title: 'TV Shows' },
     ]);
+    assert.equal(result.details.inviteEndpointVersion, 'legacy');
+  });
+});
+
+test('plexService.verifyConnection handles v2 shared servers when legacy id is missing', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options) => {
+    calls.push({ url, options });
+
+    if (url.startsWith('https://plex.tv/api/servers?')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Server: [{ machineIdentifier: 'server-uuid' }],
+            },
+          }),
+      };
+    }
+
+    if (url.includes('/library/sections')) {
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () =>
+          JSON.stringify({
+            MediaContainer: {
+              Directory: [
+                { key: '/library/sections/1', title: 'Movies' },
+                { key: '/library/sections/2', title: 'TV Shows' },
+              ],
+            },
+          }),
+      };
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.verifyConnection({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+      serverIdentifier: 'server-uuid',
+      librarySectionIds: '1,2',
+    });
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, 'https://plex.tv/api/servers?X-Plex-Token=token123');
+    assert.equal(calls[0].options.headers.Accept, undefined);
+    assert.equal(
+      calls[1].url,
+      'https://plex.local/library/sections?X-Plex-Token=token123'
+    );
+    assert.equal(result.details.inviteEndpointAvailable, true);
+    assert.equal(result.details.inviteEndpointVersion, 'v2');
   });
 });
 
@@ -791,6 +965,7 @@ test('plexService.verifyConnection falls back when shared server endpoint is mis
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
     assert.equal(result.details.inviteEndpointAvailable, false);
+    assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
 });
 
@@ -856,6 +1031,7 @@ test('plexService.verifyConnection notes when shared server endpoint is gone', a
     );
     assert.equal(result.message, 'Plex invite configuration verified successfully.');
     assert.equal(result.details.inviteEndpointAvailable, false);
+    assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
 });
 
@@ -917,5 +1093,6 @@ test('plexService.verifyConnection parses XML library list responses', async () 
       { id: '5', title: 'Kids' },
       { id: '9', title: 'Music' },
     ]);
+    assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
 });
