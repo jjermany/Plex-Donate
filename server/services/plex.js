@@ -264,6 +264,76 @@ function extractInviteUrl(data) {
     (container.links && container.links.invite);
 
   if (!candidate) {
+    const visited = new Set();
+    const queue = [];
+
+    const enqueue = (value) => {
+      if (!value) {
+        return;
+      }
+
+      if (visited.has(value)) {
+        return;
+      }
+
+      if (typeof value === 'object' || Array.isArray(value)) {
+        visited.add(value);
+      }
+
+      queue.push(value);
+    };
+
+    enqueue(container.links);
+
+    while (queue.length) {
+      const current = queue.shift();
+
+      if (!current) {
+        continue;
+      }
+
+      if (Array.isArray(current)) {
+        for (const entry of current) {
+          enqueue(entry);
+        }
+        continue;
+      }
+
+      if (typeof current !== 'object') {
+        continue;
+      }
+
+      const rel =
+        current.rel !== undefined && current.rel !== null
+          ? String(current.rel).toLowerCase()
+          : '';
+      const type =
+        current.type !== undefined && current.type !== null
+          ? String(current.type).toLowerCase()
+          : '';
+
+      if (
+        rel.includes('invite') ||
+        rel.includes('accept') ||
+        rel.includes('web') ||
+        type.includes('invite') ||
+        type.includes('accept') ||
+        type.includes('web')
+      ) {
+        const linkCandidate = current.uri || current.url || current.href;
+        if (linkCandidate) {
+          return String(linkCandidate);
+        }
+      }
+
+      for (const key of Object.keys(current)) {
+        if (key === 'uri' || key === 'url' || key === 'href') {
+          continue;
+        }
+        enqueue(current[key]);
+      }
+    }
+
     return null;
   }
 
