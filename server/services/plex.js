@@ -2015,11 +2015,24 @@ async function createInvite(
   ).filter(Boolean);
   const availableSectionIdsSet = new Set(normalizedAvailableSectionIds);
 
+  const translatedRequestedSections = requestedSections
+    .map((id) => {
+      const normalized = id === undefined || id === null ? '' : String(id).trim();
+      if (!normalized) {
+        return null;
+      }
+
+      const resolved =
+        resolveSectionSelectionId(normalized, availableSectionIdsSet, keyToIdMap) || normalized;
+      const normalizedResolved = String(resolved).trim();
+
+      return normalizedResolved || null;
+    })
+    .filter(Boolean);
+
   const resolvedRequestedSections = Array.from(
     new Set(
-      requestedSections
-        .map((id) => resolveSectionSelectionId(id, availableSectionIdsSet, keyToIdMap))
-        .filter(Boolean)
+      translatedRequestedSections.filter((id) => availableSectionIdsSet.has(id))
     )
   );
 
