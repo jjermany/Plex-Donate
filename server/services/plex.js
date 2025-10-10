@@ -1963,7 +1963,7 @@ async function revokeUser({ plexAccountId, email }) {
 }
 
 async function createInvite(
-  { email, friendlyName, librarySectionIds } = {},
+  { email, friendlyName, librarySectionIds, invitedId } = {},
   overrideSettings
 ) {
   const plex = getPlexConfig(overrideSettings);
@@ -2069,8 +2069,13 @@ async function createInvite(
 
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
 
-  const invitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
-  if (!invitedId) {
+  let resolvedInvitedId = invitedId === undefined || invitedId === null
+    ? ''
+    : String(invitedId).trim();
+  if (!resolvedInvitedId) {
+    resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
+  }
+  if (!resolvedInvitedId) {
     throw new Error(
       `Plex did not return an invitedId for ${normalizedEmail}; verify the user has logged into Plex at least once.`
     );
@@ -2079,8 +2084,6 @@ async function createInvite(
   const v2Body = {
     machineIdentifier,
     librarySectionIds: finalSectionIds,
-    invitedId,
-    invitedEmail: normalizedEmail,
     ...(normalizedFriendlyName ? { friendlyName: normalizedFriendlyName } : {}),
     settings: {
       allowSync: to01(plex?.allowSync),
@@ -2088,6 +2091,12 @@ async function createInvite(
       allowChannels: to01(plex?.allowChannels),
     },
   };
+
+  if (resolvedInvitedId) {
+    v2Body.invitedId = resolvedInvitedId;
+  } else {
+    v2Body.invitedEmail = normalizedEmail;
+  }
 
   const v2Url =
     `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
@@ -2323,11 +2332,92 @@ async function verifyConnection(overrideSettings) {
   };
 }
 
+async function authenticateAccount({ email, password } = {}, overrideSettings) {
+  const normalizedEmail = email ? String(email).trim() : '';
+  if (!normalizedEmail) {
+    throw new Error('Email is required to authenticate Plex account');
+  }
+
+  const normalizedPassword = password ? String(password) : '';
+  if (!normalizedPassword) {
+    throw new Error('Password is required to authenticate Plex account');
+  }
+
+  const plex = getPlexConfig(overrideSettings);
+  const headers = buildPlexClientHeaders(getClientIdentifier(plex), {
+    Authorization: `Basic ${Buffer.from(
+      `${normalizedEmail}:${normalizedPassword}`,
+      'utf8'
+    ).toString('base64')}`,
+  });
+  delete headers['Content-Type'];
+
+  let response;
+  try {
+    response = await fetch('https://plex.tv/users/sign_in.json', {
+      method: 'POST',
+      headers,
+    });
+  } catch (err) {
+    throw new Error(`Failed to authenticate Plex account: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided email or password.');
+  }
+
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => '');
+    const statusText = response.statusText || 'Error';
+    const suffix = bodyText ? `: ${bodyText}` : '';
+    throw new Error(
+      `Plex authentication failed with ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (err) {
+    data = {};
+  }
+
+  const user = data && typeof data === 'object' ? data.user || data : {};
+  const invitedIdCandidate =
+    getCaseInsensitive(user, 'invitedId') ||
+    getCaseInsensitive(user, 'id') ||
+    getCaseInsensitive(user, 'uuid') ||
+    getCaseInsensitive(user, 'userID') ||
+    null;
+
+  if (!invitedIdCandidate) {
+    throw new Error('Plex did not return an account identifier.');
+  }
+
+  const resolvedEmail =
+    getCaseInsensitive(user, 'email') ||
+    getCaseInsensitive(user, 'username') ||
+    normalizedEmail;
+
+  const authToken =
+    getCaseInsensitive(user, 'authToken') ||
+    getCaseInsensitive(data, 'authToken') ||
+    getCaseInsensitive(data, 'auth_token') ||
+    null;
+
+  return {
+    invitedId: String(invitedIdCandidate).trim(),
+    email: resolvedEmail ? String(resolvedEmail).trim() : normalizedEmail,
+    authToken: authToken ? String(authToken).trim() : null,
+  };
+}
+
 module.exports = {
   getPlexConfig,
   isConfigured,
   createInvite,
   cancelInvite,
+  authenticateAccount,
   listUsers,
   revokeUser,
   revokeUserByEmail,

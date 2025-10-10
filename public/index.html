@@ -1471,6 +1471,21 @@
                   >Creates a real Plex invite and emails it using your saved SMTP settings.</span
                 >
               </label>
+              <label>
+                Plex password for test invite
+                <input
+                  name="testInvitePassword"
+                  type="password"
+                  placeholder="••••••••"
+                  autocomplete="current-password"
+                  data-test-field="invite-password"
+                  data-transient="true"
+                />
+                <span class="help"
+                  >Used temporarily to authenticate the Plex account before sending the
+                  invite. This password is not stored.</span
+                >
+              </label>
               <p>Use this to verify invite delivery before sharing your donation link.</p>
             </div>
             <p class="form-status" data-status-for="plex"></p>
@@ -3866,6 +3881,10 @@
 
             const emailInput = form.querySelector('[data-test-field="invite-email"]');
             const emailValue = emailInput ? emailInput.value.trim() : '';
+            const passwordInput = form.querySelector(
+              '[data-test-field="invite-password"]'
+            );
+            const passwordValue = passwordInput ? passwordInput.value : '';
             if (!emailValue) {
               setFormStatus(
                 form,
@@ -3878,9 +3897,22 @@
               return;
             }
 
+            if (!passwordValue) {
+              setFormStatus(
+                form,
+                'Enter the Plex password for the test invite email.',
+                'error'
+              );
+              if (passwordInput) {
+                passwordInput.focus();
+              }
+              return;
+            }
+
             const payload = getFormPayload(form);
             const requestBody = {
               email: emailValue,
+              password: passwordValue,
               overrides: payload,
             };
 
@@ -3905,6 +3937,9 @@
               );
             } finally {
               button.disabled = previousDisabledState;
+              if (passwordInput) {
+                passwordInput.value = '';
+              }
             }
             return;
           }
