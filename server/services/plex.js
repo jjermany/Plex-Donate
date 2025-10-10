@@ -1358,8 +1358,9 @@ async function createInvite(
         machineIdentifier: descriptor.machineIdentifier,
         librarySectionIds: sections,
         settings: {
-          allowTuners: Boolean(plex.allowChannels),
-          allowSync: Boolean(plex.allowSync),
+          allowSync: serializeBool(plex.allowSync),
+          allowCameraUpload: serializeBool(plex.allowCameraUpload),
+          allowChannels: serializeBool(plex.allowChannels),
         },
         invitedEmail: normalizedEmail,
       };
