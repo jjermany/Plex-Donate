@@ -1034,14 +1034,20 @@ async function resolveServerDescriptor(plex) {
     );
   }
 
-  if (
-    matchedDevice.owned !== undefined &&
-    matchedDevice.owned !== null &&
-    String(matchedDevice.owned).trim() !== '1'
-  ) {
-    throw new Error(
-      `Plex token does not own server "${matchedDevice.name || 'unknown'}". Ensure the PMS is claimed by this account.`
-    );
+  if (matchedDevice.owned !== undefined && matchedDevice.owned !== null) {
+    const normalizedOwned = String(matchedDevice.owned).trim().toLowerCase();
+    const isOwned =
+      matchedDevice.owned === true ||
+      matchedDevice.owned === 1 ||
+      normalizedOwned === '1' ||
+      normalizedOwned === 'true' ||
+      normalizedOwned === 'yes';
+
+    if (!isOwned) {
+      throw new Error(
+        `Plex token does not own server "${matchedDevice.name || 'unknown'}". Ensure the PMS is claimed by this account.`
+      );
+    }
   }
 
   let legacyServerId = null;
