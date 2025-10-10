@@ -148,6 +148,116 @@ test('plexService.createInvite uses v2 when available', async () => {
   });
 });
 
+test('plexService.createInvite extracts invite url from nested links arrays', async () => {
+  const calls = [];
+  await withMockedFetch(async (url, options = {}) => {
+    calls.push({ url, options });
+
+    if (
+      url ===
+      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
+    ) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([
+            {
+              name: 'UnraidNAS',
+              provides: 'server',
+              clientIdentifier: 'd4e2machine',
+              owned: '1',
+              connections: [{ uri: 'https://example.com:32400' }],
+            },
+          ]),
+      };
+    }
+
+    if (url === 'https://plex.tv/api/servers?X-Plex-Token=token123') {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          '<MediaContainer><Server machineIdentifier="d4e2machine" owned="1" name="UnraidNAS"/></MediaContainer>',
+      };
+    }
+
+    if (url === 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123') {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          '<MediaContainer><Server machineIdentifier="d4e2machine"><Section id="10" key="/library/sections/1" title="Movies"/><Section id="12" key="/library/sections/2" title="TV"/></Server></MediaContainer>',
+      };
+    }
+
+    if (
+      url ===
+      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
+    ) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            users: [
+              {
+                id: '2001',
+                email: 'friend@example.com',
+                invitedId: 'INVITED-2001',
+              },
+            ],
+          }),
+      };
+    }
+
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          invitation: {
+            id: 'INV-200',
+            status: 'pending',
+            links: {
+              link: [
+                { rel: 'self', uri: 'https://plex.example/invite/self/INV-200' },
+                {
+                  rel: 'detail',
+                  links: [
+                    {
+                      rel: 'accept',
+                      href: 'https://plex.example/invite/INV-200',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        }),
+      };
+    }
+
+    throw new Error(`Unexpected URL: ${url}`);
+  }, async (plexService) => {
+    const result = await plexService.createInvite(
+      { email: 'friend@example.com', librarySectionIds: ['10', '12'] },
+      {
+        baseUrl: 'https://plex.local',
+        token: 'token123',
+        serverIdentifier: 'd4e2machine',
+        allowSync: true,
+        allowCameraUpload: false,
+        allowChannels: true,
+      }
+    );
+
+    assert.equal(calls[calls.length - 1].url, 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123');
+    assert.equal(result.inviteId, 'INV-200');
+    assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-200');
+  });
+});
+
 test('plexService.createInvite translates legacy configured section indices', async () => {
   const calls = [];
   await withMockedFetch(async (url, options = {}) => {
