@@ -57,24 +57,26 @@ function buildInviteRequestBody({
     throw new Error('At least one Plex library section ID must be configured');
   }
 
-  const payload = {
-    email,
-    server: {
-      uuid: plex.serverIdentifier,
-    },
-    settings: {
-      allowSync: false,
-      allowCameraUpload: false,
-      allowChannels: false,
-    },
-    libraries: sections.map((id) => ({ id })),
+  const sharedServer = {
+    library_section_ids: sections,
+    invited_email: email,
   };
 
   if (friendlyName) {
-    payload.friendlyName = friendlyName;
+    sharedServer.friendly_name = friendlyName;
   }
 
-  return payload;
+  const serializeBoolean = (value) => (value ? '1' : '0');
+
+  return {
+    server_id: plex.serverIdentifier,
+    shared_server: sharedServer,
+    sharing_settings: {
+      allow_sync: serializeBoolean(plex.allowSync),
+      allow_camera_upload: serializeBoolean(plex.allowCameraUpload),
+      allow_channels: serializeBoolean(plex.allowChannels),
+    },
+  };
 }
 
 function coerceArray(value) {

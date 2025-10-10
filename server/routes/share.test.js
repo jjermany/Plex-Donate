@@ -178,6 +178,50 @@ async function requestJson(server, method, path, { headers = {}, body } = {}) {
   return { status: response.status, body: payload };
 }
 
+function parseLibrarySectionIds(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => String(entry).trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  if (!value && value !== 0) {
+    return [];
+  }
+
+  return String(value)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function buildExpectedInviteRequest(payload, plexConfig = {}) {
+  const sections = parseLibrarySectionIds(
+    Object.prototype.hasOwnProperty.call(payload, 'librarySectionIds')
+      ? payload.librarySectionIds
+      : plexConfig.librarySectionIds
+  );
+
+  const request = {
+    server_id: plexConfig.serverIdentifier || '',
+    shared_server: {
+      library_section_ids: sections,
+      invited_email: payload.email,
+    },
+    sharing_settings: {
+      allow_sync: plexConfig.allowSync ? '1' : '0',
+      allow_camera_upload: plexConfig.allowCameraUpload ? '1' : '0',
+      allow_channels: plexConfig.allowChannels ? '1' : '0',
+    },
+  };
+
+  if (payload.friendlyName) {
+    request.shared_server.friendly_name = payload.friendlyName;
+  }
+
+  return request;
+}
+
 function resetDatabase() {
   db.exec(`
     DELETE FROM sessions;
@@ -971,7 +1015,11 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     const originalGetSmtpConfig = emailService.getSmtpConfig;
 
     plexService.createInvite = async (payload, overrideConfig) => {
-      inviteCalls.push({ payload, overrideConfig });
+      const plexConfig = overrideConfig || settingsStore.getPlexSettings();
+      inviteCalls.push({
+        request: buildExpectedInviteRequest(payload, plexConfig),
+        overrideConfig,
+      });
       return {
         inviteId: 'INV-123',
         inviteUrl: 'https://plex.example/invite/INV-123',
@@ -1025,9 +1073,18 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       });
 
       assert.equal(inviteCalls.length, 1);
-      assert.deepEqual(inviteCalls[0].payload, {
-        email: 'tester@example.com',
-        friendlyName: 'Tester Example',
+      assert.deepEqual(inviteCalls[0].request, {
+        server_id: 'server-preview',
+        shared_server: {
+          library_section_ids: ['7', '8'],
+          invited_email: 'tester@example.com',
+          friendly_name: 'Tester Example',
+        },
+        sharing_settings: {
+          allow_sync: '0',
+          allow_camera_upload: '0',
+          allow_channels: '0',
+        },
       });
       assert.equal(inviteCalls[0].overrideConfig.baseUrl, 'https://plex.preview');
       assert.equal(inviteCalls[0].overrideConfig.token, 'preview-token');
@@ -1086,8 +1143,9 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     const originalSendInviteEmail = emailService.sendInviteEmail;
     const originalGetSmtpConfig = emailService.getSmtpConfig;
 
-    plexService.createInvite = async (payload) => {
-      inviteCalls.push(payload);
+    plexService.createInvite = async (payload, overrideConfig) => {
+      const plexConfig = overrideConfig || settingsStore.getPlexSettings();
+      inviteCalls.push(buildExpectedInviteRequest(payload, plexConfig));
       return {
         inviteId: 'INV-FAIL',
         inviteUrl: 'https://plex.example/invite/INV-FAIL',
@@ -1123,7 +1181,11 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(response.status, 500);
       assert.equal(response.body.error, 'Invite created but email delivery failed');
       assert.equal(inviteCalls.length, 1);
-      assert.equal(inviteCalls[0].email, 'failure@example.com');
+      assert.equal(
+        inviteCalls[0].shared_server.invited_email,
+        'failure@example.com'
+      );
+      assert.equal(inviteCalls[0].shared_server.friendly_name, 'Test Invite');
       assert.equal(emailAttempts, 1);
       assert.deepEqual(cancelCalls, ['INV-FAIL']);
 
