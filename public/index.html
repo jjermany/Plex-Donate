@@ -886,18 +886,6 @@
         }
       }
 
-      .test-invite-group {
-        margin-top: 24px;
-        display: grid;
-        gap: 12px;
-      }
-
-      .test-invite-group p {
-        margin: 0;
-        color: var(--text-muted-soft);
-        font-size: 0.9rem;
-      }
-
       .checkbox-row {
         display: flex;
         align-items: center;
@@ -1456,43 +1444,10 @@
                 </div>
               </div>
             </div>
-            <div class="test-invite-group">
-              <label>
-                Send test invite to
-                <input
-                  name="testInviteEmail"
-                  type="email"
-                  placeholder="you@example.com"
-                  autocomplete="off"
-                  data-test-field="invite-email"
-                  data-transient="true"
-                />
-                <span class="help"
-                  >Creates a real Plex invite and emails it using your saved SMTP settings.</span
-                >
-              </label>
-              <label>
-                Plex password for test invite
-                <input
-                  name="testInvitePassword"
-                  type="password"
-                  placeholder="••••••••"
-                  autocomplete="current-password"
-                  data-test-field="invite-password"
-                  data-transient="true"
-                />
-                <span class="help"
-                  >Used temporarily to authenticate the Plex account before sending the
-                  invite. This password is not stored.</span
-                >
-              </label>
-              <p>Use this to verify invite delivery before sharing your donation link.</p>
-            </div>
             <p class="form-status" data-status-for="plex"></p>
             <div class="form-actions">
               <button type="submit" class="secondary">Save Plex settings</button>
               <button type="button" data-action="test">Test Plex connection</button>
-              <button type="button" data-action="test-invite">Send Plex test invite</button>
             </div>
           </form>
         </section>
@@ -3870,76 +3825,6 @@
               );
             } finally {
               button.disabled = previousDisabledState;
-            }
-            return;
-          }
-
-          if (action === 'test-invite') {
-            if (group !== 'plex') {
-              return;
-            }
-
-            const emailInput = form.querySelector('[data-test-field="invite-email"]');
-            const emailValue = emailInput ? emailInput.value.trim() : '';
-            const passwordInput = form.querySelector(
-              '[data-test-field="invite-password"]'
-            );
-            const passwordValue = passwordInput ? passwordInput.value : '';
-            if (!emailValue) {
-              setFormStatus(
-                form,
-                'Enter an email address to send a test invite.',
-                'error'
-              );
-              if (emailInput) {
-                emailInput.focus();
-              }
-              return;
-            }
-
-            if (!passwordValue) {
-              setFormStatus(
-                form,
-                'Enter the Plex password for the test invite email.',
-                'error'
-              );
-              if (passwordInput) {
-                passwordInput.focus();
-              }
-              return;
-            }
-
-            const payload = getFormPayload(form);
-            const requestBody = {
-              email: emailValue,
-              password: passwordValue,
-              overrides: payload,
-            };
-
-            const previousDisabledState = button.disabled;
-            try {
-              button.disabled = true;
-              setFormStatus(form, 'Sending test invite…');
-              const response = await api('/api/admin/settings/plex/test-invite', {
-                method: 'POST',
-                body: requestBody,
-              });
-              const message =
-                response.message ||
-                `Test invite sent to ${emailValue}. Check your inbox for the Plex invite.`;
-              setFormStatus(form, message, 'success');
-              scheduleStatusClear(form, 5000);
-            } catch (err) {
-              setFormStatus(
-                form,
-                err.message || 'Failed to send test invite',
-                'error'
-              );
-            } finally {
-              button.disabled = previousDisabledState;
-              if (passwordInput) {
-                passwordInput.value = '';
-              }
             }
             return;
           }

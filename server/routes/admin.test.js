@@ -57,7 +57,6 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const plexService = require('../services/plex');
-const emailService = require('../services/email');
 
 function resetDatabase() {
   db.exec(`
@@ -439,76 +438,3 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.equal(body.donor.plexPending, true);
 });
 
-test('POST /api/admin/settings/plex/test-invite uses Plex invite helper', async (t) => {
-  resetDatabase();
-  const agent = await startServer(t);
-  const csrfToken = await loginAgent(agent);
-
-  settingsStore.updateGroup('plex', {
-    baseUrl: 'https://plex.local',
-    token: 'token-xyz',
-    serverIdentifier: 'server-789',
-    librarySectionIds: '5,6',
-  });
-
-  const originalCreateInvite = plexService.createInvite;
-  let createInviteRequest = null;
-  plexService.createInvite = async (payload, overrideConfig) => {
-    const plexConfig = overrideConfig || settingsStore.getPlexSettings();
-    createInviteRequest = buildExpectedInviteRequest(payload, plexConfig);
-    return {
-      inviteId: 'plex-test',
-      inviteUrl: 'https://plex.local/invite/plex-test',
-      status: 'pending',
-      invitedAt: new Date().toISOString(),
-      sharedLibraries: [{ id: '5', title: 'Movies' }],
-    };
-  };
-  const originalGetSmtpConfig = emailService.getSmtpConfig;
-  const originalSendInviteEmail = emailService.sendInviteEmail;
-  let inviteEmailPayload = null;
-  emailService.getSmtpConfig = () => ({
-    host: 'smtp.example.com',
-    port: 587,
-    secure: false,
-    from: 'plex@example.com',
-  });
-  emailService.sendInviteEmail = async (payload) => {
-    inviteEmailPayload = payload;
-  };
-
-  t.after(() => {
-    plexService.createInvite = originalCreateInvite;
-    emailService.getSmtpConfig = originalGetSmtpConfig;
-    emailService.sendInviteEmail = originalSendInviteEmail;
-  });
-
-  const response = await agent.post('/api/admin/settings/plex/test-invite', {
-    headers: { 'x-csrf-token': csrfToken },
-    body: {
-      email: 'tester@example.com',
-      overrides: {
-        allowSync: true,
-      },
-    },
-  });
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.success, true);
-  assert.ok(body.message.includes('Plex'));
-  assert.ok(createInviteRequest);
-  assert.equal(createInviteRequest.server_id, 'server-789');
-  assert.deepEqual(createInviteRequest.shared_server, {
-    library_section_ids: ['5', '6'],
-    invited_email: 'tester@example.com',
-    friendly_name: 'Test Invite',
-  });
-  assert.deepEqual(createInviteRequest.sharing_settings, {
-    allow_sync: '0',
-    allow_camera_upload: '0',
-    allow_channels: '0',
-  });
-  assert.ok(inviteEmailPayload);
-  assert.equal(inviteEmailPayload.to, 'tester@example.com');
-  assert.equal(inviteEmailPayload.inviteUrl, 'https://plex.local/invite/plex-test');
-});
