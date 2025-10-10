@@ -194,8 +194,9 @@ test('plexService.createInvite uses v2 shared servers endpoint when id is missin
       machineIdentifier: 'server-uuid',
       librarySectionIds: ['1', '2'],
       settings: {
-        allowTuners: true,
-        allowSync: false,
+        allowSync: '0',
+        allowCameraUpload: '0',
+        allowChannels: '1',
       },
       invitedEmail: 'friend@example.com',
       friendlyName: 'Friend Example',
