@@ -587,6 +587,67 @@
         display: none;
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
+      .dashboard-legend {
+        position: sticky;
+        top: 16px;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px;
+        margin: 0 0 28px;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border-color);
+        background: var(--panel-background);
+        box-shadow: var(--panel-shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .dashboard-legend button {
+        appearance: none;
+        background: transparent;
+        border-radius: 12px;
+        border: none;
+        padding: 10px 18px;
+        font-weight: 600;
+        color: var(--text-muted);
+        transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .dashboard-legend button:hover,
+      .dashboard-legend button:focus-visible {
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--button-primary-bg);
+        outline: none;
+      }
+
+      .dashboard-legend button[aria-selected='true'] {
+        background: var(--button-primary-bg);
+        color: var(--button-primary-color);
+        box-shadow: var(--button-primary-shadow);
+      }
+
+      .dashboard-legend button[aria-selected='true']:focus-visible {
+        outline: 2px solid var(--button-primary-color);
+        outline-offset: 2px;
+      }
+
+      .dashboard-views {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .dashboard-view {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
       .grid {
         display: grid;
         gap: 24px;
@@ -595,6 +656,19 @@
       @media (min-width: 960px) {
         .grid {
           grid-template-columns: 2fr 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .dashboard-legend {
+          position: static;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .dashboard-legend button {
+          width: 100%;
+          text-align: left;
         }
       }
 
@@ -1091,354 +1165,440 @@
       </section>
 
       <div id="dashboard" class="hidden">
-        <section class="panel" id="admin-account-panel">
-          <h2 style="margin-top:0;">Admin account</h2>
-          <p class="muted-text" id="admin-account-description">
-            Update the username and password used to access this dashboard. Password changes require at least 12 characters.
-          </p>
-          <form id="admin-credentials-form" class="settings-form">
-            <div class="field-grid">
-              <label>
-                Username
-                <input name="username" type="text" autocomplete="username" placeholder="Admin username" />
-              </label>
-              <label>
-                New password
-                <input
-                  name="newPassword"
-                  type="password"
-                  autocomplete="new-password"
-                  placeholder="Leave blank to keep current"
-                />
-              </label>
-              <label>
-                Confirm new password
-                <input
-                  name="confirmPassword"
-                  type="password"
-                  autocomplete="new-password"
-                  placeholder="Repeat the new password"
-                />
-              </label>
-            </div>
-            <label>
-              Current password
-              <input name="currentPassword" type="password" autocomplete="current-password" required />
-            </label>
-            <p class="form-status" data-status-for="admin-credentials"></p>
-            <div class="form-actions">
-              <button type="submit">Save admin credentials</button>
-            </div>
-          </form>
-        </section>
-        <section class="panel" id="prospect-share-panel">
-          <h2 style="margin-top:0;">Invite a new supporter</h2>
-          <p class="muted-text" style="margin:0 0 16px;">
-            Generate a share page for someone who isn't subscribed yet. The link walks them
-            through account creation and the PayPal signup flow before unlocking Plex access.
-          </p>
-          <form id="prospect-share-form">
-            <input type="hidden" name="prospectId" />
-            <div class="field-grid">
-              <label>
-                Contact email
-                <input
-                  name="email"
-                  type="email"
-                  autocomplete="off"
-                  placeholder="future.supporter@example.com"
-                />
-              </label>
-              <label>
-                Display name
-                <input
-                  name="name"
-                  type="text"
-                  autocomplete="off"
-                  placeholder="Future Supporter"
-                />
-              </label>
-            </div>
-            <label>
-              Internal notes
-              <textarea name="note" placeholder="Optional details for other admins"></textarea>
-            </label>
-            <p class="form-status" data-status-for="prospect-share"></p>
-            <div class="form-actions">
-              <button type="submit">Generate invite page link</button>
-              <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
-            </div>
-          </form>
-          <div class="share-output hidden" id="prospect-share-result">
-            <div>
-              <div class="share-output-meta" id="prospect-share-summary"></div>
-              <a
-                id="prospect-share-url"
-                class="share-url"
-                href="#"
-                target="_blank"
-                rel="noopener"
-              ></a>
-            </div>
-            <div class="share-output-actions">
-              <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
-              <button type="button" class="secondary" id="prospect-share-regenerate">
-                Generate new link
-              </button>
-            </div>
-            <div class="share-output-meta" id="prospect-share-note"></div>
-          </div>
-        </section>
-        <div class="grid">
-          <section class="panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
-              <div>
-                <h2 style="margin:0 0 4px;">Active subscribers</h2>
-                <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
-              </div>
-              <button id="refresh-button" type="button" class="secondary">Refresh</button>
-            </div>
-            <p id="plex-status-note" class="muted-text" hidden></p>
-            <div style="overflow-x:auto;">
-              <table id="subscribers-table">
-                <thead>
-                  <tr>
-                    <th>Subscriber</th>
-                    <th>Status</th>
-                    <th>Last payment</th>
-                    <th>Invite</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="panel" id="share-links-panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
-              <div>
-                <h2 style="margin:0 0 4px;">Invite page links</h2>
-                <p class="muted-text" style="margin:0;">
-                  Review active share URLs and remove any that are no longer needed.
-                </p>
-              </div>
-            </div>
-            <div style="overflow-x:auto;">
-              <table id="share-links-table">
-                <thead>
-                  <tr>
-                    <th>Link</th>
-                    <th>Owner</th>
-                    <th>Created</th>
-                    <th>Last used</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="panel">
-            <h2 style="margin-top:0;">Recent activity</h2>
-            <ul id="events-list" class="events-list"></ul>
-          </section>
-        </div>
-        <section class="panel" id="settings-panel">
-          <h2 style="margin-top:0;">Integration settings</h2>
-          <p class="muted-text" style="margin:0 0 16px;">Keep service credentials in one place so you can avoid editing environment files.</p>
-
-          <form class="settings-form" data-group="app">
-            <h3>Application</h3>
-            <div class="field-grid">
-              <label>
-                Public base URL
-                <input
-                  name="publicBaseUrl"
-                  type="url"
-                  placeholder="https://plexdonate.example.com"
-                />
-                <span class="help"
-                  >Used to build invite page links that work outside your
-                  network.</span
-                >
-              </label>
-            </div>
-            <p class="form-status" data-status-for="app"></p>
-            <div class="form-actions">
-              <button type="submit" class="secondary">
-                Save application settings
-              </button>
-            </div>
-          </form>
-
-          <form class="settings-form" data-group="paypal">
-            <h3>PayPal</h3>
-            <div class="field-grid">
-              <label>
-                Client ID
-                <input name="clientId" type="text" autocomplete="off" placeholder="A..." />
-              </label>
-              <label>
-                Client Secret
-                <input name="clientSecret" type="password" autocomplete="new-password" placeholder="E..." />
-              </label>
-              <label>
-                Webhook ID
-                <input name="webhookId" type="text" autocomplete="off" placeholder="0..." />
-              </label>
-              <label>
-                API base URL
-                <input name="apiBase" type="url" placeholder="https://api-m.sandbox.paypal.com" />
-                <span class="help">Use the sandbox URL for testing or the live URL for production.</span>
-              </label>
-              <label>
-                Plan ID
-                <input name="planId" type="text" autocomplete="off" placeholder="P-123456789" />
-                <span class="help">Used to generate the PayPal subscription link that donors visit.</span>
-              </label>
-              <label>
-                Monthly price
-                <input name="subscriptionPrice" type="number" min="0" step="0.01" placeholder="5.00" />
-                <span class="help">Shown on share pages so donors know the recurring amount.</span>
-              </label>
-              <label>
-                Currency
-                <input name="currency" type="text" autocomplete="off" placeholder="USD" />
-              </label>
-            </div>
-            <div class="paypal-plan-management" id="paypal-plan-management">
-              <div class="plan-management-header">
-                <div>
-                  <h4>Subscription plan management</h4>
-                  <p>
-                    Manage your PayPal billing plan from the PayPal dashboard. Once a
-                    plan ID is saved, details will appear below.
-                  </p>
+        <nav class="dashboard-legend" aria-label="Dashboard sections" data-dashboard-legend>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-account"
+            data-dashboard-target="account"
+            aria-controls="dashboard-view-account"
+            aria-selected="true"
+            tabindex="0"
+          >
+            Account
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-donors"
+            data-dashboard-target="donors"
+            aria-controls="dashboard-view-donors"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Donors
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-integration"
+            data-dashboard-target="integration"
+            aria-controls="dashboard-view-integration"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Integrations
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-logs"
+            data-dashboard-target="logs"
+            aria-controls="dashboard-view-logs"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Logs
+          </button>
+        </nav>
+        <div class="dashboard-views">
+          <div
+            class="dashboard-view"
+            id="dashboard-view-account"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-account"
+            data-dashboard-view="account"
+          >
+            <section class="panel" id="admin-account-panel">
+              <h2 style="margin-top:0;">Admin account</h2>
+              <p class="muted-text" id="admin-account-description">
+                Update the username and password used to access this dashboard. Password changes require at least 12 characters.
+              </p>
+              <form id="admin-credentials-form" class="settings-form">
+                <div class="field-grid">
+                  <label>
+                    Username
+                    <input name="username" type="text" autocomplete="username" placeholder="Admin username" />
+                  </label>
+                  <label>
+                    New password
+                    <input
+                      name="newPassword"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="Leave blank to keep current"
+                    />
+                  </label>
+                  <label>
+                    Confirm new password
+                    <input
+                      name="confirmPassword"
+                      type="password"
+                      autocomplete="new-password"
+                      placeholder="Repeat the new password"
+                    />
+                  </label>
                 </div>
-                <div class="plan-management-actions">
+                <label>
+                  Current password
+                  <input name="currentPassword" type="password" autocomplete="current-password" required />
+                </label>
+                <p class="form-status" data-status-for="admin-credentials"></p>
+                <div class="form-actions">
+                  <button type="submit">Save admin credentials</button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-donors"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-donors"
+            data-dashboard-view="donors"
+            hidden
+          >
+            <section class="panel" id="prospect-share-panel">
+              <h2 style="margin-top:0;">Invite a new supporter</h2>
+              <p class="muted-text" style="margin:0 0 16px;">
+                Generate a share page for someone who isn't subscribed yet. The link walks them
+                through account creation and the PayPal signup flow before unlocking Plex access.
+              </p>
+              <form id="prospect-share-form">
+                <input type="hidden" name="prospectId" />
+                <div class="field-grid">
+                  <label>
+                    Contact email
+                    <input
+                      name="email"
+                      type="email"
+                      autocomplete="off"
+                      placeholder="future.supporter@example.com"
+                    />
+                  </label>
+                  <label>
+                    Display name
+                    <input
+                      name="name"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Future Supporter"
+                    />
+                  </label>
+                </div>
+                <label>
+                  Internal notes
+                  <textarea name="note" placeholder="Optional details for other admins"></textarea>
+                </label>
+                <p class="form-status" data-status-for="prospect-share"></p>
+                <div class="form-actions">
+                  <button type="submit">Generate invite page link</button>
+                  <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
+                </div>
+              </form>
+              <div class="share-output hidden" id="prospect-share-result">
+                <div>
+                  <div class="share-output-meta" id="prospect-share-summary"></div>
                   <a
+                    id="prospect-share-url"
+                    class="share-url"
                     href="#"
-                    class="manage-link"
-                    id="paypal-plan-manage-link"
                     target="_blank"
                     rel="noopener"
-                    hidden
-                    >Open in PayPal</a
-                  >
+                  ></a>
                 </div>
-              </div>
-              <div class="plan-management-body empty" id="paypal-plan-body">
-                <p>No PayPal subscription plan has been generated yet.</p>
-              </div>
-            </div>
-            <p class="form-status" data-status-for="paypal"></p>
-            <div class="form-actions">
-              <button type="submit" class="secondary">Save PayPal settings</button>
-              <button type="button" data-action="test">Test PayPal settings</button>
-            </div>
-          </form>
-
-          <form class="settings-form" data-group="smtp">
-            <h3>Email (SMTP)</h3>
-            <div class="field-grid">
-              <label>
-                Host
-                <input name="host" type="text" placeholder="smtp.example.com" />
-              </label>
-              <label>
-                Port
-                <input name="port" type="number" min="1" />
-              </label>
-              <label class="checkbox-row">
-                <input name="secure" type="checkbox" />
-                Use TLS (secure)
-              </label>
-              <label>
-                Username
-                <input name="user" type="text" autocomplete="off" />
-              </label>
-              <label>
-                Password
-                <input name="pass" type="password" autocomplete="new-password" />
-              </label>
-              <label>
-                From address
-                <input name="from" type="email" placeholder="Plex Donate &lt;donations@example.com&gt;" />
-              </label>
-            </div>
-            <p class="form-status" data-status-for="smtp"></p>
-            <div class="form-actions">
-              <button type="submit" class="secondary">Save email settings</button>
-              <button type="button" data-action="test">Test email delivery</button>
-            </div>
-          </form>
-
-          <form class="settings-form" data-group="plex">
-            <h3>Plex invites</h3>
-            <p class="muted-text subtle-text" style="margin:0 0 12px;">
-              Connect Plex Donate to your server so you can send invites without leaving the dashboard.
-            </p>
-            <div class="field-grid">
-              <label>
-                Server URL
-                <input name="baseUrl" type="url" placeholder="https://plex.example.com" />
-              </label>
-              <label>
-                Plex token
-                <input name="token" type="password" autocomplete="new-password" />
-              </label>
-              <div class="library-selector" data-library-picker>
-                <label class="library-selector-label">Library access</label>
-                <input
-                  name="librarySectionIds"
-                  type="hidden"
-                  data-library-input
-                />
-                <div class="library-selector-control">
-                  <button
-                    type="button"
-                    class="secondary library-selector-toggle"
-                    data-library-toggle
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    disabled
-                  >
-                    Select libraries
+                <div class="share-output-actions">
+                  <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
+                  <button type="button" class="secondary" id="prospect-share-regenerate">
+                    Generate new link
                   </button>
-                  <p class="help" data-library-help>
-                    Test the Plex connection to load your server's libraries.
-                  </p>
-                  <p
-                    class="muted-text subtle-text library-selector-summary"
-                    data-library-summary
-                    hidden
-                  ></p>
                 </div>
-                <div class="library-selector-dropdown" data-library-dropdown hidden>
-                  <div class="library-selector-options" data-library-options></div>
-                  <p class="library-selector-empty" data-library-empty hidden>
-                    No libraries were returned. Check your Plex permissions and try again.
-                  </p>
-                  <div class="library-selector-actions">
-                    <button type="button" class="secondary" data-library-clear>
-                      Clear selection
-                    </button>
-                    <button type="button" class="secondary" data-library-apply>
-                      OK
-                    </button>
+                <div class="share-output-meta" id="prospect-share-note"></div>
+              </div>
+            </section>
+            <div class="grid">
+              <section class="panel">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                  <div>
+                    <h2 style="margin:0 0 4px;">Active subscribers</h2>
+                    <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
+                  </div>
+                  <button id="refresh-button" type="button" class="secondary">Refresh</button>
+                </div>
+                <p id="plex-status-note" class="muted-text" hidden></p>
+                <div style="overflow-x:auto;">
+                  <table id="subscribers-table">
+                    <thead>
+                      <tr>
+                        <th>Subscriber</th>
+                        <th>Status</th>
+                        <th>Last payment</th>
+                        <th>Invite</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="panel" id="share-links-panel">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                  <div>
+                    <h2 style="margin:0 0 4px;">Invite page links</h2>
+                    <p class="muted-text" style="margin:0;">
+                      Review active share URLs and remove any that are no longer needed.
+                    </p>
                   </div>
                 </div>
-              </div>
+                <div style="overflow-x:auto;">
+                  <table id="share-links-table">
+                    <thead>
+                      <tr>
+                        <th>Link</th>
+                        <th>Owner</th>
+                        <th>Created</th>
+                        <th>Last used</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
-            <p class="form-status" data-status-for="plex"></p>
-            <div class="form-actions">
-              <button type="submit" class="secondary">Save Plex settings</button>
-              <button type="button" data-action="test">Test Plex connection</button>
-            </div>
-          </form>
-        </section>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-integration"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-integration"
+            data-dashboard-view="integration"
+            hidden
+          >
+            <section class="panel" id="settings-panel">
+              <h2 style="margin-top:0;">Integration settings</h2>
+              <p class="muted-text" style="margin:0 0 16px;">Keep service credentials in one place so you can avoid editing environment files.</p>
+
+              <form class="settings-form" data-group="app">
+                <h3>Application</h3>
+                <div class="field-grid">
+                  <label>
+                    Public base URL
+                    <input
+                      name="publicBaseUrl"
+                      type="url"
+                      placeholder="https://plexdonate.example.com"
+                    />
+                    <span class="help"
+                      >Used to build invite page links that work outside your
+                      network.</span
+                    >
+                  </label>
+                </div>
+                <p class="form-status" data-status-for="app"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">
+                    Save application settings
+                  </button>
+                </div>
+              </form>
+
+              <form class="settings-form" data-group="paypal">
+                <h3>PayPal</h3>
+                <div class="field-grid">
+                  <label>
+                    Client ID
+                    <input name="clientId" type="text" autocomplete="off" placeholder="A..." />
+                  </label>
+                  <label>
+                    Client Secret
+                    <input name="clientSecret" type="password" autocomplete="new-password" placeholder="E..." />
+                  </label>
+                  <label>
+                    Webhook ID
+                    <input name="webhookId" type="text" autocomplete="off" placeholder="0..." />
+                  </label>
+                  <label>
+                    API base URL
+                    <input name="apiBase" type="url" placeholder="https://api-m.sandbox.paypal.com" />
+                    <span class="help">Use the sandbox URL for testing or the live URL for production.</span>
+                  </label>
+                  <label>
+                    Plan ID
+                    <input name="planId" type="text" autocomplete="off" placeholder="P-123456789" />
+                    <span class="help">Used to generate the PayPal subscription link that donors visit.</span>
+                  </label>
+                  <label>
+                    Monthly price
+                    <input name="subscriptionPrice" type="number" min="0" step="0.01" placeholder="5.00" />
+                    <span class="help">Shown on share pages so donors know the recurring amount.</span>
+                  </label>
+                  <label>
+                    Currency
+                    <input name="currency" type="text" autocomplete="off" placeholder="USD" />
+                  </label>
+                </div>
+                <div class="paypal-plan-management" id="paypal-plan-management">
+                  <div class="plan-management-header">
+                    <div>
+                      <h4>Subscription plan management</h4>
+                      <p>
+                        Manage your PayPal billing plan from the PayPal dashboard. Once a
+                        plan ID is saved, details will appear below.
+                      </p>
+                    </div>
+                    <div class="plan-management-actions">
+                      <a
+                        href="#"
+                        class="manage-link"
+                        id="paypal-plan-manage-link"
+                        target="_blank"
+                        rel="noopener"
+                        hidden
+                        >Open in PayPal</a
+                      >
+                    </div>
+                  </div>
+                  <div class="plan-management-body empty" id="paypal-plan-body">
+                    <p>No PayPal subscription plan has been generated yet.</p>
+                  </div>
+                </div>
+                <p class="form-status" data-status-for="paypal"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save PayPal settings</button>
+                  <button type="button" data-action="test">Test PayPal settings</button>
+                </div>
+              </form>
+
+              <form class="settings-form" data-group="smtp">
+                <h3>Email (SMTP)</h3>
+                <div class="field-grid">
+                  <label>
+                    Host
+                    <input name="host" type="text" placeholder="smtp.example.com" />
+                  </label>
+                  <label>
+                    Port
+                    <input name="port" type="number" min="1" />
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="secure" type="checkbox" />
+                    Use TLS (secure)
+                  </label>
+                  <label>
+                    Username
+                    <input name="user" type="text" autocomplete="off" />
+                  </label>
+                  <label>
+                    Password
+                    <input name="pass" type="password" autocomplete="new-password" />
+                  </label>
+                  <label>
+                    From address
+                    <input name="from" type="email" placeholder="Plex Donate &lt;donations@example.com&gt;" />
+                  </label>
+                </div>
+                <p class="form-status" data-status-for="smtp"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save email settings</button>
+                  <button type="button" data-action="test">Test email delivery</button>
+                </div>
+              </form>
+
+              <form class="settings-form" data-group="plex">
+                <h3>Plex invites</h3>
+                <p class="muted-text subtle-text" style="margin:0 0 12px;">
+                  Connect Plex Donate to your server so you can send invites without leaving the dashboard.
+                </p>
+                <div class="field-grid">
+                  <label>
+                    Server URL
+                    <input name="baseUrl" type="url" placeholder="https://plex.example.com" />
+                  </label>
+                  <label>
+                    Plex token
+                    <input name="token" type="password" autocomplete="new-password" />
+                  </label>
+                  <div class="library-selector" data-library-picker>
+                    <label class="library-selector-label">Library access</label>
+                    <input
+                      name="librarySectionIds"
+                      type="hidden"
+                      data-library-input
+                    />
+                    <div class="library-selector-control">
+                      <button
+                        type="button"
+                        class="secondary library-selector-toggle"
+                        data-library-toggle
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        disabled
+                      >
+                        Select libraries
+                      </button>
+                      <p class="help" data-library-help>
+                        Test the Plex connection to load your server's libraries.
+                      </p>
+                      <p
+                        class="muted-text subtle-text library-selector-summary"
+                        data-library-summary
+                        hidden
+                      ></p>
+                    </div>
+                    <div class="library-selector-dropdown" data-library-dropdown hidden>
+                      <div class="library-selector-options" data-library-options></div>
+                      <p class="library-selector-empty" data-library-empty hidden>
+                        No libraries were returned. Check your Plex permissions and try again.
+                      </p>
+                      <div class="library-selector-actions">
+                        <button type="button" class="secondary" data-library-clear>
+                          Clear selection
+                        </button>
+                        <button type="button" class="secondary" data-library-apply>
+                          OK
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="form-status" data-status-for="plex"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save Plex settings</button>
+                  <button type="button" data-action="test">Test Plex connection</button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-logs"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-logs"
+            data-dashboard-view="logs"
+            hidden
+          >
+            <section class="panel">
+              <h2 style="margin-top:0;">Recent activity</h2>
+              <ul id="events-list" class="events-list"></ul>
+            </section>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1607,6 +1767,18 @@
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
       const THEME_STORAGE_KEY = 'plexDonateTheme';
+      const dashboardLegend = document.querySelector('[data-dashboard-legend]');
+      const dashboardLegendButtons = dashboardLegend
+        ? Array.from(dashboardLegend.querySelectorAll('[data-dashboard-target]'))
+        : [];
+      const dashboardViewContainers = Array.from(
+        document.querySelectorAll('[data-dashboard-view]')
+      );
+      const DASHBOARD_VIEW_STORAGE_KEY = 'plexDonateDashboardView';
+      const DASHBOARD_VIEW_HASH_PREFIX = 'view-';
+      const DASHBOARD_VIEW_DEFAULT = 'account';
+      const DASHBOARD_VIEW_ORDER = ['account', 'donors', 'integration', 'logs'];
+      const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
 
       if (prospectShareCopy) {
         prospectShareCopy.disabled = true;
@@ -1620,6 +1792,191 @@
       let sessionToken = null;
 
       let openSubscriberActionMenu = null;
+
+      let activeDashboardView = DASHBOARD_VIEW_DEFAULT;
+
+      function normalizeDashboardView(view) {
+        if (!view) {
+          return null;
+        }
+        const normalized = String(view).trim().toLowerCase();
+        return DASHBOARD_VIEW_SET.has(normalized) ? normalized : null;
+      }
+
+      function getStoredDashboardView() {
+        try {
+          return normalizeDashboardView(
+            localStorage.getItem(DASHBOARD_VIEW_STORAGE_KEY)
+          );
+        } catch (err) {
+          return null;
+        }
+      }
+
+      function storeDashboardView(view) {
+        try {
+          if (!normalizeDashboardView(view)) {
+            localStorage.removeItem(DASHBOARD_VIEW_STORAGE_KEY);
+            return;
+          }
+          localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, view);
+        } catch (err) {
+          /* noop */
+        }
+      }
+
+      function parseDashboardViewFromHash() {
+        const hash = window.location.hash ? window.location.hash.slice(1) : '';
+        if (!hash) {
+          return null;
+        }
+        if (hash.startsWith(DASHBOARD_VIEW_HASH_PREFIX)) {
+          const candidate = hash.slice(DASHBOARD_VIEW_HASH_PREFIX.length);
+          return normalizeDashboardView(candidate);
+        }
+        return null;
+      }
+
+      function updateDashboardViewHash(view) {
+        const normalized = normalizeDashboardView(view);
+        try {
+          const url = new URL(window.location.href);
+          const nextHash = normalized
+            ? `#${DASHBOARD_VIEW_HASH_PREFIX}${normalized}`
+            : '';
+          window.history.replaceState(
+            {},
+            '',
+            `${url.pathname}${url.search}${nextHash}`
+          );
+        } catch (err) {
+          if (normalized) {
+            window.location.hash = `${DASHBOARD_VIEW_HASH_PREFIX}${normalized}`;
+          } else {
+            window.location.hash = '';
+          }
+        }
+      }
+
+      function applyActiveDashboardView() {
+        dashboardViewContainers.forEach((container) => {
+          const viewName = container.getAttribute('data-dashboard-view');
+          const isActive = viewName === activeDashboardView;
+          container.hidden = !isActive;
+          if (isActive) {
+            container.removeAttribute('aria-hidden');
+          } else {
+            container.setAttribute('aria-hidden', 'true');
+          }
+          container.classList.toggle('is-active', isActive);
+        });
+
+        dashboardLegendButtons.forEach((button) => {
+          const target = button.getAttribute('data-dashboard-target');
+          const isActive = target === activeDashboardView;
+          button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          button.setAttribute('tabindex', isActive ? '0' : '-1');
+          button.classList.toggle('is-active', isActive);
+        });
+      }
+
+      function setActiveDashboardView(view, options = {}) {
+        const normalized = normalizeDashboardView(view) || DASHBOARD_VIEW_DEFAULT;
+        const {
+          persist = true,
+          updateHash = true,
+          force = false,
+        } = options;
+
+        if (!force && normalized === activeDashboardView) {
+          return;
+        }
+
+        activeDashboardView = normalized;
+        applyActiveDashboardView();
+
+        if (persist) {
+          storeDashboardView(normalized);
+        }
+
+        if (updateHash) {
+          updateDashboardViewHash(normalized);
+        }
+      }
+
+      if (dashboardLegendButtons.length > 0) {
+        const focusDashboardTabByIndex = (index) => {
+          const button = dashboardLegendButtons[index];
+          if (!button) {
+            return;
+          }
+          button.focus();
+          const target = button.getAttribute('data-dashboard-target');
+          setActiveDashboardView(target);
+        };
+
+        dashboardLegendButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const target = button.getAttribute('data-dashboard-target');
+            setActiveDashboardView(target);
+          });
+        });
+
+        if (dashboardLegend) {
+          dashboardLegend.addEventListener('keydown', (event) => {
+            const { key } = event;
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) {
+              return;
+            }
+            event.preventDefault();
+            const activeElement = document.activeElement;
+            let currentIndex = dashboardLegendButtons.indexOf(activeElement);
+            if (currentIndex === -1) {
+              currentIndex = dashboardLegendButtons.findIndex((button) =>
+                button.getAttribute('data-dashboard-target') ===
+                activeDashboardView
+              );
+            }
+            if (key === 'Home') {
+              focusDashboardTabByIndex(0);
+              return;
+            }
+            if (key === 'End') {
+              focusDashboardTabByIndex(dashboardLegendButtons.length - 1);
+              return;
+            }
+            if (key === 'ArrowLeft') {
+              const previousIndex =
+                currentIndex <= 0
+                  ? dashboardLegendButtons.length - 1
+                  : currentIndex - 1;
+              focusDashboardTabByIndex(previousIndex);
+            } else if (key === 'ArrowRight') {
+              const nextIndex = (currentIndex + 1) % dashboardLegendButtons.length;
+              focusDashboardTabByIndex(nextIndex);
+            }
+          });
+        }
+      }
+
+      const storedDashboardView = getStoredDashboardView();
+      const hashDashboardView = parseDashboardViewFromHash();
+      const initialDashboardView =
+        hashDashboardView || storedDashboardView || DASHBOARD_VIEW_DEFAULT;
+      setActiveDashboardView(initialDashboardView, {
+        persist: hashDashboardView ? true : !storedDashboardView,
+        updateHash: hashDashboardView ? false : true,
+        force: true,
+      });
+
+      window.addEventListener('hashchange', () => {
+        const nextViewFromHash = parseDashboardViewFromHash();
+        if (nextViewFromHash) {
+          setActiveDashboardView(nextViewFromHash, { updateHash: false });
+        } else {
+          setActiveDashboardView(DASHBOARD_VIEW_DEFAULT, { updateHash: false });
+        }
+      });
 
       function closeSubscriberActionMenu(menu, options = {}) {
         const targetMenu = menu || openSubscriberActionMenu;
@@ -2146,6 +2503,7 @@
             prospectSharePanel.classList.add('hidden');
           }
         }
+        applyActiveDashboardView();
       }
 
       function setFormStatus(form, message, stateAttr = '') {
