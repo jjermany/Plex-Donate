@@ -83,6 +83,11 @@ test('plexService.createInvite posts to Plex API using resolved server id', asyn
     assert.equal(calls[0].options.method || 'GET', 'GET');
     assert.equal(calls[0].options.headers.Accept, 'application/json');
     assert.equal(
+      calls[0].options.headers['X-Plex-Client-Identifier'],
+      'plex-donate-server-uuid'
+    );
+    assert.equal(calls[0].options.headers['X-Plex-Token'], 'token123');
+    assert.equal(
       calls[1].url,
       'https://plex.tv/api/servers/12345/shared_servers?X-Plex-Token=token123'
     );
