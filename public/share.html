@@ -504,7 +504,7 @@
               <input
                 id="account-password"
                 type="password"
-                placeholder="At least 8 characters"
+                placeholder="At least 12 characters"
                 autocomplete="new-password"
                 required
               />
@@ -1121,8 +1121,8 @@
             return;
           }
 
-          if (!password || password.trim().length < 8) {
-            accountStatus.textContent = 'Choose a password with at least 8 characters.';
+          if (!password || password.trim().length < 12) {
+            accountStatus.textContent = 'Choose a password with at least 12 characters.';
             accountStatus.className = 'status-text error';
             return;
           }

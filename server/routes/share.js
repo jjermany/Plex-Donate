@@ -25,7 +25,11 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
-const { hashPassword, isPasswordStrong } = require('../utils/passwords');
+const {
+  hashPassword,
+  isPasswordStrong,
+  MIN_PASSWORD_LENGTH,
+} = require('../utils/passwords');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
 const {
@@ -842,7 +846,7 @@ router.post(
 
     if (!isPasswordStrong(password)) {
       return res.status(400).json({
-        error: 'Choose a password with at least 8 characters.',
+        error: `Choose a password with at least ${MIN_PASSWORD_LENGTH} characters.`,
       });
     }
 
