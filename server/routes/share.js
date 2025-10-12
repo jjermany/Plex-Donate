@@ -22,6 +22,8 @@ const {
   markProspectConverted,
   updateInvitePlexDetails,
   setDonorAccessExpirationBySubscription,
+  resetDonorEmailVerification,
+  createDonorEmailVerificationToken,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
@@ -910,6 +912,7 @@ router.post(
       }
 
       activeDonor = updateDonorPassword(activeDonor.id, hashedPassword);
+      activeDonor = resetDonorEmailVerification(activeDonor.id);
 
       const updatedLink = markShareLinkUsed(shareLink.id) || shareLink;
       const {
@@ -919,6 +922,10 @@ router.post(
         shareInvite,
       } = getInviteState(activeDonor.id);
       const origin = resolvePublicBaseUrl(req);
+      const verificationRecord = createDonorEmailVerificationToken(activeDonor.id);
+      const verificationUrl = `${origin}/dashboard/verify?token=${encodeURIComponent(
+        verificationRecord.token
+      )}`;
       const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
       const loginUrl = `${origin}/dashboard`;
       const invitePayload = invite
@@ -937,6 +944,7 @@ router.post(
           to: activeDonor.email,
           name: activeDonor.name,
           loginUrl,
+          verificationUrl,
         });
       } catch (err) {
         logger.error('Failed to send welcome email for donor account setup', {
@@ -955,6 +963,12 @@ router.post(
         });
       }
 
+      logEvent('share.account.verification_sent', {
+        donorId: activeDonor.id,
+        shareLinkId: updatedLink.id,
+        verificationTokenId: verificationRecord ? verificationRecord.id : null,
+        flow: 'existing-donor',
+      });
       logEvent('share.account.password_set', {
         donorId: activeDonor.id,
         shareLinkId: updatedLink.id,
@@ -1041,6 +1055,8 @@ router.post(
       }
     }
 
+    activeDonor = resetDonorEmailVerification(activeDonor.id);
+
     const reassignedLink = assignShareLinkToDonor(shareLink.id, activeDonor.id, {
       clearLastUsed: true,
     });
@@ -1052,6 +1068,10 @@ router.post(
       shareInvite,
     } = getInviteState(activeDonor.id);
     const origin = resolvePublicBaseUrl(req);
+    const verificationRecord = createDonorEmailVerificationToken(activeDonor.id);
+    const verificationUrl = `${origin}/dashboard/verify?token=${encodeURIComponent(
+      verificationRecord.token
+    )}`;
     const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
     const loginUrl = `${origin}/dashboard`;
     const invitePayload = invite
@@ -1074,6 +1094,7 @@ router.post(
         to: activeDonor.email,
         name: activeDonor.name,
         loginUrl,
+        verificationUrl,
       });
     } catch (err) {
       logger.error('Failed to send welcome email after prospect promotion', {
@@ -1094,6 +1115,13 @@ router.post(
       });
     }
 
+    logEvent('share.account.verification_sent', {
+      donorId: activeDonor.id,
+      shareLinkId: updatedLink.id,
+      prospectId: prospect ? prospect.id : null,
+      verificationTokenId: verificationRecord ? verificationRecord.id : null,
+      flow: 'prospect-promotion',
+    });
     logEvent('share.account.prospect_promoted', {
       donorId: activeDonor.id,
       shareLinkId: updatedLink.id,

@@ -27,6 +27,8 @@ const {
   createDonor,
   updateDonorPassword,
   getDonorById,
+  markDonorEmailVerified,
+  createDonorEmailVerificationToken,
 } = require('../db');
 const { hashPasswordSync } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
@@ -221,6 +223,7 @@ test(
       status: 'pending',
     });
     updateDonorPassword(donor.id, hashPasswordSync(password));
+    markDonorEmailVerified(donor.id);
 
     const paypalMock = t.mock.method(
       paypalService,
@@ -254,6 +257,61 @@ test(
     assert.equal(refreshed.lastPaymentAt, '2024-01-15T12:34:56Z');
   }
 );
+
+test('email verification is required before login', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'VerifyMe123!';
+  const donor = createDonor({
+    email: 'verify-flow@example.com',
+    name: 'Verify Flow',
+    status: 'pending',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  const tokenRecord = createDonorEmailVerificationToken(donor.id);
+
+  await withTestServer(async (client) => {
+    let response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 403);
+    let payload = await response.json();
+    assert.equal(payload.verificationRequired, true);
+    assert.match(payload.error, /verify your email/i);
+
+    response = await client.post('/customer/verify', {
+      body: { token: tokenRecord.token },
+    });
+    assert.equal(response.status, 200);
+    payload = await response.json();
+    assert.equal(payload.authenticated, true);
+    assert.ok(payload.donor);
+    assert.equal(payload.donor.emailVerified, true);
+
+    const logoutResponse = await client.post('/customer/logout');
+    assert.equal(logoutResponse.status, 200);
+    await logoutResponse.json();
+
+    response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 200);
+    payload = await response.json();
+    assert.equal(payload.authenticated, true);
+    assert.equal(payload.donor.emailVerified, true);
+  });
+
+  const verificationState = db
+    .prepare('SELECT email_verified_at FROM donors WHERE id = ?')
+    .get(donor.id);
+  assert.ok(verificationState.email_verified_at);
+
+  const remainingTokens = db
+    .prepare('SELECT COUNT(*) AS count FROM email_verification_tokens WHERE donor_id = ?')
+    .get(donor.id);
+  assert.equal(remainingTokens.count, 0);
+});
 
 test(
   'customer session refreshes pending PayPal subscription',
