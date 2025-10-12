@@ -72,7 +72,7 @@ app.get('/share/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/share.html'));
 });
 
-app.get('/dashboard', (req, res) => {
+app.get(/^\/dashboard(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, '../public/dashboard.html'));
 });
 
@@ -143,10 +143,12 @@ function scheduleAccessExpirationJob() {
   setInterval(run, ACCESS_REVOCATION_CHECK_INTERVAL_MS);
 }
 
-scheduleAccessExpirationJob();
+if (config.env !== 'test') {
+  scheduleAccessExpirationJob();
 
-app.listen(config.port, () => {
-  logger.info(`Plex Donate server listening on port ${config.port}`);
-});
+  app.listen(config.port, () => {
+    logger.info(`Plex Donate server listening on port ${config.port}`);
+  });
+}
 
 module.exports = app;
