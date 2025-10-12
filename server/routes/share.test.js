@@ -289,11 +289,26 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(welcomeArgs.to, 'updated@example.com');
       assert.equal(welcomeArgs.name, 'Updated Name');
       assert.equal(welcomeArgs.loginUrl, `${server.origin}/dashboard`);
+      assert.ok(
+        typeof welcomeArgs.verificationUrl === 'string' &&
+          welcomeArgs.verificationUrl.startsWith(
+            `${server.origin}/dashboard/verify?token=`
+          )
+      );
 
       const row = db
-        .prepare('SELECT password_hash FROM donors WHERE id = ?')
+        .prepare('SELECT password_hash, email_verified_at FROM donors WHERE id = ?')
         .get(accountResponse.body.donor.id);
       assert.ok(row.password_hash && row.password_hash.startsWith('pbkdf2$'));
+      assert.equal(row.email_verified_at, null);
+
+      const tokenRow = db
+        .prepare(
+          'SELECT token, used_at FROM email_verification_tokens WHERE donor_id = ?'
+        )
+        .get(accountResponse.body.donor.id);
+      assert.ok(tokenRow && tokenRow.token);
+      assert.equal(tokenRow.used_at, null);
     } finally {
       welcomeMock.mock.restore();
       await server.close();
@@ -355,6 +370,12 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(welcomeArgs.to, 'future@example.com');
       assert.equal(welcomeArgs.name, 'Future Supporter');
       assert.equal(welcomeArgs.loginUrl, `${server.origin}/dashboard`);
+      assert.ok(
+        typeof welcomeArgs.verificationUrl === 'string' &&
+          welcomeArgs.verificationUrl.startsWith(
+            `${server.origin}/dashboard/verify?token=`
+          )
+      );
 
       const updatedLink = getShareLinkByToken(shareLink.token);
       assert.equal(updatedLink.donorId, accountResponse.body.donor.id);
@@ -364,9 +385,18 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.ok(prospectRecord && prospectRecord.convertedAt);
 
       const row = db
-        .prepare('SELECT password_hash FROM donors WHERE id = ?')
+        .prepare('SELECT password_hash, email_verified_at FROM donors WHERE id = ?')
         .get(accountResponse.body.donor.id);
       assert.ok(row.password_hash && row.password_hash.startsWith('pbkdf2$'));
+      assert.equal(row.email_verified_at, null);
+
+      const tokenRow = db
+        .prepare(
+          'SELECT token, used_at FROM email_verification_tokens WHERE donor_id = ?'
+        )
+        .get(accountResponse.body.donor.id);
+      assert.ok(tokenRow && tokenRow.token);
+      assert.equal(tokenRow.used_at, null);
     } finally {
       welcomeMock.mock.restore();
       await server.close();

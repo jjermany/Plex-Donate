@@ -14,6 +14,10 @@ const {
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
   updateInvitePlexDetails,
+  getDonorEmailVerificationToken,
+  markDonorEmailVerified,
+  markEmailVerificationTokenUsed,
+  clearDonorEmailVerificationTokens,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
@@ -289,6 +293,8 @@ function buildDashboardResponse({
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
           hasPassword: Boolean(donor.hasPassword),
+          emailVerified: Boolean(donor.emailVerified),
+          emailVerifiedAt: donor.emailVerifiedAt || null,
           plexAccountId: donor.plexAccountId || '',
           plexEmail: donor.plexEmail || '',
           plexLinked: hasPlexLink(donor),
@@ -451,6 +457,14 @@ router.post(
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
+    if (!authRecord.donor.emailVerified) {
+      return res.status(403).json({
+        error:
+          'Verify your email address from the link we sent before signing in.',
+        verificationRequired: true,
+      });
+    }
+
     let donor = authRecord.donor;
     const existingPlexLink =
       req.session && req.session.plexLink && req.session.plexLink.donorId === donor.id
@@ -525,6 +539,143 @@ router.post(
         return res
           .status(500)
           .json({ error: 'Failed to sign in. Please try again shortly.' });
+      }
+    });
+  })
+);
+
+router.post(
+  '/verify',
+  asyncHandler(async (req, res) => {
+    const tokenInput =
+      req.body && typeof req.body.token === 'string'
+        ? req.body.token
+        : req.query && typeof req.query.token === 'string'
+        ? req.query.token
+        : '';
+    const token = tokenInput.trim();
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'A verification token is required to confirm your email.',
+      });
+    }
+
+    const tokenRecord = getDonorEmailVerificationToken(token);
+    if (!tokenRecord) {
+      return res.status(400).json({
+        error: 'This verification link is invalid or has expired.',
+      });
+    }
+
+    if (tokenRecord.usedAt) {
+      clearDonorEmailVerificationTokens(tokenRecord.donorId);
+      return res.status(410).json({
+        error: 'This verification link has already been used.',
+      });
+    }
+
+    if (tokenRecord.expiresAt) {
+      const expiresAtMs = Date.parse(tokenRecord.expiresAt);
+      if (Number.isFinite(expiresAtMs) && Date.now() > expiresAtMs) {
+        clearDonorEmailVerificationTokens(tokenRecord.donorId);
+        return res.status(410).json({
+          error: 'This verification link has expired. Request a new one.',
+        });
+      }
+    }
+
+    const donor = getDonorById(tokenRecord.donorId);
+    if (!donor) {
+      clearDonorEmailVerificationTokens(tokenRecord.donorId);
+      return res.status(404).json({
+        error: 'Account not found for this verification link.',
+      });
+    }
+
+    const existingPlexLink =
+      req.session && req.session.plexLink && req.session.plexLink.donorId === donor.id
+        ? { ...req.session.plexLink }
+        : null;
+
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      logger.error('Session is not available for email verification regeneration');
+      return res
+        .status(500)
+        .json({ error: 'Failed to verify email. Please try again shortly.' });
+    }
+
+    return req.session.regenerate(async (err) => {
+      if (err) {
+        logger.error('Failed to regenerate session for email verification', err);
+        return res
+          .status(500)
+          .json({ error: 'Failed to verify email. Please try again shortly.' });
+      }
+
+      try {
+        if (existingPlexLink) {
+          req.session.plexLink = existingPlexLink;
+        }
+
+        let verifiedDonor = markDonorEmailVerified(donor.id);
+        markEmailVerificationTokenUsed(tokenRecord.id);
+        clearDonorEmailVerificationTokens(verifiedDonor.id);
+
+        let subscriptionRefreshError = '';
+        if (needsSubscriptionRefresh(verifiedDonor, false)) {
+          const donorForRefresh = verifiedDonor;
+          const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+            donorForRefresh,
+            {
+              onError: (refreshErr) =>
+                logger.warn('Failed to refresh PayPal subscription after verification', {
+                  donorId: donorForRefresh.id,
+                  subscriptionId: donorForRefresh.subscriptionId,
+                  error: refreshErr && refreshErr.message,
+                }),
+            }
+          );
+          if (refreshedDonor) {
+            verifiedDonor = refreshedDonor;
+          }
+          subscriptionRefreshError = error || '';
+        }
+
+        req.session.customerId = verifiedDonor.id;
+        logger.info('Customer verified email and signed in', {
+          donorId: verifiedDonor.id,
+        });
+
+        logEvent('customer.email.verified', {
+          donorId: verifiedDonor.id,
+          verificationTokenId: tokenRecord.id,
+        });
+
+        res.locals.sessionToken = ensureSessionToken(req);
+
+        const {
+          activeInvite: invite,
+          inviteLimitReached,
+          nextInviteAvailableAt,
+        } = getInviteState(verifiedDonor.id);
+        const pendingPlexLink = getPendingPlexLink(req, verifiedDonor);
+
+        return res.json(
+          buildDashboardResponse({
+            donor: verifiedDonor,
+            invite,
+            pendingPlexLink,
+            inviteLimitReached,
+            nextInviteAvailableAt,
+            paypalError: subscriptionRefreshError,
+          })
+        );
+      } catch (handlerErr) {
+        logger.error('Failed to finalize email verification', handlerErr);
+        return res
+          .status(500)
+          .json({ error: 'Failed to verify email. Please try again shortly.' });
       }
     });
   })

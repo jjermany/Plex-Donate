@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS donors (
   password_hash TEXT,
   plex_account_id TEXT,
   plex_email TEXT,
+  email_verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -103,6 +104,16 @@ CREATE TABLE IF NOT EXISTS invite_links (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE,
   FOREIGN KEY (prospect_id) REFERENCES prospects(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  donor_id INTEGER NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at TEXT,
+  expires_at TEXT NOT NULL,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+);
 `);
 
 function generateShareSessionToken() {
@@ -149,6 +160,23 @@ function ensureDonorPasswordColumn() {
   const hasPasswordHash = columns.some((column) => column.name === 'password_hash');
   if (!hasPasswordHash) {
     db.exec('ALTER TABLE donors ADD COLUMN password_hash TEXT');
+  }
+}
+
+function ensureDonorEmailVerifiedColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  const hasEmailVerifiedAt = columns.some(
+    (column) => column.name === 'email_verified_at'
+  );
+  if (!hasEmailVerifiedAt) {
+    db.exec(`
+      ALTER TABLE donors ADD COLUMN email_verified_at TEXT;
+
+      UPDATE donors
+         SET email_verified_at = CURRENT_TIMESTAMP
+       WHERE password_hash IS NOT NULL
+         AND TRIM(password_hash) <> '';
+    `);
   }
 }
 
@@ -377,6 +405,7 @@ function ensureDonorSubscriptionOptional() {
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
+ensureDonorEmailVerifiedColumn();
 ensureDonorPlexColumns();
 ensureDonorAccessExpirationColumn();
 ensureDonorSubscriptionOptional();
@@ -469,8 +498,8 @@ const statements = {
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email)
-     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail)`
+    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at)
+     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail, @emailVerifiedAt)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -683,6 +712,18 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  markDonorEmailVerified: db.prepare(
+    `UPDATE donors
+     SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  clearDonorEmailVerification: db.prepare(
+    `UPDATE donors
+     SET email_verified_at = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   updateDonorPlexIdentity: db.prepare(
     `UPDATE donors
      SET plex_account_id = @plexAccountId,
@@ -716,6 +757,24 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  deleteVerificationTokensForDonor: db.prepare(
+    'DELETE FROM email_verification_tokens WHERE donor_id = ?'
+  ),
+  insertVerificationToken: db.prepare(
+    `INSERT INTO email_verification_tokens (donor_id, token, expires_at)
+     VALUES (@donorId, @token, @expiresAt)`
+  ),
+  getVerificationTokenByToken: db.prepare(
+    'SELECT * FROM email_verification_tokens WHERE token = ?'
+  ),
+  markVerificationTokenUsed: db.prepare(
+    `UPDATE email_verification_tokens
+     SET used_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  deleteVerificationTokenById: db.prepare(
+    'DELETE FROM email_verification_tokens WHERE id = ?'
+  ),
 };
 
 function mapDonor(row) {
@@ -731,6 +790,8 @@ function mapDonor(row) {
     hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
+    emailVerifiedAt: row.email_verified_at,
+    emailVerified: Boolean(row.email_verified_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -780,6 +841,18 @@ function mapInviteLink(row) {
     lastUsedAt: row.last_used_at,
     expiresAt: row.expires_at,
     usedAt: row.used_at,
+  };
+}
+
+function mapEmailVerificationToken(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    token: row.token,
+    createdAt: row.created_at,
+    usedAt: row.used_at,
+    expiresAt: row.expires_at,
   };
 }
 
@@ -863,6 +936,7 @@ function upsertDonor({
     passwordHash: null,
     plexAccountId: null,
     plexEmail: null,
+    emailVerifiedAt: null,
   };
   const info = statements.insertDonor.run(newDonor);
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
@@ -1327,6 +1401,85 @@ function markProspectConverted(prospectId, donorId) {
   return mapProspect(statements.getProspectById.get(prospectId));
 }
 
+function clearDonorEmailVerificationTokens(donorId) {
+  if (!donorId) {
+    return;
+  }
+  statements.deleteVerificationTokensForDonor.run(donorId);
+}
+
+function createDonorEmailVerificationToken(
+  donorId,
+  { expiresInHours = 48 } = {}
+) {
+  if (!donorId) {
+    throw new Error('donorId is required to create verification token');
+  }
+
+  const hours = Number.isFinite(expiresInHours) && expiresInHours > 0
+    ? expiresInHours
+    : 48;
+  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const expiresAtIso = Number.isNaN(expiresAt.getTime())
+    ? new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+    : expiresAt.toISOString();
+
+  clearDonorEmailVerificationTokens(donorId);
+
+  const token = nanoid(48);
+  statements.insertVerificationToken.run({
+    donorId,
+    token,
+    expiresAt: expiresAtIso,
+  });
+
+  return mapEmailVerificationToken(
+    statements.getVerificationTokenByToken.get(token)
+  );
+}
+
+function getDonorEmailVerificationToken(token) {
+  if (!token) {
+    return null;
+  }
+  return mapEmailVerificationToken(
+    statements.getVerificationTokenByToken.get(token)
+  );
+}
+
+function markEmailVerificationTokenUsed(tokenId) {
+  if (!tokenId) {
+    return false;
+  }
+  const result = statements.markVerificationTokenUsed.run({ id: tokenId });
+  return result.changes > 0;
+}
+
+function deleteEmailVerificationTokenById(tokenId) {
+  if (!tokenId) {
+    return false;
+  }
+  const result = statements.deleteVerificationTokenById.run(tokenId);
+  return result.changes > 0;
+}
+
+function markDonorEmailVerified(donorId) {
+  if (!donorId) {
+    throw new Error('donorId is required to mark verification');
+  }
+  statements.markDonorEmailVerified.run({ id: donorId });
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function resetDonorEmailVerification(donorId) {
+  if (!donorId) {
+    throw new Error('donorId is required to reset verification');
+  }
+  statements.clearDonorEmailVerification.run({ id: donorId });
+  clearDonorEmailVerificationTokens(donorId);
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
 function createDonor({
   email,
   name,
@@ -1337,6 +1490,7 @@ function createDonor({
   passwordHash = null,
   plexAccountId = null,
   plexEmail = null,
+  emailVerifiedAt = null,
 } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
@@ -1355,6 +1509,10 @@ function createDonor({
     plexEmail: plexEmail
       ? normalizeEmail(typeof plexEmail === 'string' ? plexEmail : String(plexEmail))
       : null,
+    emailVerifiedAt:
+      emailVerifiedAt == null || emailVerifiedAt === ''
+        ? null
+        : normalizeAccessExpiresAt(emailVerifiedAt) || null,
   });
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
 }
@@ -1473,6 +1631,13 @@ module.exports = {
   updateProspect,
   getProspectById,
   markProspectConverted,
+  createDonorEmailVerificationToken,
+  getDonorEmailVerificationToken,
+  markDonorEmailVerified,
+  resetDonorEmailVerification,
+  markEmailVerificationTokenUsed,
+  clearDonorEmailVerificationTokens,
+  deleteEmailVerificationTokenById,
   listDonorsWithDetails,
   listShareLinks,
   createInvite,

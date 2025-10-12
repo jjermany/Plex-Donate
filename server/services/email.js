@@ -71,25 +71,27 @@ async function sendInviteEmail(
 }
 
 async function sendAccountWelcomeEmail(
-  { to, name, loginUrl },
+  { to, name, loginUrl, verificationUrl },
   overrideSettings
 ) {
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
-  if (!loginUrl) {
-    throw new Error('loginUrl is required to send welcome email');
+  if (!verificationUrl) {
+    throw new Error('verificationUrl is required to send welcome email');
   }
 
   const recipientName = name || 'there';
-  const subject = 'Welcome to your Plex dashboard';
-  const text = `Hi ${recipientName},\n\nYour Plex Donate dashboard account is ready. Use the link below to sign in and confirm your email address:\n\n${loginUrl}\n\nIf you did not request this email or need help, reply to this message.\n\n— Plex Donate`;
+  const subject = 'Verify your Plex dashboard email';
+  const dashboardUrl = loginUrl || verificationUrl;
+  const text = `Hi ${recipientName},\n\nThanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:\n\n${verificationUrl}\n\nOnce verified you can manage your dashboard at ${dashboardUrl}. If you did not request this email or need help, reply to this message.\n\n— Plex Donate`;
 
   const html = `
   <p>Hi ${recipientName},</p>
-  <p>Your Plex Donate dashboard account is ready. Use the button below to sign in and confirm your email address.</p>
+  <p>Thanks for setting up your Plex Donate dashboard account. Use the button below to confirm your email address.</p>
   <p style="text-align:center;margin:24px 0;">
-    <a href="${loginUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Open Dashboard</a>
+    <a href="${verificationUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
   </p>
+  <p>Once verified you can manage your dashboard anytime at <a href="${dashboardUrl}">${dashboardUrl}</a>.</p>
   <p>If you need help or did not request this email, just reply to this message.</p>
   <p style="margin-top:24px;">— Plex Donate</p>
   `;

@@ -889,7 +889,10 @@
       }
 
       const SESSION_TOKEN_QUERY_PARAM = 'session';
+      const VERIFICATION_TOKEN_QUERY_PARAM = 'token';
       let sessionToken = null;
+      let initialVerificationToken = null;
+      let verificationInFlight = false;
 
       function normalizeSessionToken(token) {
         if (typeof token !== 'string') {
@@ -935,6 +938,32 @@
         }
       })();
 
+      function extractVerificationTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const tokenValue = url.searchParams.get(VERIFICATION_TOKEN_QUERY_PARAM);
+          if (!tokenValue) {
+            return null;
+          }
+          url.searchParams.delete(VERIFICATION_TOKEN_QUERY_PARAM);
+          if (/\/verify\/?$/i.test(url.pathname)) {
+            const withoutSegment = url.pathname.replace(/\/verify\/?$/i, '/');
+            if (withoutSegment.length > 1 && withoutSegment.endsWith('/')) {
+              url.pathname = withoutSegment.slice(0, -1);
+            } else {
+              url.pathname = withoutSegment || '/';
+            }
+          }
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+          return tokenValue;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      initialVerificationToken = extractVerificationTokenFromUrl();
+
       function withSessionToken(path) {
         if (!sessionToken) {
           return path;
@@ -972,6 +1001,60 @@
       async function sessionFetch(path, options = {}) {
         const { requestUrl, requestOptions } = buildSessionRequest(path, options);
         return fetch(requestUrl, requestOptions);
+      }
+
+      async function submitVerificationToken(token) {
+        if (!token || verificationInFlight) {
+          return;
+        }
+        verificationInFlight = true;
+        try {
+          showLoading();
+          const response = await fetch('/api/customer/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (err) {
+            payload = {};
+          }
+          updateSessionTokenFromResponse(payload);
+          if (!response.ok) {
+            const errorMessage =
+              (payload && payload.error) ||
+              'Failed to verify email. Try again shortly.';
+            throw new Error(errorMessage);
+          }
+          renderDashboard(payload);
+          if (memberStatusMessage) {
+            setStatusText(
+              memberStatusMessage,
+              'Email verified successfully! Welcome back to the dashboard.',
+              'success'
+            );
+            memberStatusMessage.classList.add('small');
+          }
+        } catch (err) {
+          const message = err && err.message
+            ? err.message
+            : 'Failed to verify email. Try again shortly.';
+          if (state.data && state.data.authenticated) {
+            if (memberStatusMessage) {
+              setStatusText(memberStatusMessage, message, 'error');
+              memberStatusMessage.classList.add('small');
+            }
+          } else {
+            renderDashboard({ authenticated: false });
+            setStatusText(loginStatus, message, 'error');
+          }
+          fetchSession({ silent: true });
+        } finally {
+          verificationInFlight = false;
+          initialVerificationToken = null;
+        }
       }
 
       const profileForm = document.getElementById('profile-form');
@@ -1367,6 +1450,7 @@
           cooldownActive = false,
           refreshError = '',
           plexLinked = false,
+          emailVerified = true,
         } = {}
       ) {
         if (!memberStatusMessage) {
@@ -1377,6 +1461,16 @@
           typeof refreshError === 'string' ? refreshError.trim() : '';
         if (normalizedRefreshError) {
           setStatusText(memberStatusMessage, normalizedRefreshError, 'error');
+          memberStatusMessage.classList.add('small');
+          return;
+        }
+
+        if (donor && !emailVerified) {
+          setStatusText(
+            memberStatusMessage,
+            'Check your inbox for the verification email to unlock your dashboard.',
+            'error'
+          );
           memberStatusMessage.classList.add('small');
           return;
         }
@@ -1452,7 +1546,12 @@
         memberStatusMessage.classList.add('small');
       }
 
-      function renderInvite(invite, limitReached, nextInviteAvailableAt) {
+      function renderInvite(
+        invite,
+        limitReached,
+        nextInviteAvailableAt,
+        { emailVerified = true } = {}
+      ) {
         const limitHit = Boolean(limitReached);
         const nextAvailableDate = parseDate(nextInviteAvailableAt);
         const cooldownActive =
@@ -1462,7 +1561,15 @@
           : '';
 
         if (inviteStatus) {
-          setStatusText(inviteStatus, '');
+          if (!emailVerified) {
+            setStatusText(
+              inviteStatus,
+              'Verify your email to unlock referral invites.',
+              'info'
+            );
+          } else {
+            setStatusText(inviteStatus, '');
+          }
         }
 
         if (inviteForm) {
@@ -1552,6 +1659,7 @@
           showSubscriptionCta,
           inviteCooldownActive = false,
           nextInviteMessage = '',
+          emailVerified = true,
         } = {}
       ) {
         if (!onboardingPanel) {
@@ -1559,6 +1667,31 @@
         }
 
         const donor = data && data.donor ? data.donor : null;
+        if (donor && !emailVerified) {
+          onboardingPanel.classList.remove('hidden');
+          if (stepPlex) {
+            setStepState(stepPlex, 'upcoming');
+          }
+          if (stepSubscription) {
+            setStepState(stepSubscription, 'upcoming');
+          }
+          if (stepInvite) {
+            setStepState(stepInvite, 'upcoming');
+          }
+          const verificationNote =
+            'Verify your email from the link we sent to unlock the rest of your setup steps.';
+          if (stepPlexNote) {
+            stepPlexNote.textContent = verificationNote;
+          }
+          if (stepSubscriptionNote) {
+            stepSubscriptionNote.textContent = verificationNote;
+          }
+          if (stepInviteNote) {
+            stepInviteNote.textContent = verificationNote;
+          }
+          return;
+        }
+
         const normalizedStatus = donor && donor.status
           ? donor.status.toLowerCase()
           : 'pending';
@@ -1739,7 +1872,34 @@
         dashboardPanel.classList.remove('hidden');
 
         const donor = data.donor || {};
-        applyPlexLinkState(donor, data.plexLink || null);
+        const emailVerified = Boolean(donor.emailVerified);
+        if (emailVerified) {
+          applyPlexLinkState(donor, data.plexLink || null);
+        } else {
+          clearPlexLinkCountdownTimer();
+          clearPlexLinkPollTimer();
+          closePlexAuthWindow();
+          state.pendingPlexLink = null;
+          plexLinkStatusSticky = true;
+          if (plexLinkButton) {
+            plexLinkButton.disabled = true;
+            plexLinkButton.classList.remove('hidden');
+          }
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          setPlexLinkStatus(
+            'Verify your email address to unlock Plex linking.',
+            'info',
+            { force: true }
+          );
+        }
         memberNameEl.textContent = donor.name
           ? `Hi ${donor.name}!`
           : 'Add a display name below so we know how to greet you.';
@@ -1783,7 +1943,8 @@
         }
 
         const subscriptionCheckoutEligible = Boolean(
-          data.paypal &&
+          emailVerified &&
+            data.paypal &&
             data.paypal.subscriptionCheckoutAvailable &&
             (!donor.subscriptionId || normalizedStatus !== 'active')
         );
@@ -1814,15 +1975,29 @@
               ? data.paypal.refreshError
               : '',
           plexLinked,
+          emailVerified,
         });
         updateOnboarding(data, {
           showSubscriptionCta,
           inviteCooldownActive,
           nextInviteMessage,
+          emailVerified,
         });
 
         if (subscriptionButton && subscriptionCta) {
-          if (showSubscriptionCta) {
+          if (!emailVerified) {
+            subscriptionCta.classList.remove('hidden');
+            subscriptionButton.classList.remove('hidden');
+            subscriptionButton.disabled = true;
+            subscriptionButton.dataset.available = 'false';
+            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+            setStatusText(
+              subscriptionNote,
+              'Verify your email to unlock the PayPal checkout.',
+              'info'
+            );
+            subscriptionNote.classList.add('small');
+          } else if (showSubscriptionCta) {
             subscriptionCta.classList.remove('hidden');
             subscriptionButton.classList.remove('hidden');
             subscriptionButton.disabled = false;
@@ -1862,6 +2037,18 @@
         if (profileSubscription) {
           profileSubscription.value = donor.subscriptionId || '';
         }
+        if (profileEmail) {
+          profileEmail.disabled = !emailVerified;
+        }
+        if (profileName) {
+          profileName.disabled = !emailVerified;
+        }
+        if (profileSubscription) {
+          profileSubscription.disabled = !emailVerified;
+        }
+        if (profileSave) {
+          profileSave.disabled = !emailVerified;
+        }
         if (passwordForm) {
           passwordForm.reset();
         }
@@ -1869,9 +2056,14 @@
           setStatusText(passwordStatus, '');
         }
         if (passwordGuidance) {
-          passwordGuidance.textContent = donor.hasPassword
-            ? 'Update your dashboard password to keep your account secure.'
-            : 'Set a password so you can return to the dashboard anytime.';
+          if (!emailVerified) {
+            passwordGuidance.textContent =
+              'Verify your email to enable password updates.';
+          } else {
+            passwordGuidance.textContent = donor.hasPassword
+              ? 'Update your dashboard password to keep your account secure.'
+              : 'Set a password so you can return to the dashboard anytime.';
+          }
         }
         if (passwordCurrentRow) {
           if (donor.hasPassword) {
@@ -1881,17 +2073,25 @@
           }
         }
         if (passwordCurrent) {
-          passwordCurrent.disabled = !donor.hasPassword;
-          passwordCurrent.required = Boolean(donor.hasPassword);
+          passwordCurrent.disabled = !emailVerified || !donor.hasPassword;
+          passwordCurrent.required = Boolean(emailVerified && donor.hasPassword);
+        }
+        if (passwordNew) {
+          passwordNew.disabled = !emailVerified;
+        }
+        if (passwordConfirm) {
+          passwordConfirm.disabled = !emailVerified;
         }
         if (passwordSave) {
-          passwordSave.disabled = false;
+          passwordSave.disabled = !emailVerified;
         }
         inviteEmail.value = donor.email || '';
 
-        renderInvite(data.invite, limitReached, nextInviteAvailableAt);
+        renderInvite(data.invite, limitReached, nextInviteAvailableAt, {
+          emailVerified,
+        });
 
-        const inviteBlocked = normalizedStatus !== 'active' || limitReached;
+        const inviteBlocked = !emailVerified || normalizedStatus !== 'active' || limitReached;
         if (inviteSubmit) {
           inviteSubmit.disabled = inviteBlocked;
         }
@@ -1902,7 +2102,10 @@
           inviteNote.disabled = inviteBlocked;
         }
 
-        if (inviteBlocked && !limitReached) {
+        if (!emailVerified) {
+          inviteDescription.textContent =
+            'Verify your email to unlock referral invites.';
+        } else if (inviteBlocked && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
             ? 'Start your PayPal subscription to unlock referral invites.'
             : 'Referral invites unlock once your subscription is active.';
@@ -2384,7 +2587,11 @@
         }
       });
 
-      fetchSession();
+      if (initialVerificationToken) {
+        submitVerificationToken(initialVerificationToken);
+      } else {
+        fetchSession();
+      }
     </script>
   </body>
 </html>
