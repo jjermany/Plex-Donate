@@ -40,6 +40,177 @@ function createTransport(smtp) {
   });
 }
 
+function escapeHtml(value) {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function normalizeAnnouncementEmailPayload({
+  announcement,
+  subject,
+  body,
+  cta,
+}) {
+  const settings = announcement && typeof announcement === 'object' ? announcement : {};
+  const resolvedSubject = subject && typeof subject === 'string'
+    ? subject.trim()
+    : typeof settings.bannerTitle === 'string'
+    ? settings.bannerTitle.trim()
+    : '';
+  const resolvedBody = body && typeof body === 'string'
+    ? body.trim()
+    : typeof settings.bannerBody === 'string'
+    ? settings.bannerBody.trim()
+    : '';
+
+  const hasConfiguredCta = Boolean(
+    settings &&
+      settings.bannerCtaEnabled &&
+      settings.bannerCtaLabel &&
+      settings.bannerCtaUrl
+  );
+
+  const announcementCta = cta
+    ? {
+        label: cta.label ? String(cta.label).trim() : '',
+        url: cta.url ? String(cta.url).trim() : '',
+      }
+    : hasConfiguredCta
+    ? {
+        label: String(settings.bannerCtaLabel).trim(),
+        url: String(settings.bannerCtaUrl).trim(),
+      }
+    : null;
+
+  const normalizedCta =
+    announcementCta && announcementCta.label && announcementCta.url
+      ? announcementCta
+      : null;
+
+  return {
+    subject: resolvedSubject,
+    body: resolvedBody,
+    cta: normalizedCta,
+  };
+}
+
+function buildAnnouncementEmailHtml({ subject, body, cta, recipientName }) {
+  const paragraphs = String(body || '')
+    .split(/\r?\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0);
+
+  const htmlParagraphs =
+    paragraphs.length > 0
+      ? paragraphs
+          .map(
+            (paragraph) =>
+              `<p style="margin:0 0 16px;">${escapeHtml(paragraph)}</p>`
+          )
+          .join('')
+      : `<p style="margin:0 0 16px;">${escapeHtml(body || '')}</p>`;
+
+  const ctaHtml = cta
+    ? `
+  <p style="margin:24px 0;text-align:center;">
+    <a
+      href="${escapeHtml(cta.url)}"
+      style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;"
+    >${escapeHtml(cta.label)}</a>
+  </p>
+  `
+    : '';
+
+  const greetingName = recipientName ? escapeHtml(recipientName) : 'there';
+
+  return `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(
+      subject
+    )}</h2>
+    <p style="margin:0 0 16px;">Hi ${greetingName},</p>
+    ${htmlParagraphs}
+    ${ctaHtml}
+    <p style="margin:24px 0 0;">— Plex Donate</p>
+  </div>
+  `;
+}
+
+function buildAnnouncementEmailText({ subject, body, cta, recipientName }) {
+  const lines = [];
+  lines.push(`Hi ${recipientName ? recipientName : 'there'},`);
+  lines.push('');
+
+  const bodyLines = String(body || '').split(/\r?\n/);
+  bodyLines.forEach((line) => {
+    lines.push(line);
+  });
+
+  if (cta) {
+    lines.push('');
+    lines.push(`${cta.label}: ${cta.url}`);
+  }
+
+  lines.push('');
+  lines.push('— Plex Donate');
+
+  return lines.join('\n');
+}
+
+async function sendAnnouncementEmail(
+  { to, name, announcement, subject, body, cta },
+  overrideSettings
+) {
+  if (!to) {
+    throw new Error('Recipient email is required to send announcement email');
+  }
+
+  const normalized = normalizeAnnouncementEmailPayload({
+    announcement,
+    subject,
+    body,
+    cta,
+  });
+
+  if (!normalized.subject) {
+    throw new Error('Announcement subject is required to send email');
+  }
+  if (!normalized.body) {
+    throw new Error('Announcement body is required to send email');
+  }
+
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+
+  const html = buildAnnouncementEmailHtml({
+    subject: normalized.subject,
+    body: normalized.body,
+    cta: normalized.cta,
+    recipientName: name,
+  });
+  const text = buildAnnouncementEmailText({
+    subject: normalized.subject,
+    body: normalized.body,
+    cta: normalized.cta,
+    recipientName: name,
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject: normalized.subject,
+    text,
+    html,
+  });
+}
+
 async function sendInviteEmail(
   { to, inviteUrl, name, subscriptionId },
   overrideSettings
@@ -157,6 +328,7 @@ module.exports = {
   sendInviteEmail,
   sendAccountWelcomeEmail,
   sendCancellationEmail,
+  sendAnnouncementEmail,
   getSmtpConfig,
   verifyConnection,
 };

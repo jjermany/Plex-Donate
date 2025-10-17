@@ -19,6 +19,7 @@ const http = require('node:http');
 const express = require('express');
 const session = require('express-session');
 const fetch = require('node-fetch');
+const nodemailer = require('nodemailer');
 const { test } = require('node:test');
 
 const config = require('../config');
@@ -54,6 +55,7 @@ const {
   createDonor,
   createInvite,
   listDonorsWithDetails,
+  getRecentEvents,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const plexService = require('../services/plex');
@@ -511,5 +513,171 @@ test('announcements settings round-trip through admin API', async (t) => {
     body.settings.announcements.bannerCtaUrl,
     updatePayload.bannerCtaUrl
   );
+});
+
+test('POST /api/admin/announcements/email sends announcement email to donors', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const donorOne = createDonor({
+    email: 'supporter.one@example.com',
+    name: 'Supporter One',
+    status: 'active',
+  });
+  const donorTwo = createDonor({
+    email: 'supporter.two@example.com',
+    name: 'Supporter Two',
+    status: 'active',
+  });
+  createDonor({
+    email: '',
+    name: 'Missing Email',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('announcements', {
+    bannerEnabled: true,
+    bannerTitle: 'Scheduled maintenance',
+    bannerBody: 'Streaming access pauses tonight at 10:00 PM.\nThanks for your support!',
+    bannerTone: 'warning',
+    bannerCtaEnabled: true,
+    bannerCtaLabel: 'View status page',
+    bannerCtaUrl: 'https://status.example.com',
+  });
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const response = await agent.request('/api/admin/announcements/email', {
+    method: 'POST',
+    headers: { 'x-csrf-token': csrfToken },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.equal(body.success, true);
+  assert.equal(body.sent, 2);
+  assert.equal(body.skipped, 1);
+
+  assert.equal(sentMessages.length, 2);
+  const recipients = sentMessages.map((mail) => mail.to).sort();
+  assert.deepEqual(recipients, [donorOne.email, donorTwo.email].sort());
+
+  const sampleMessage = sentMessages[0];
+  assert.equal(sampleMessage.subject, 'Scheduled maintenance');
+  assert.ok(sampleMessage.html.includes('Scheduled maintenance'));
+  assert.ok(sampleMessage.html.includes('Streaming access pauses tonight'));
+  assert.ok(sampleMessage.html.includes('https://status.example.com'));
+  assert.ok(sampleMessage.text.includes('Streaming access pauses tonight'));
+
+  const events = getRecentEvents(1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].eventType, 'announcement.email.sent');
+  const payload = JSON.parse(events[0].payload);
+  assert.equal(payload.recipientCount, 2);
+  assert.equal(payload.skippedCount, 1);
+  assert.equal(payload.subject, 'Scheduled maintenance');
+});
+
+test('POST /api/admin/announcements/email fails without SMTP configuration', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  createDonor({
+    email: 'recipient@example.com',
+    name: 'Recipient',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('announcements', {
+    bannerTitle: 'System update',
+    bannerBody: 'We are upgrading our servers tonight.',
+  });
+
+  let createTransportCalls = 0;
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => {
+    createTransportCalls += 1;
+    return {
+      sendMail: async () => {},
+    };
+  };
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const response = await agent.request('/api/admin/announcements/email', {
+    method: 'POST',
+    headers: { 'x-csrf-token': csrfToken },
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.ok(/smtp/i.test(body.error));
+  assert.equal(createTransportCalls, 0);
+});
+
+test('POST /api/admin/announcements/email validates announcement content', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  createDonor({
+    email: 'recipient@example.com',
+    name: 'Recipient',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  let createTransportCalls = 0;
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => {
+    createTransportCalls += 1;
+    return {
+      sendMail: async () => {},
+    };
+  };
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const response = await agent.request('/api/admin/announcements/email', {
+    method: 'POST',
+    headers: { 'x-csrf-token': csrfToken },
+  });
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.equal(
+    body.error,
+    'Announcement title and body are required to send an email.'
+  );
+  assert.equal(createTransportCalls, 0);
 });
 
