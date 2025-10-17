@@ -596,7 +596,8 @@ router.post(
   '/announcements/email',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const announcement = settingsStore.getAnnouncementSettings();
+    const overrides = req.body && typeof req.body === 'object' ? req.body : null;
+    const announcement = settingsStore.getAnnouncementSettings(overrides);
     const subject =
       typeof announcement.bannerTitle === 'string'
         ? announcement.bannerTitle.trim()

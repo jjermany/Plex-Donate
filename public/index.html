@@ -4636,6 +4636,7 @@
               setFormStatus(form, 'Sending announcement email…');
               const response = await api('/api/admin/announcements/email', {
                 method: 'POST',
+                body: values,
               });
               const sentCount = response.sent || 0;
               const toastMessage =
