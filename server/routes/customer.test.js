@@ -52,6 +52,16 @@ function resetDatabase() {
   `);
 }
 
+function assertDefaultAnnouncement(announcement) {
+  assert.ok(announcement);
+  assert.equal(announcement.enabled, false);
+  assert.equal(announcement.title, '');
+  assert.equal(announcement.body, '');
+  assert.equal(announcement.tone, 'info');
+  assert.equal(announcement.dismissible, true);
+  assert.equal(announcement.cta, null);
+}
+
 class TestClient {
   constructor(baseUrl) {
     this.baseUrl = baseUrl;
@@ -246,6 +256,7 @@ test(
       assert.equal(response.status, 200);
       const payload = await response.json();
       assert.equal(payload.authenticated, true);
+      assertDefaultAnnouncement(payload.announcement);
       assert.ok(payload.donor);
       assert.equal(payload.donor.status, 'active');
       assert.equal(payload.donor.lastPaymentAt, '2024-01-15T12:34:56Z');
@@ -286,6 +297,7 @@ test('email verification is required before login', async (t) => {
     assert.equal(response.status, 200);
     payload = await response.json();
     assert.equal(payload.authenticated, true);
+    assertDefaultAnnouncement(payload.announcement);
     assert.ok(payload.donor);
     assert.equal(payload.donor.emailVerified, true);
 
@@ -299,6 +311,7 @@ test('email verification is required before login', async (t) => {
     assert.equal(response.status, 200);
     payload = await response.json();
     assert.equal(payload.authenticated, true);
+    assertDefaultAnnouncement(payload.announcement);
     assert.equal(payload.donor.emailVerified, true);
   });
 
@@ -347,12 +360,13 @@ test(
       assert.equal(setupResponse.status, 200);
       await setupResponse.json();
 
-      const response = await client.get('/customer/session');
-      assert.equal(response.status, 200);
-      const payload = await response.json();
-      assert.equal(payload.authenticated, true);
-      assert.ok(payload.donor);
-      assert.equal(payload.donor.status, 'active');
+    const response = await client.get('/customer/session');
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.authenticated, true);
+    assertDefaultAnnouncement(payload.announcement);
+    assert.ok(payload.donor);
+    assert.equal(payload.donor.status, 'active');
       assert.equal(payload.donor.subscriptionId, 'I-SESSIONREFRESH');
       assert.equal(payload.donor.lastPaymentAt, '2024-02-20T00:00:00Z');
     });

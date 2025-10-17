@@ -4,6 +4,17 @@ const DEFAULT_SETTINGS = {
   app: {
     publicBaseUrl: '',
   },
+  announcements: {
+    bannerEnabled: false,
+    bannerTitle: '',
+    bannerBody: '',
+    bannerTone: 'info',
+    bannerDismissible: true,
+    bannerCtaEnabled: false,
+    bannerCtaLabel: '',
+    bannerCtaUrl: '',
+    bannerCtaOpenInNewTab: true,
+  },
   paypal: {
     clientId: '',
     clientSecret: '',
@@ -152,6 +163,33 @@ function previewGroup(name, overrides) {
   return normalizeGroup(name, overrides, current);
 }
 
+const ANNOUNCEMENT_TONES = new Set(['info', 'success', 'warning', 'danger', 'neutral']);
+
+function normalizeAnnouncementValue(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim();
+}
+
+function getAnnouncementSettings() {
+  const group = getGroup('announcements');
+  const tone = typeof group.bannerTone === 'string' ? group.bannerTone.trim().toLowerCase() : '';
+  const normalizedTone = ANNOUNCEMENT_TONES.has(tone) ? tone : 'info';
+
+  return {
+    bannerEnabled: Boolean(group.bannerEnabled),
+    bannerTitle: normalizeAnnouncementValue(group.bannerTitle),
+    bannerBody: normalizeAnnouncementValue(group.bannerBody),
+    bannerTone: normalizedTone,
+    bannerDismissible: Boolean(group.bannerDismissible),
+    bannerCtaEnabled: Boolean(group.bannerCtaEnabled),
+    bannerCtaLabel: normalizeAnnouncementValue(group.bannerCtaLabel),
+    bannerCtaUrl: normalizeAnnouncementValue(group.bannerCtaUrl),
+    bannerCtaOpenInNewTab: Boolean(group.bannerCtaOpenInNewTab),
+  };
+}
+
 function getPaypalSettings() {
   return getGroup('paypal');
 }
@@ -178,4 +216,5 @@ module.exports = {
   getPaypalSettings,
   getSmtpSettings,
   getPlexSettings,
+  getAnnouncementSettings,
 };

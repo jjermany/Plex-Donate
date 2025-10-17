@@ -438,3 +438,78 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.equal(body.donor.plexPending, true);
 });
 
+test('announcements settings round-trip through admin API', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  let response = await agent.get('/api/admin/settings');
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.ok(body.settings);
+  assert.ok(body.settings.announcements);
+  assert.deepEqual(body.settings.announcements, {
+    bannerEnabled: false,
+    bannerTitle: '',
+    bannerBody: '',
+    bannerTone: 'info',
+    bannerDismissible: true,
+    bannerCtaEnabled: false,
+    bannerCtaLabel: '',
+    bannerCtaUrl: '',
+    bannerCtaOpenInNewTab: true,
+  });
+
+  const updatePayload = {
+    bannerEnabled: true,
+    bannerTitle: 'Scheduled maintenance',
+    bannerBody: 'Streaming access pauses tonight at 10:00 PM.',
+    bannerTone: 'warning',
+    bannerDismissible: false,
+    bannerCtaEnabled: true,
+    bannerCtaLabel: 'View status page',
+    bannerCtaUrl: 'https://status.example.com',
+    bannerCtaOpenInNewTab: false,
+  };
+
+  response = await agent.request('/api/admin/settings/announcements', {
+    method: 'PUT',
+    headers: { 'x-csrf-token': csrfToken },
+    body: updatePayload,
+  });
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.ok(body.settings);
+  assert.equal(body.settings.bannerEnabled, true);
+  assert.equal(body.settings.bannerTitle, updatePayload.bannerTitle);
+  assert.equal(body.settings.bannerBody, updatePayload.bannerBody);
+  assert.equal(body.settings.bannerTone, 'warning');
+  assert.equal(body.settings.bannerDismissible, false);
+  assert.equal(body.settings.bannerCtaEnabled, true);
+  assert.equal(body.settings.bannerCtaLabel, updatePayload.bannerCtaLabel);
+  assert.equal(body.settings.bannerCtaUrl, updatePayload.bannerCtaUrl);
+  assert.equal(body.settings.bannerCtaOpenInNewTab, false);
+
+  response = await agent.get('/api/admin/settings');
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.ok(body.settings);
+  assert.equal(body.settings.announcements.bannerEnabled, true);
+  assert.equal(body.settings.announcements.bannerTitle, updatePayload.bannerTitle);
+  assert.equal(body.settings.announcements.bannerBody, updatePayload.bannerBody);
+  assert.equal(body.settings.announcements.bannerTone, 'warning');
+  assert.equal(body.settings.announcements.bannerDismissible, false);
+  assert.equal(body.settings.announcements.bannerCtaEnabled, true);
+  assert.equal(
+    body.settings.announcements.bannerCtaOpenInNewTab,
+    updatePayload.bannerCtaOpenInNewTab
+  );
+  assert.equal(
+    body.settings.announcements.bannerCtaUrl,
+    updatePayload.bannerCtaUrl
+  );
+});
+

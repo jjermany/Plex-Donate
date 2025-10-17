@@ -731,7 +731,9 @@
       .settings-form input[type='password'],
       .settings-form input[type='url'],
       .settings-form input[type='number'],
-      .settings-form input[type='email'] {
+      .settings-form input[type='email'],
+      .settings-form textarea,
+      .settings-form select {
         border-radius: 12px;
         border: 1px solid rgba(148, 163, 184, 0.35);
         padding: 12px 14px;
@@ -749,7 +751,9 @@
       .settings-form input[type='password']:focus,
       .settings-form input[type='url']:focus,
       .settings-form input[type='number']:focus,
-      .settings-form input[type='email']:focus {
+      .settings-form input[type='email']:focus,
+      .settings-form textarea:focus,
+      .settings-form select:focus {
         border-color: rgba(79, 70, 229, 0.8);
         box-shadow: 0 22px 44px -28px rgba(79, 70, 229, 0.65);
       }
@@ -758,6 +762,179 @@
         font-weight: 500;
         color: var(--text-muted-soft);
         font-size: 0.8rem;
+      }
+
+      .announcement-preview {
+        border: 1px dashed var(--settings-divider);
+        border-radius: 14px;
+        padding: 16px;
+        background: rgba(148, 163, 184, 0.08);
+        display: grid;
+        gap: 12px;
+      }
+
+      .announcement-preview p {
+        margin: 0;
+      }
+
+      .announcement-preview-empty {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+      }
+
+      .announcement-banner {
+        --announcement-bg: rgba(99, 102, 241, 0.12);
+        --announcement-border: rgba(99, 102, 241, 0.28);
+        --announcement-text: var(--text-primary);
+        --announcement-chip-bg: rgba(99, 102, 241, 0.18);
+        --announcement-chip-color: #4338ca;
+        border-radius: 14px;
+        border: 1px solid var(--announcement-border);
+        padding: 18px;
+        background: var(--announcement-bg);
+        color: var(--announcement-text);
+        display: grid;
+        gap: 12px;
+      }
+
+      .announcement-banner[data-tone='success'] {
+        --announcement-bg: rgba(34, 197, 94, 0.12);
+        --announcement-border: rgba(34, 197, 94, 0.28);
+        --announcement-chip-bg: rgba(34, 197, 94, 0.18);
+        --announcement-chip-color: #166534;
+      }
+
+      .announcement-banner[data-tone='warning'] {
+        --announcement-bg: rgba(234, 179, 8, 0.16);
+        --announcement-border: rgba(234, 179, 8, 0.32);
+        --announcement-chip-bg: rgba(234, 179, 8, 0.22);
+        --announcement-chip-color: #92400e;
+      }
+
+      .announcement-banner[data-tone='danger'] {
+        --announcement-bg: rgba(239, 68, 68, 0.16);
+        --announcement-border: rgba(239, 68, 68, 0.32);
+        --announcement-chip-bg: rgba(239, 68, 68, 0.22);
+        --announcement-chip-color: #b91c1c;
+      }
+
+      .announcement-banner[data-tone='neutral'] {
+        --announcement-bg: rgba(148, 163, 184, 0.16);
+        --announcement-border: rgba(148, 163, 184, 0.32);
+        --announcement-chip-bg: rgba(148, 163, 184, 0.22);
+        --announcement-chip-color: #0f172a;
+      }
+
+      :root[data-theme='dark'] .announcement-preview {
+        background: rgba(30, 41, 59, 0.65);
+        border-color: rgba(71, 85, 105, 0.6);
+      }
+
+      :root[data-theme='dark'] .announcement-banner {
+        --announcement-text: #e2e8f0;
+      }
+
+      :root[data-theme='dark'] .announcement-banner[data-tone='info'] {
+        --announcement-bg: rgba(99, 102, 241, 0.24);
+        --announcement-border: rgba(129, 140, 248, 0.45);
+        --announcement-chip-bg: rgba(129, 140, 248, 0.32);
+        --announcement-chip-color: #c7d2fe;
+      }
+
+      :root[data-theme='dark'] .announcement-banner[data-tone='success'] {
+        --announcement-bg: rgba(34, 197, 94, 0.24);
+        --announcement-border: rgba(74, 222, 128, 0.45);
+        --announcement-chip-bg: rgba(74, 222, 128, 0.32);
+        --announcement-chip-color: #bbf7d0;
+      }
+
+      :root[data-theme='dark'] .announcement-banner[data-tone='warning'] {
+        --announcement-bg: rgba(234, 179, 8, 0.28);
+        --announcement-border: rgba(250, 204, 21, 0.45);
+        --announcement-chip-bg: rgba(250, 204, 21, 0.32);
+        --announcement-chip-color: #fde68a;
+      }
+
+      :root[data-theme='dark'] .announcement-banner[data-tone='danger'] {
+        --announcement-bg: rgba(248, 113, 113, 0.28);
+        --announcement-border: rgba(252, 165, 165, 0.45);
+        --announcement-chip-bg: rgba(252, 165, 165, 0.35);
+        --announcement-chip-color: #fecdd3;
+      }
+
+      :root[data-theme='dark'] .announcement-banner[data-tone='neutral'] {
+        --announcement-bg: rgba(71, 85, 105, 0.45);
+        --announcement-border: rgba(148, 163, 184, 0.4);
+        --announcement-chip-bg: rgba(148, 163, 184, 0.4);
+        --announcement-chip-color: #e2e8f0;
+      }
+
+      .announcement-banner h4,
+      .announcement-banner h3,
+      .announcement-banner p {
+        margin: 0;
+      }
+
+      .announcement-banner p {
+        white-space: pre-wrap;
+      }
+
+      .announcement-banner-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .announcement-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        background: var(--announcement-chip-bg);
+        color: var(--announcement-chip-color);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      .announcement-dismiss {
+        border: none;
+        background: transparent;
+        color: inherit;
+        font-size: 0.85rem;
+        cursor: default;
+        opacity: 0.7;
+      }
+
+      .announcement-dismiss[data-interactive='true'] {
+        cursor: pointer;
+      }
+
+      .announcement-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .announcement-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 16px;
+        border-radius: 999px;
+        font-weight: 600;
+        background: rgba(30, 64, 175, 0.18);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .announcement-cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px -18px rgba(30, 64, 175, 0.6);
       }
 
       .library-selector {
@@ -1263,6 +1440,100 @@
                 </div>
               </form>
             </section>
+            <section class="panel" id="announcement-settings-panel">
+              <h2 style="margin-top:0;">Customer announcements</h2>
+              <p class="muted-text" style="margin:0 0 16px;">
+                Share timely updates with donors directly on the customer dashboard. Banners support optional buttons and can
+                be dismissed if you allow it.
+              </p>
+              <form class="settings-form" data-group="announcements">
+                <div class="field-grid">
+                  <label class="checkbox-row">
+                    <input name="bannerEnabled" type="checkbox" />
+                    Enable announcement banner
+                  </label>
+                  <label>
+                    Banner tone
+                    <select name="bannerTone">
+                      <option value="info">Information</option>
+                      <option value="success">Success</option>
+                      <option value="warning">Warning</option>
+                      <option value="danger">Alert</option>
+                      <option value="neutral">Neutral</option>
+                    </select>
+                    <span class="help">Controls the color palette so the message matches its urgency.</span>
+                  </label>
+                  <label>
+                    Banner title
+                    <input
+                      name="bannerTitle"
+                      type="text"
+                      placeholder="Welcome back to Plex Donate"
+                    />
+                  </label>
+                  <label style="grid-column: 1 / -1;">
+                    Banner body
+                    <textarea
+                      name="bannerBody"
+                      rows="4"
+                      placeholder="Highlight a new library, scheduled maintenance, or important reminders for supporters."
+                    ></textarea>
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label class="checkbox-row">
+                    <input name="bannerDismissible" type="checkbox" />
+                    Allow donors to dismiss this message
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="bannerCtaEnabled" type="checkbox" />
+                    Show call-to-action button
+                  </label>
+                  <label>
+                    Button label
+                    <input name="bannerCtaLabel" type="text" placeholder="Read the update" />
+                  </label>
+                  <label>
+                    Button URL
+                    <input name="bannerCtaUrl" type="url" placeholder="https://status.example.com" />
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="bannerCtaOpenInNewTab" type="checkbox" />
+                    Open button link in a new tab
+                  </label>
+                </div>
+                <div class="announcement-preview" data-announcement-preview>
+                  <p class="announcement-preview-empty" data-announcement-preview-empty>
+                    Banner preview will appear here after you enable the announcement.
+                  </p>
+                  <div class="announcement-banner" data-announcement-banner hidden data-tone="info">
+                    <div class="announcement-banner-header">
+                      <span class="announcement-chip" data-announcement-chip>Information</span>
+                      <button type="button" class="announcement-dismiss" data-announcement-dismiss hidden>
+                        Dismiss
+                      </button>
+                    </div>
+                    <h3 data-announcement-title>Banner title</h3>
+                    <p data-announcement-body>
+                      Write a short message to show donors on the dashboard.
+                    </p>
+                    <div class="announcement-actions">
+                      <a
+                        href="#"
+                        class="announcement-cta"
+                        data-announcement-cta
+                        hidden
+                        aria-disabled="true"
+                      ></a>
+                    </div>
+                  </div>
+                </div>
+                <p class="form-status" data-status-for="announcements"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save announcement</button>
+                </div>
+              </form>
+            </section>
           </div>
           <div
             class="dashboard-view"
@@ -1718,9 +1989,9 @@
       const eventsList = document.getElementById('events-list');
       const refreshButton = document.getElementById('refresh-button');
       const settingsPanel = document.getElementById('settings-panel');
-      const settingsForms = settingsPanel
-        ? Array.from(settingsPanel.querySelectorAll('.settings-form'))
-        : [];
+      const settingsForms = Array.from(
+        document.querySelectorAll('.settings-form[data-group]')
+      );
       const plexLibraryPicker = settingsPanel
         ? settingsPanel.querySelector('[data-library-picker]')
         : null;
@@ -1754,6 +2025,38 @@
       const paypalPlanSection = document.getElementById('paypal-plan-management');
       const paypalPlanBody = document.getElementById('paypal-plan-body');
       const paypalPlanManageLink = document.getElementById('paypal-plan-manage-link');
+      const announcementSettingsPanel = document.getElementById(
+        'announcement-settings-panel'
+      );
+      const announcementsForm = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector(
+            '.settings-form[data-group="announcements"]'
+          )
+        : null;
+      const announcementPreview = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-preview]')
+        : null;
+      const announcementPreviewBanner = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-banner]')
+        : null;
+      const announcementPreviewEmpty = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-preview-empty]')
+        : null;
+      const announcementPreviewTitle = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-title]')
+        : null;
+      const announcementPreviewBody = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-body]')
+        : null;
+      const announcementPreviewChip = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-chip]')
+        : null;
+      const announcementPreviewCta = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-cta]')
+        : null;
+      const announcementPreviewDismiss = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-dismiss]')
+        : null;
       const prospectSharePanel = document.getElementById('prospect-share-panel');
       const prospectShareForm = document.getElementById('prospect-share-form');
       const prospectShareResult = document.getElementById('prospect-share-result');
@@ -2951,8 +3254,123 @@
 
       closePlexLibraryDropdown();
 
+      const ANNOUNCEMENT_TONE_LABELS = {
+        info: 'Information',
+        success: 'Success',
+        warning: 'Warning',
+        danger: 'Alert',
+        neutral: 'Neutral',
+      };
+
+      function normalizeAnnouncementPreview(values) {
+        const payload = values && typeof values === 'object' ? values : {};
+        const enabled = payload.bannerEnabled === true || payload.bannerEnabled === 'true';
+        const dismissible =
+          payload.bannerDismissible === true || payload.bannerDismissible === 'true';
+        const ctaEnabled =
+          payload.bannerCtaEnabled === true || payload.bannerCtaEnabled === 'true';
+        const toneRaw = typeof payload.bannerTone === 'string'
+          ? payload.bannerTone.trim().toLowerCase()
+          : '';
+        const tone = Object.prototype.hasOwnProperty.call(
+          ANNOUNCEMENT_TONE_LABELS,
+          toneRaw
+        )
+          ? toneRaw
+          : 'info';
+        const title = typeof payload.bannerTitle === 'string'
+          ? payload.bannerTitle.trim()
+          : '';
+        const body = typeof payload.bannerBody === 'string'
+          ? payload.bannerBody.trim()
+          : '';
+        const ctaLabel = typeof payload.bannerCtaLabel === 'string'
+          ? payload.bannerCtaLabel.trim()
+          : '';
+        const ctaUrl = typeof payload.bannerCtaUrl === 'string'
+          ? payload.bannerCtaUrl.trim()
+          : '';
+        const ctaOpenInNewTab =
+          payload.bannerCtaOpenInNewTab === true ||
+          payload.bannerCtaOpenInNewTab === 'true';
+
+        return {
+          enabled,
+          tone,
+          title,
+          body,
+          dismissible,
+          cta:
+            enabled && ctaEnabled && ctaLabel && ctaUrl
+              ? { label: ctaLabel, url: ctaUrl, openInNewTab: ctaOpenInNewTab }
+              : null,
+        };
+      }
+
+      function renderAnnouncementPreview() {
+        if (!announcementPreview) {
+          return;
+        }
+        const values = announcementsForm ? getFormPayload(announcementsForm) : {};
+        const preview = normalizeAnnouncementPreview(values);
+
+        if (announcementPreviewBanner) {
+          announcementPreviewBanner.dataset.tone = preview.tone;
+        }
+
+        if (!preview.enabled) {
+          if (announcementPreviewBanner) {
+            announcementPreviewBanner.hidden = true;
+          }
+          if (announcementPreviewEmpty) {
+            announcementPreviewEmpty.hidden = false;
+          }
+          return;
+        }
+
+        if (announcementPreviewEmpty) {
+          announcementPreviewEmpty.hidden = true;
+        }
+        if (announcementPreviewBanner) {
+          announcementPreviewBanner.hidden = false;
+        }
+        if (announcementPreviewChip) {
+          const label = ANNOUNCEMENT_TONE_LABELS[preview.tone] || 'Information';
+          announcementPreviewChip.textContent = label;
+        }
+        if (announcementPreviewTitle) {
+          announcementPreviewTitle.textContent = preview.title || 'Add a banner title';
+        }
+        if (announcementPreviewBody) {
+          announcementPreviewBody.textContent =
+            preview.body || 'Write a short message to show donors on the dashboard.';
+        }
+        if (announcementPreviewDismiss) {
+          announcementPreviewDismiss.hidden = !preview.dismissible;
+          if (preview.dismissible) {
+            announcementPreviewDismiss.dataset.interactive = 'true';
+          } else {
+            delete announcementPreviewDismiss.dataset.interactive;
+          }
+        }
+        if (announcementPreviewCta) {
+          if (preview.cta) {
+            announcementPreviewCta.hidden = false;
+            announcementPreviewCta.textContent = preview.cta.label;
+          } else {
+            announcementPreviewCta.hidden = true;
+            announcementPreviewCta.textContent = '';
+          }
+        }
+      }
+
+      if (announcementsForm) {
+        announcementsForm.addEventListener('input', renderAnnouncementPreview);
+        announcementsForm.addEventListener('change', renderAnnouncementPreview);
+      }
+
       function renderSettings() {
-        if (!settingsPanel) {
+        if (settingsForms.length === 0) {
           return;
         }
         if (state.settings) {
@@ -2974,6 +3392,7 @@
         }
         renderPlexLibrarySelector({ preserveSelection: false });
         renderPaypalPlan();
+        renderAnnouncementPreview();
       }
 
       function renderPaypalPlan() {

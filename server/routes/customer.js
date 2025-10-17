@@ -48,6 +48,54 @@ const {
 const router = express.Router();
 
 const PLEX_LINK_EXPIRY_GRACE_MS = 60 * 1000;
+const ANNOUNCEMENT_TONES = new Set([
+  'info',
+  'success',
+  'warning',
+  'danger',
+  'neutral',
+]);
+
+function sanitizeAnnouncement(settings) {
+  const announcementSettings = settings || {};
+  const enabled = Boolean(announcementSettings.bannerEnabled);
+  const title = typeof announcementSettings.bannerTitle === 'string'
+    ? announcementSettings.bannerTitle.trim()
+    : '';
+  const body = typeof announcementSettings.bannerBody === 'string'
+    ? announcementSettings.bannerBody.trim()
+    : '';
+  const dismissible = Boolean(announcementSettings.bannerDismissible);
+  const ctaEnabled = Boolean(announcementSettings.bannerCtaEnabled);
+  const ctaLabel = typeof announcementSettings.bannerCtaLabel === 'string'
+    ? announcementSettings.bannerCtaLabel.trim()
+    : '';
+  const ctaUrl = typeof announcementSettings.bannerCtaUrl === 'string'
+    ? announcementSettings.bannerCtaUrl.trim()
+    : '';
+  const ctaOpenInNewTab = Boolean(announcementSettings.bannerCtaOpenInNewTab);
+  const toneRaw = typeof announcementSettings.bannerTone === 'string'
+    ? announcementSettings.bannerTone.trim().toLowerCase()
+    : '';
+  const tone = ANNOUNCEMENT_TONES.has(toneRaw) ? toneRaw : 'info';
+
+  const cta = ctaEnabled && ctaLabel && ctaUrl
+    ? {
+        label: ctaLabel,
+        url: ctaUrl,
+        openInNewTab: ctaOpenInNewTab,
+      }
+    : null;
+
+  return {
+    enabled,
+    title,
+    body,
+    tone,
+    dismissible,
+    cta,
+  };
+}
 
 function asyncHandler(handler) {
   return (req, res, next) => {
@@ -274,6 +322,12 @@ function buildDashboardResponse({
   paypalError = '',
 }) {
   const paypal = settingsStore.getPaypalSettings();
+  let announcementSettings;
+  try {
+    announcementSettings = settingsStore.getAnnouncementSettings();
+  } catch (err) {
+    announcementSettings = {};
+  }
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
   const checkoutAvailable = isSubscriptionCheckoutConfigured(paypal);
   const subscriptionUrl = checkoutAvailable
@@ -330,6 +384,7 @@ function buildDashboardResponse({
         : typeof nextInviteAvailableAt === 'string'
         ? nextInviteAvailableAt
         : null,
+    announcement: sanitizeAnnouncement(announcementSettings),
   };
 }
 
