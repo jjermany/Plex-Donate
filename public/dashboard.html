@@ -227,6 +227,22 @@
         cursor: not-allowed;
         opacity: 0.6;
       }
+      .button-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 12px 22px;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: transform 0.2s ease, box-shadow 0.2s ease,
+          opacity 0.2s ease;
+      }
+      .button-link:hover {
+        transform: translateY(-1px);
+      }
       .button-primary {
         background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         color: #ffffff;
@@ -378,6 +394,12 @@
         display: grid;
         gap: 20px;
         text-align: left;
+      }
+      .request-list {
+        margin: 16px 0;
+        padding-left: 1.2rem;
+        display: grid;
+        gap: 8px;
       }
       .steps {
         display: grid;
@@ -797,6 +819,33 @@
               <p id="invite-email-display" class="muted small"></p>
               <p id="invite-created" class="muted small"></p>
             </div>
+          </article>
+
+          <article class="surface">
+            <h2 class="section-title">Request new content through Overseerr</h2>
+            <p class="muted">
+              Looking for a movie or show we don't have yet? Submit a request in
+              Overseerr so the server team can queue it up for you.
+            </p>
+            <ol class="request-list muted small">
+              <li>Sign in with your Plex account so requests stay linked.</li>
+              <li>
+                Search for the title you want and choose
+                <strong>Request</strong> to send it to the admins.
+              </li>
+              <li>
+                Visit the <strong>Activity</strong> tab to follow approvals and
+                downloads once they're underway.
+              </li>
+            </ol>
+            <a
+              class="button-link button-primary"
+              href="https://overseerr.jalonshomelab.com"
+              target="_blank"
+              rel="noopener"
+            >
+              Open Overseerr
+            </a>
           </article>
 
           <article class="surface">
