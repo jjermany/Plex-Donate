@@ -177,6 +177,100 @@
       .link-inline:hover {
         text-decoration: none;
       }
+      .announcement-banner {
+        --announcement-bg: rgba(99, 102, 241, 0.22);
+        --announcement-border: rgba(129, 140, 248, 0.45);
+        --announcement-chip-bg: rgba(129, 140, 248, 0.35);
+        --announcement-chip-color: #c7d2fe;
+        --announcement-text: #e2e8f0;
+        border-radius: 20px;
+        border: 1px solid var(--announcement-border);
+        padding: 20px;
+        background: var(--announcement-bg);
+        color: var(--announcement-text);
+        box-shadow: 0 25px 50px -30px rgba(99, 102, 241, 0.8);
+        display: grid;
+        gap: 14px;
+      }
+      .announcement-banner[data-tone='success'] {
+        --announcement-bg: rgba(34, 197, 94, 0.24);
+        --announcement-border: rgba(74, 222, 128, 0.45);
+        --announcement-chip-bg: rgba(74, 222, 128, 0.35);
+        --announcement-chip-color: #bbf7d0;
+      }
+      .announcement-banner[data-tone='warning'] {
+        --announcement-bg: rgba(234, 179, 8, 0.28);
+        --announcement-border: rgba(250, 204, 21, 0.45);
+        --announcement-chip-bg: rgba(250, 204, 21, 0.35);
+        --announcement-chip-color: #fde68a;
+      }
+      .announcement-banner[data-tone='danger'] {
+        --announcement-bg: rgba(248, 113, 113, 0.28);
+        --announcement-border: rgba(252, 165, 165, 0.45);
+        --announcement-chip-bg: rgba(252, 165, 165, 0.4);
+        --announcement-chip-color: #fecdd3;
+      }
+      .announcement-banner[data-tone='neutral'] {
+        --announcement-bg: rgba(71, 85, 105, 0.45);
+        --announcement-border: rgba(148, 163, 184, 0.4);
+        --announcement-chip-bg: rgba(148, 163, 184, 0.45);
+        --announcement-chip-color: #e2e8f0;
+      }
+      .announcement-banner h2,
+      .announcement-banner h3,
+      .announcement-banner p {
+        margin: 0;
+      }
+      .announcement-banner p {
+        white-space: pre-wrap;
+      }
+      .announcement-banner-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .announcement-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 12px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: var(--announcement-chip-bg);
+        color: var(--announcement-chip-color);
+      }
+      .announcement-dismiss {
+        border: none;
+        background: transparent;
+        color: inherit;
+        font-size: 0.85rem;
+        opacity: 0.75;
+        cursor: pointer;
+      }
+      .announcement-actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .announcement-cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        background: rgba(148, 163, 184, 0.25);
+        color: inherit;
+        text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      .announcement-cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 30px -22px rgba(148, 163, 184, 0.8);
+      }
       .login-footnote {
         margin: -6px 0 0;
       }
@@ -497,6 +591,37 @@
             jump back into your libraries anytime. Not subscribed yet? Follow
             the guided checklist below to unlock access to endless content.
           </p>
+        </section>
+
+        <section
+          id="announcement-banner"
+          class="announcement-banner hidden"
+          role="status"
+          aria-live="polite"
+          data-tone="info"
+        >
+          <div class="announcement-banner-header">
+            <span class="announcement-chip" id="announcement-chip">Information</span>
+            <button
+              type="button"
+              class="announcement-dismiss"
+              id="announcement-dismiss"
+              aria-label="Dismiss announcement"
+            >
+              Dismiss
+            </button>
+          </div>
+          <h2 id="announcement-title">Banner title</h2>
+          <p id="announcement-body"></p>
+          <div class="announcement-actions">
+            <a
+              id="announcement-cta"
+              class="announcement-cta hidden"
+              href="#"
+              target="_blank"
+              rel="noopener"
+            ></a>
+          </div>
         </section>
 
         <section id="login-panel" class="surface login-card">
@@ -877,6 +1002,7 @@
         inviteLimitReached: false,
         nextInviteAvailableAt: null,
         pendingPlexLink: null,
+        announcement: null,
       };
       let inviteCooldownTimer = null;
       let inviteCooldownTimerType = null;
@@ -902,6 +1028,12 @@
       const defaultForgotPasswordLinkText = forgotPasswordLink
         ? forgotPasswordLink.textContent
         : 'Forgot your password?';
+      const announcementBanner = document.getElementById('announcement-banner');
+      const announcementChip = document.getElementById('announcement-chip');
+      const announcementTitle = document.getElementById('announcement-title');
+      const announcementBody = document.getElementById('announcement-body');
+      const announcementCta = document.getElementById('announcement-cta');
+      const announcementDismissButton = document.getElementById('announcement-dismiss');
 
       const logoutButton = document.getElementById('logout-button');
       const memberNameEl = document.getElementById('member-name');
@@ -942,6 +1074,23 @@
       let sessionToken = null;
       let initialVerificationToken = null;
       let verificationInFlight = false;
+
+      const ANNOUNCEMENT_TONE_LABELS = {
+        info: 'Information',
+        success: 'Success',
+        warning: 'Warning',
+        danger: 'Alert',
+        neutral: 'Update',
+      };
+      const ANNOUNCEMENT_DISMISSAL_KEY = 'plexDonateAnnouncementDismissed';
+      let dismissedAnnouncementFingerprint = null;
+
+      try {
+        dismissedAnnouncementFingerprint =
+          window.localStorage.getItem(ANNOUNCEMENT_DISMISSAL_KEY) || null;
+      } catch (err) {
+        dismissedAnnouncementFingerprint = null;
+      }
 
       function normalizeSessionToken(token) {
         if (typeof token !== 'string') {
@@ -1033,6 +1182,175 @@
         if (Object.prototype.hasOwnProperty.call(data, 'sessionToken')) {
           setSessionToken(data.sessionToken);
         }
+      }
+
+      function normalizeAnnouncementPayload(payload) {
+        if (!payload || typeof payload !== 'object') {
+          return null;
+        }
+        const toneRaw = typeof payload.tone === 'string'
+          ? payload.tone.trim().toLowerCase()
+          : '';
+        const tone = Object.prototype.hasOwnProperty.call(
+          ANNOUNCEMENT_TONE_LABELS,
+          toneRaw
+        )
+          ? toneRaw
+          : 'info';
+        const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+        const body = typeof payload.body === 'string' ? payload.body.trim() : '';
+        const dismissible = Boolean(payload.dismissible);
+        const enabled = Boolean(payload.enabled);
+        let cta = null;
+        if (payload.cta && typeof payload.cta === 'object') {
+          const label =
+            typeof payload.cta.label === 'string' ? payload.cta.label.trim() : '';
+          const url = typeof payload.cta.url === 'string' ? payload.cta.url.trim() : '';
+          const openInNewTab = Boolean(payload.cta.openInNewTab);
+          if (label && url) {
+            cta = { label, url, openInNewTab };
+          }
+        }
+        return { enabled, title, body, tone, dismissible, cta };
+      }
+
+      function buildAnnouncementFingerprint(announcement) {
+        if (!announcement) {
+          return '';
+        }
+        return JSON.stringify({
+          tone: announcement.tone,
+          title: announcement.title,
+          body: announcement.body,
+          dismissible: announcement.dismissible,
+          ctaLabel: announcement.cta ? announcement.cta.label : '',
+          ctaUrl: announcement.cta ? announcement.cta.url : '',
+        });
+      }
+
+      function isAnnouncementDismissed(announcement) {
+        if (!announcement || !announcement.dismissible) {
+          return false;
+        }
+        const fingerprint = buildAnnouncementFingerprint(announcement);
+        return fingerprint && fingerprint === dismissedAnnouncementFingerprint;
+      }
+
+      function rememberAnnouncementDismissal(announcement) {
+        if (!announcement || !announcement.dismissible) {
+          return;
+        }
+        const fingerprint = buildAnnouncementFingerprint(announcement);
+        if (!fingerprint) {
+          return;
+        }
+        dismissedAnnouncementFingerprint = fingerprint;
+        try {
+          window.localStorage.setItem(ANNOUNCEMENT_DISMISSAL_KEY, fingerprint);
+        } catch (err) {
+          // ignore storage errors
+        }
+      }
+
+      function resetAnnouncementCta() {
+        if (!announcementCta) {
+          return;
+        }
+        announcementCta.classList.add('hidden');
+        announcementCta.textContent = '';
+        announcementCta.removeAttribute('href');
+        announcementCta.removeAttribute('target');
+        announcementCta.removeAttribute('rel');
+      }
+
+      function renderAnnouncementBanner(payload) {
+        if (!announcementBanner) {
+          state.announcement = null;
+          return;
+        }
+
+        const normalized = normalizeAnnouncementPayload(payload);
+        state.announcement = normalized;
+
+        if (
+          !normalized ||
+          !normalized.enabled ||
+          (!normalized.title && !normalized.body) ||
+          isAnnouncementDismissed(normalized)
+        ) {
+          announcementBanner.classList.add('hidden');
+          announcementBanner.dataset.tone = 'info';
+          if (announcementTitle) {
+            announcementTitle.textContent = '';
+          }
+          if (announcementBody) {
+            announcementBody.textContent = '';
+            announcementBody.classList.add('hidden');
+          }
+          resetAnnouncementCta();
+          if (announcementDismissButton) {
+            announcementDismissButton.classList.add('hidden');
+            announcementDismissButton.setAttribute('aria-hidden', 'true');
+          }
+          return;
+        }
+
+        announcementBanner.classList.remove('hidden');
+        announcementBanner.dataset.tone = normalized.tone;
+
+        if (announcementChip) {
+          announcementChip.textContent =
+            ANNOUNCEMENT_TONE_LABELS[normalized.tone] || 'Information';
+        }
+
+        if (announcementTitle) {
+          announcementTitle.textContent = normalized.title || 'Notice';
+        }
+
+        if (announcementBody) {
+          if (normalized.body) {
+            announcementBody.textContent = normalized.body;
+            announcementBody.classList.remove('hidden');
+          } else {
+            announcementBody.textContent = '';
+            announcementBody.classList.add('hidden');
+          }
+        }
+
+        if (normalized.cta && announcementCta) {
+          announcementCta.classList.remove('hidden');
+          announcementCta.textContent = normalized.cta.label;
+          announcementCta.href = normalized.cta.url;
+          if (normalized.cta.openInNewTab) {
+            announcementCta.target = '_blank';
+            announcementCta.rel = 'noopener';
+          } else {
+            announcementCta.removeAttribute('target');
+            announcementCta.removeAttribute('rel');
+          }
+        } else {
+          resetAnnouncementCta();
+        }
+
+        if (announcementDismissButton) {
+          if (normalized.dismissible) {
+            announcementDismissButton.classList.remove('hidden');
+            announcementDismissButton.removeAttribute('aria-hidden');
+          } else {
+            announcementDismissButton.classList.add('hidden');
+            announcementDismissButton.setAttribute('aria-hidden', 'true');
+          }
+        }
+      }
+
+      if (announcementDismissButton) {
+        announcementDismissButton.addEventListener('click', () => {
+          if (!state.announcement || !state.announcement.dismissible) {
+            return;
+          }
+          rememberAnnouncementDismissal(state.announcement);
+          renderAnnouncementBanner(null);
+        });
       }
 
       function buildSessionRequest(path, options = {}) {
@@ -1863,6 +2181,13 @@
       function renderDashboard(data) {
         state.data = data;
         showApp();
+
+        const hasAnnouncement =
+          data && Object.prototype.hasOwnProperty.call(data, 'announcement');
+        const announcementPayload = hasAnnouncement
+          ? data.announcement
+          : state.announcement;
+        renderAnnouncementBanner(announcementPayload);
 
         if (!data || !data.authenticated) {
           loginPanel.classList.remove('hidden');
