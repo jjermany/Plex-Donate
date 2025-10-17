@@ -3,6 +3,7 @@ const { getAllSettings, saveSettings } = require('../db');
 const DEFAULT_SETTINGS = {
   app: {
     publicBaseUrl: '',
+    overseerrBaseUrl: '',
   },
   announcements: {
     bannerEnabled: false,
