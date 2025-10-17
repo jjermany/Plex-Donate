@@ -946,7 +946,7 @@
             </div>
           </article>
 
-          <article class="surface">
+          <article class="surface hidden" id="overseerr-section">
             <h2 class="section-title">Request new content through Overseerr</h2>
             <p class="muted">
               Looking for a movie or show we don't have yet? Submit a request in
@@ -965,9 +965,9 @@
             </ol>
             <a
               class="button-link button-primary"
-              href="https://overseerr.jalonshomelab.com"
-              target="_blank"
-              rel="noopener"
+              id="overseerr-link"
+              href="#"
+              aria-disabled="true"
             >
               Open Overseerr
             </a>
@@ -1061,6 +1061,8 @@
       const stepSubscriptionNote = document.getElementById('step-subscription-note');
       const stepPlexNote = document.getElementById('step-plex-note');
       const stepInviteNote = document.getElementById('step-invite-note');
+      const overseerrSection = document.getElementById('overseerr-section');
+      const overseerrLink = document.getElementById('overseerr-link');
       const defaultSubscriptionButtonLabel = subscriptionButton
         ? subscriptionButton.textContent
         : 'Start PayPal subscription';
@@ -1340,6 +1342,38 @@
             announcementDismissButton.classList.add('hidden');
             announcementDismissButton.setAttribute('aria-hidden', 'true');
           }
+        }
+      }
+
+      function renderOverseerrIntegration(integrations) {
+        if (!overseerrSection) {
+          return;
+        }
+
+        const payload =
+          integrations && typeof integrations === 'object'
+            ? integrations.overseerr || null
+            : null;
+        const rawUrl =
+          payload && payload.url ? String(payload.url).trim() : '';
+
+        if (rawUrl) {
+          overseerrSection.classList.remove('hidden');
+          if (overseerrLink) {
+            overseerrLink.href = rawUrl;
+            overseerrLink.removeAttribute('aria-disabled');
+            overseerrLink.target = '_blank';
+            overseerrLink.rel = 'noopener noreferrer';
+          }
+          return;
+        }
+
+        overseerrSection.classList.add('hidden');
+        if (overseerrLink) {
+          overseerrLink.href = '#';
+          overseerrLink.setAttribute('aria-disabled', 'true');
+          overseerrLink.removeAttribute('target');
+          overseerrLink.removeAttribute('rel');
         }
       }
 
@@ -2188,6 +2222,7 @@
           ? data.announcement
           : state.announcement;
         renderAnnouncementBanner(announcementPayload);
+        renderOverseerrIntegration(data && data.integrations);
 
         if (!data || !data.authenticated) {
           loginPanel.classList.remove('hidden');

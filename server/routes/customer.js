@@ -322,6 +322,20 @@ function buildDashboardResponse({
   paypalError = '',
 }) {
   const paypal = settingsStore.getPaypalSettings();
+  let appSettings = {};
+  try {
+    appSettings = settingsStore.getAppSettings();
+  } catch (err) {
+    appSettings = {};
+  }
+  const overseerrUrlRaw =
+    appSettings && appSettings.overseerrBaseUrl
+      ? String(appSettings.overseerrBaseUrl).trim()
+      : '';
+  const overseerrUrl =
+    overseerrUrlRaw && /^https?:\/\//i.test(overseerrUrlRaw)
+      ? overseerrUrlRaw
+      : '';
   let announcementSettings;
   try {
     announcementSettings = settingsStore.getAnnouncementSettings();
@@ -385,6 +399,12 @@ function buildDashboardResponse({
         ? nextInviteAvailableAt
         : null,
     announcement: sanitizeAnnouncement(announcementSettings),
+    integrations: {
+      overseerr: {
+        url: overseerrUrl,
+        enabled: Boolean(overseerrUrl),
+      },
+    },
   };
 }
 

@@ -58,6 +58,8 @@ After signing in you can manage the admin username and password directly from th
 
 Use the **Integration settings** panel in the admin dashboard to store PayPal, Plex, and SMTP credentials. Values are written to the database so they survive restarts without exposing secrets in environment files.
 
+Set the Overseerr base URL under **Application settings** to expose a shortcut on the donor dashboard for media requests.
+
 ### Plex invite configuration
 
 Plex invites require the following values:
