@@ -172,8 +172,12 @@ function normalizeAnnouncementValue(value) {
   return value.trim();
 }
 
-function getAnnouncementSettings() {
-  const group = getGroup('announcements');
+function getAnnouncementSettings(overrides) {
+  const baseGroup = getGroup('announcements');
+  const group =
+    overrides && typeof overrides === 'object'
+      ? normalizeGroup('announcements', overrides, baseGroup)
+      : baseGroup;
   const tone = typeof group.bannerTone === 'string' ? group.bannerTone.trim().toLowerCase() : '';
   const normalizedTone = ANNOUNCEMENT_TONES.has(tone) ? tone : 'info';
 

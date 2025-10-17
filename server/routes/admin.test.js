@@ -596,6 +596,87 @@ test('POST /api/admin/announcements/email sends announcement email to donors', a
   assert.equal(payload.subject, 'Scheduled maintenance');
 });
 
+test('POST /api/admin/announcements/email uses request payload when provided', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const donorOne = createDonor({
+    email: 'supporter.one@example.com',
+    name: 'Supporter One',
+    status: 'active',
+  });
+  const donorTwo = createDonor({
+    email: 'supporter.two@example.com',
+    name: 'Supporter Two',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('announcements', {
+    bannerTitle: 'Saved announcement',
+    bannerBody: 'Persisted announcement body.',
+    bannerCtaEnabled: true,
+    bannerCtaLabel: 'View saved',
+    bannerCtaUrl: 'https://example.com/saved',
+  });
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const response = await agent.request('/api/admin/announcements/email', {
+    method: 'POST',
+    headers: { 'x-csrf-token': csrfToken },
+    body: {
+      bannerTitle: 'Updated announcement',
+      bannerBody: 'New details will be sent immediately.',
+      bannerTone: 'warning',
+      bannerCtaEnabled: true,
+      bannerCtaLabel: 'Read more',
+      bannerCtaUrl: 'https://status.example.com/new',
+    },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.equal(body.success, true);
+  assert.equal(body.sent, 2);
+  assert.equal(body.skipped, 0);
+
+  assert.equal(sentMessages.length, 2);
+  const recipients = sentMessages.map((mail) => mail.to).sort();
+  assert.deepEqual(recipients, [donorOne.email, donorTwo.email].sort());
+
+  const sampleMessage = sentMessages[0];
+  assert.equal(sampleMessage.subject, 'Updated announcement');
+  assert.ok(sampleMessage.html.includes('New details will be sent immediately.'));
+  assert.ok(sampleMessage.html.includes('Read more'));
+  assert.ok(sampleMessage.html.includes('https://status.example.com/new'));
+
+  const events = getRecentEvents(1);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].eventType, 'announcement.email.sent');
+  const payload = JSON.parse(events[0].payload);
+  assert.equal(payload.recipientCount, 2);
+  assert.equal(payload.skippedCount, 0);
+  assert.equal(payload.subject, 'Updated announcement');
+});
+
 test('POST /api/admin/announcements/email fails without SMTP configuration', async (t) => {
   resetDatabase();
   const agent = await startServer(t);
