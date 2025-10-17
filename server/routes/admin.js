@@ -588,7 +588,101 @@ router.post(
         error: err.message,
         csrfToken: res.locals.csrfToken,
       });
+      }
+  })
+);
+
+router.post(
+  '/announcements/email',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const announcement = settingsStore.getAnnouncementSettings();
+    const subject =
+      typeof announcement.bannerTitle === 'string'
+        ? announcement.bannerTitle.trim()
+        : '';
+    const body =
+      typeof announcement.bannerBody === 'string'
+        ? announcement.bannerBody.trim()
+        : '';
+
+    if (!subject || !body) {
+      return res.status(400).json({
+        error: 'Announcement title and body are required to send an email.',
+        csrfToken: res.locals.csrfToken,
+      });
     }
+
+    const donors = listDonorsWithDetails();
+    const recipients = donors
+      .map((donor) => ({
+        email: donor && donor.email ? String(donor.email).trim() : '',
+        name: donor && donor.name ? String(donor.name).trim() : '',
+      }))
+      .filter((entry) => entry.email);
+
+    if (recipients.length === 0) {
+      return res.status(400).json({
+        error: 'No subscribers have an email address on file.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    let smtpConfig;
+    try {
+      smtpConfig = emailService.getSmtpConfig();
+    } catch (err) {
+      return res.status(400).json({
+        error: err.message || 'SMTP configuration is missing',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const cta =
+      announcement.bannerCtaEnabled &&
+      announcement.bannerCtaLabel &&
+      announcement.bannerCtaUrl
+        ? {
+            label: announcement.bannerCtaLabel,
+            url: announcement.bannerCtaUrl,
+          }
+        : null;
+
+    let sentCount = 0;
+
+    try {
+      for (const recipient of recipients) {
+        // eslint-disable-next-line no-await-in-loop
+        await emailService.sendAnnouncementEmail({
+          to: recipient.email,
+          name: recipient.name,
+          subject,
+          body,
+          cta,
+          announcement,
+        }, smtpConfig);
+        sentCount += 1;
+      }
+    } catch (err) {
+      logger.error('Failed to send announcement email batch', err);
+      return res.status(500).json({
+        error: err.message || 'Failed to send announcement email.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    logEvent('announcement.email.sent', {
+      subject,
+      recipientCount: sentCount,
+      skippedCount: donors.length - recipients.length,
+    });
+
+    return res.json({
+      success: true,
+      sent: sentCount,
+      skipped: donors.length - recipients.length,
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 

@@ -1530,6 +1530,13 @@
                 </div>
                 <p class="form-status" data-status-for="announcements"></p>
                 <div class="form-actions">
+                  <button
+                    type="button"
+                    data-action="send-announcement-email"
+                    data-announcement-email-send
+                  >
+                    Send announcement email
+                  </button>
                   <button type="submit" class="secondary">Save announcement</button>
                 </div>
               </form>
@@ -2056,6 +2063,9 @@
         : null;
       const announcementPreviewDismiss = announcementSettingsPanel
         ? announcementSettingsPanel.querySelector('[data-announcement-dismiss]')
+        : null;
+      const announcementEmailButton = announcementSettingsPanel
+        ? announcementSettingsPanel.querySelector('[data-announcement-email-send]')
         : null;
       const prospectSharePanel = document.getElementById('prospect-share-panel');
       const prospectShareForm = document.getElementById('prospect-share-form');
@@ -3313,6 +3323,10 @@
         }
         const values = announcementsForm ? getFormPayload(announcementsForm) : {};
         const preview = normalizeAnnouncementPreview(values);
+
+        if (announcementEmailButton) {
+          announcementEmailButton.disabled = !(preview.title && preview.body);
+        }
 
         if (announcementPreviewBanner) {
           announcementPreviewBanner.dataset.tone = preview.tone;
@@ -4584,6 +4598,60 @@
                 err.message || 'Failed to verify settings',
                 'error'
               );
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+            return;
+          }
+
+          if (action === 'send-announcement-email') {
+            const values = getFormPayload(form);
+            const title =
+              typeof values.bannerTitle === 'string'
+                ? values.bannerTitle.trim()
+                : '';
+            const bodyText =
+              typeof values.bannerBody === 'string'
+                ? values.bannerBody.trim()
+                : '';
+
+            if (!title || !bodyText) {
+              showDashboardToast(
+                'Add a banner title and message before emailing supporters.',
+                'error'
+              );
+              return;
+            }
+
+            const confirmed = window.confirm(
+              'Send this announcement email to all supporters with an email address on file?'
+            );
+            if (!confirmed) {
+              return;
+            }
+
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Sending announcement email…');
+              const response = await api('/api/admin/announcements/email', {
+                method: 'POST',
+              });
+              const sentCount = response.sent || 0;
+              const toastMessage =
+                sentCount === 1
+                  ? 'Announcement email sent to 1 supporter.'
+                  : `Announcement email sent to ${sentCount} supporters.`;
+              showDashboardToast(toastMessage, 'success');
+              setFormStatus(form, 'Announcement email sent!', 'success');
+              scheduleStatusClear(form);
+            } catch (err) {
+              const message =
+                err && err.message
+                  ? err.message
+                  : 'Failed to send announcement email.';
+              showDashboardToast(message, 'error');
+              setFormStatus(form, message, 'error');
             } finally {
               button.disabled = previousDisabledState;
             }
