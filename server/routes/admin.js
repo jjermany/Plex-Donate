@@ -827,6 +827,14 @@ router.post(
       });
     }
 
+    const normalizedStatus = normalizeValue(donor.status || '');
+    if (normalizedStatus !== 'active') {
+      return res.status(403).json({
+        error: 'Only subscribers with an active status can receive Plex invites.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
     const note = typeof req.body === 'object' && req.body !== null ? req.body.note : '';
     const normalizedNote = typeof note === 'string' ? note.trim() : '';
 
