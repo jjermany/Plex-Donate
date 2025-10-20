@@ -315,6 +315,131 @@ async function sendCancellationEmail(
   });
 }
 
+function formatSupportEmailHtml({ heading, subject, requestId, actorName, body }) {
+  const safeHeading = escapeHtml(heading);
+  const safeSubject = escapeHtml(subject || 'Support request');
+  const safeActor = escapeHtml(actorName || 'Supporter');
+  const paragraphs = String(body || '')
+    .split(/\r?\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0)
+    .map((paragraph) => `<p style="margin:0 0 12px;">${escapeHtml(paragraph)}</p>`)
+    .join('');
+  const bodyHtml = paragraphs || `<p style="margin:0 0 12px;">${escapeHtml(body || '')}</p>`;
+  return `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${safeHeading}</h2>
+    <p style="margin:0 0 12px;">Subject: <strong>${safeSubject}</strong></p>
+    <p style="margin:0 0 12px;">Request ID: <strong>${escapeHtml(String(requestId || ''))}</strong></p>
+    <p style="margin:12px 0 12px;">${safeActor} wrote:</p>
+    <div style="background:#f8fafc;border:1px solid #cbd5f5;border-radius:8px;padding:16px;">${bodyHtml}</div>
+    <p style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
+  </div>
+  `;
+}
+
+function formatSupportEmailText({ heading, subject, requestId, actorName, body }) {
+  const lines = [];
+  lines.push(heading || 'Support request update');
+  lines.push('');
+  if (subject) {
+    lines.push(`Subject: ${subject}`);
+  }
+  if (requestId) {
+    lines.push(`Request ID: ${requestId}`);
+  }
+  if (actorName) {
+    lines.push('');
+    lines.push(`${actorName} wrote:`);
+  }
+  lines.push('');
+  lines.push(body || '');
+  lines.push('');
+  lines.push('— Plex Donate');
+  return lines.join('\n');
+}
+
+async function sendSupportRequestNotification(
+  { request, message, donor, adminEmail, type },
+  overrideSettings
+) {
+  if (!request || !message) {
+    throw new Error('request and message are required to send support notification');
+  }
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const recipient = adminEmail || smtp.supportNotificationEmail || smtp.from;
+  if (!recipient) {
+    throw new Error('Admin recipient email is required to send support notification');
+  }
+  const donorName =
+    (request && request.donorDisplayName) ||
+    (donor && (donor.name || donor.email)) ||
+    (request && (request.donorName || request.donorEmail)) ||
+    'Supporter';
+  const normalizedType = typeof type === 'string' ? type.trim().toLowerCase() : '';
+  const heading = normalizedType === 'new'
+    ? `New support request from ${donorName}`
+    : `New message from ${donorName}`;
+  const subject = `[Support] ${request.subject || 'Request'} (#${request.id})`;
+  const html = formatSupportEmailHtml({
+    heading,
+    subject: request.subject,
+    requestId: request.id,
+    actorName: donorName,
+    body: message.body,
+  });
+  const text = formatSupportEmailText({
+    heading,
+    subject: request.subject,
+    requestId: request.id,
+    actorName: donorName,
+    body: message.body,
+  });
+  await mailer.sendMail({
+    from: smtp.from,
+    to: recipient,
+    subject,
+    text,
+    html,
+  });
+}
+
+async function sendSupportResponseNotification(
+  { request, message, donor },
+  overrideSettings
+) {
+  if (!request || !message || !donor || !donor.email) {
+    throw new Error('request, message, and donor email are required to notify donor');
+  }
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const heading = 'Support reply from the Plex Donate team';
+  const subject = `We replied: ${request.subject || 'Support request'} (#${request.id})`;
+  const actorName = 'Plex Donate';
+  const html = formatSupportEmailHtml({
+    heading,
+    subject: request.subject,
+    requestId: request.id,
+    actorName,
+    body: message.body,
+  });
+  const text = formatSupportEmailText({
+    heading,
+    subject: request.subject,
+    requestId: request.id,
+    actorName,
+    body: message.body,
+  });
+  await mailer.sendMail({
+    from: smtp.from,
+    to: donor.email,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function verifyConnection(overrideSettings) {
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
@@ -331,4 +456,6 @@ module.exports = {
   sendAnnouncementEmail,
   getSmtpConfig,
   verifyConnection,
+  sendSupportRequestNotification,
+  sendSupportResponseNotification,
 };

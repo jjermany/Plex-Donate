@@ -19,6 +19,7 @@ const express = require('express');
 const session = require('express-session');
 const fetch = require('node-fetch');
 const { test } = require('node:test');
+const nodemailer = require('nodemailer');
 
 const config = require('../config');
 const customerRouter = require('./customer');
@@ -33,6 +34,7 @@ const {
 const { hashPasswordSync } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
 const { ensureSessionToken } = require('../utils/session-tokens');
+const settingsStore = require('../state/settings');
 
 const testDataDir = fs.mkdtempSync(
   path.join(os.tmpdir(), 'plex-donate-customer-router-')
@@ -49,6 +51,8 @@ function resetDatabase() {
     DELETE FROM payments;
     DELETE FROM sessions;
     DELETE FROM settings;
+    DELETE FROM support_messages;
+    DELETE FROM support_requests;
   `);
 }
 
@@ -378,3 +382,79 @@ test(
   }
 );
 
+
+test('customer support workflow creates thread and notifies admin', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.test',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const donor = createDonor({
+    email: 'supporter@example.com',
+    name: 'Supportive Donor',
+    status: 'active',
+  });
+
+  await withTestServer(async (client) => {
+    const setupResponse = await client.post('/test/setup-session', {
+      body: { customerId: donor.id },
+    });
+    assert.equal(setupResponse.status, 200);
+    await setupResponse.json();
+
+    const createResponse = await client.post('/customer/support', {
+      body: {
+        subject: 'Library access issue',
+        message: 'I cannot see the new movies library.',
+        displayName: 'Supportive Donor',
+      },
+    });
+    assert.equal(createResponse.status, 201);
+    const createdPayload = await createResponse.json();
+    assert.ok(createdPayload.thread);
+    assert.equal(createdPayload.thread.request.donorId, donor.id);
+    assert.equal(createdPayload.thread.messages.length, 1);
+    const threadId = createdPayload.thread.request.id;
+
+    const listResponse = await client.get('/customer/support');
+    assert.equal(listResponse.status, 200);
+    const listPayload = await listResponse.json();
+    assert.ok(Array.isArray(listPayload.threads));
+    assert.equal(listPayload.threads.length, 1);
+
+    const replyResponse = await client.post(
+      `/customer/support/${threadId}/replies`,
+      {
+        body: {
+          message: 'Thanks for checking into this!',
+          displayName: 'Supportive Donor',
+        },
+      }
+    );
+    assert.equal(replyResponse.status, 201);
+    const replyPayload = await replyResponse.json();
+    assert.equal(replyPayload.thread.messages.length, 2);
+  });
+
+  assert.equal(sentMessages.length, 2);
+  const recipientAddresses = sentMessages.map((mail) => mail.to);
+  assert.ok(
+    recipientAddresses.every((address) => address === 'Plex Donate <notify@example.com>')
+  );
+});
