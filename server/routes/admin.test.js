@@ -367,6 +367,44 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
   assert.equal(body.plex.error, null);
 });
 
+test('GET /api/admin/subscribers keeps Plex invite disabled for pending donors', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const pendingDonor = createDonor({
+    email: 'pending-status@example.com',
+    name: 'Pending Status',
+    status: 'pending',
+  });
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-xyz',
+    serverIdentifier: 'server-456',
+    librarySectionIds: '5,6',
+  });
+
+  const originalListUsers = plexService.listUsers;
+  plexService.listUsers = async () => [];
+  t.after(() => {
+    plexService.listUsers = originalListUsers;
+  });
+
+  const response = await agent.get('/api/admin/subscribers');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(Array.isArray(body.donors));
+
+  const donor = body.donors.find((item) => item.id === pendingDonor.id);
+  assert.ok(donor);
+  assert.equal(donor.status, 'pending');
+  assert.equal(donor.plexShared, false);
+  assert.equal(donor.plexPending, false);
+  assert.equal(donor.needsPlexInvite, false);
+});
+
 test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) => {
   resetDatabase();
   const agent = await startServer(t);
