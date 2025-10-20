@@ -2370,7 +2370,13 @@
       const DASHBOARD_VIEW_STORAGE_KEY = 'plexDonateDashboardView';
       const DASHBOARD_VIEW_HASH_PREFIX = 'view-';
       const DASHBOARD_VIEW_DEFAULT = 'account';
-      const DASHBOARD_VIEW_ORDER = ['account', 'donors', 'integration', 'logs'];
+      const DASHBOARD_VIEW_ORDER = [
+        'account',
+        'donors',
+        'support',
+        'integration',
+        'logs',
+      ];
       const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
 
       if (prospectShareCopy) {
