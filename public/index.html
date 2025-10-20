@@ -2553,7 +2553,36 @@
         if (!value) {
           return '—';
         }
-        const date = new Date(value);
+
+        let date;
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (!trimmed) {
+            return '—';
+          }
+
+          const sqliteMatch = trimmed.match(
+            /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/
+          );
+          if (sqliteMatch) {
+            const [, year, month, day, hour, minute, second] = sqliteMatch;
+            date = new Date(
+              Date.UTC(
+                Number(year),
+                Number(month) - 1,
+                Number(day),
+                Number(hour),
+                Number(minute),
+                Number(second)
+              )
+            );
+          } else {
+            date = new Date(trimmed);
+          }
+        } else {
+          date = new Date(value);
+        }
+
         if (Number.isNaN(date.getTime())) {
           return String(value);
         }
