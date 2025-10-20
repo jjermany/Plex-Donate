@@ -1612,7 +1612,7 @@
               <section class="panel">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
                   <div>
-                    <h2 style="margin:0 0 4px;">Active subscribers</h2>
+                    <h2 style="margin:0 0 4px;">Active users</h2>
                     <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
                   </div>
                   <button id="refresh-button" type="button" class="secondary">Refresh</button>
@@ -1622,7 +1622,7 @@
                   <table id="subscribers-table">
                     <thead>
                       <tr>
-                        <th>Subscriber</th>
+                        <th>User</th>
                         <th>Status</th>
                         <th>Last payment</th>
                         <th>Invite</th>
@@ -1963,7 +1963,7 @@
                 data-action="remove"
                 role="menuitem"
               >
-                Remove subscriber
+                Remove user
               </button>
             </div>
           </div>
@@ -3826,7 +3826,7 @@
           const row = document.createElement('tr');
           const cell = document.createElement('td');
           cell.colSpan = 5;
-          cell.textContent = 'No subscribers yet.';
+          cell.textContent = 'No users yet.';
           cell.style.color = 'var(--text-muted-soft)';
           row.appendChild(cell);
           subscribersTable.appendChild(row);
@@ -3902,7 +3902,7 @@
           const inviteParts = [];
           if (donor.plexShareState === 'shared') {
             inviteParts.push(
-              '<span class="badge badge-visited" title="This subscriber already has Plex access.">Plex shared</span>'
+              '<span class="badge badge-visited" title="This user already has Plex access.">Plex shared</span>'
             );
           } else if (donor.plexShareState === 'pending') {
             inviteParts.push(
@@ -3969,13 +3969,13 @@
             } else if (!donor.email) {
               inviteTitle = 'Add an email address to send a Plex invite.';
             } else if (donor.plexShared) {
-              inviteTitle = 'Subscriber already has Plex access.';
+              inviteTitle = 'User already has Plex access.';
             } else if (donor.plexPending) {
               inviteTitle = 'A Plex invite has already been sent and is pending acceptance.';
             } else if (canInvite) {
-              inviteTitle = 'Send a Plex invite to this subscriber.';
+              inviteTitle = 'Send a Plex invite to this user.';
             } else {
-              inviteTitle = 'Plex invite is not available for this subscriber right now.';
+              inviteTitle = 'Plex invite is not available for this user right now.';
             }
             inviteButton.title = inviteTitle;
           }
@@ -4008,7 +4008,7 @@
           }
 
           if (removeButton) {
-            removeButton.title = 'Remove this subscriber and all related records';
+            removeButton.title = 'Remove this user and all related records';
           }
 
           if (inviteParts.length > 0) {
@@ -4284,7 +4284,7 @@
 
           const ownerName = (() => {
             if (link.donor) {
-              return link.donor.name || link.donor.email || 'Subscriber';
+              return link.donor.name || link.donor.email || 'User';
             }
             if (link.prospect) {
               return link.prospect.name || link.prospect.email || 'Prospect';
@@ -4294,7 +4294,7 @@
 
           const ownerMeta = [];
           const typeLabel = link.donor
-            ? 'Subscriber'
+            ? 'User'
             : link.prospect
             ? 'Prospect'
             : 'Unassigned';
@@ -4824,8 +4824,8 @@
             } else {
               const promptMessage =
                 action === 'share-generate'
-                  ? 'New invite page link generated. Share this link with the subscriber:'
-                  : 'Share this invite page link with the subscriber:';
+                  ? 'New invite page link generated. Share this link with the user:'
+                  : 'Share this invite page link with the user:';
               window.prompt(promptMessage, shareUrl);
             }
           } else if (action === 'refresh') {
@@ -4851,13 +4851,13 @@
           } else if (action === 'resend') {
             await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
           } else if (action === 'revoke') {
-            if (!confirm('Revoke the latest invite for this subscriber?')) {
+            if (!confirm('Revoke the latest invite for this user?')) {
               return;
             }
             await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
           } else if (action === 'remove') {
             const confirmation = confirm(
-              'Remove this subscriber and delete all related invites, payments, and share links?'
+              'Remove this user and delete all related invites, payments, and share links?'
             );
             if (!confirmation) {
               return;
