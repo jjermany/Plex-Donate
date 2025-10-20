@@ -3972,6 +3972,9 @@
               inviteTitle = 'User already has Plex access.';
             } else if (donor.plexPending) {
               inviteTitle = 'A Plex invite has already been sent and is pending acceptance.';
+            } else if (status === 'pending') {
+              inviteTitle =
+                'Pending subscribers must activate their subscription before a Plex invite can be sent.';
             } else if (canInvite) {
               inviteTitle = 'Send a Plex invite to this user.';
             } else {
