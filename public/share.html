@@ -897,8 +897,24 @@
         ).toLowerCase();
         const isActive = normalizedStatus === 'active';
         const accountReady = Boolean(donor && donor.hasPassword);
+        const shareState = data.shareState || {};
         const plexLinked = Boolean(donor && donor.plexLinked);
+        const plexShared = Boolean(
+          shareState.plexShared === true ||
+            (donor && donor.plexShared === true)
+        );
+        const plexPending = Boolean(
+          shareState.plexPending === true ||
+            (donor && donor.plexPending === true)
+        );
+        const needsPlexInvite = Boolean(
+          shareState.needsPlexInvite === true ||
+            (donor && donor.needsPlexInvite === true)
+        );
         state.isProspect = isProspect;
+        state.plexShared = plexShared;
+        state.plexPending = plexPending;
+        state.needsPlexInvite = needsPlexInvite;
         const limitReached = Boolean(data.inviteLimitReached);
         state.inviteLimitReached = limitReached;
         const nextInviteAvailableAt = data.nextInviteAvailableAt || null;
@@ -959,9 +975,15 @@
               'Create your dashboard password above to unlock referral invites.';
             actionStatus.className = 'status-text info';
           } else if (!plexLinked) {
-            actionStatus.textContent =
-              'Authenticate with Plex to continue—watch for the sign-in prompt above so referral invites go to the right account.';
-            actionStatus.className = 'status-text info';
+            if (plexShared) {
+              actionStatus.textContent =
+                'Plex access is already active—no new invite is needed.';
+              actionStatus.className = 'status-text success';
+            } else {
+              actionStatus.textContent =
+                'Authenticate with Plex to continue—watch for the sign-in prompt above so referral invites go to the right account.';
+              actionStatus.className = 'status-text info';
+            }
           } else if (hasSevereIssue) {
             actionStatus.textContent =
               'This subscription needs attention before another referral invite can be generated. Contact the server admin if you need help.';
@@ -1054,7 +1076,10 @@
           nextInviteAvailableAt
         );
 
-        if (!plexLinked && !limitReached) {
+        if (plexShared && !limitReached) {
+          inviteDescription.textContent =
+            'Plex access is already active. Follow the link below if you ever need to restore it.';
+        } else if (!plexLinked && !limitReached) {
           inviteDescription.textContent =
             'Link your Plex account to unlock checkout and referral invites.';
         } else if (!isActive && !limitReached) {

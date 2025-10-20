@@ -47,6 +47,7 @@ const {
 } = require('../utils/paypal');
 
 const router = express.Router();
+const { annotateDonorWithPlex, loadPlexContext } = require('../utils/plex');
 
 function asyncHandler(handler) {
   return (req, res, next) => {
@@ -213,6 +214,38 @@ function needsSubscriptionRefresh(donor, subscriptionLinked) {
   return ['pending', 'approval_pending', 'approved'].includes(status);
 }
 
+function buildPlexShareState(donor) {
+  if (!donor) {
+    return null;
+  }
+
+  const shareState = {
+    plexShared:
+      typeof donor.plexShared === 'boolean' ? donor.plexShared : null,
+    plexPending:
+      typeof donor.plexPending === 'boolean' ? donor.plexPending : null,
+    needsPlexInvite:
+      typeof donor.needsPlexInvite === 'boolean'
+        ? donor.needsPlexInvite
+        : null,
+    plexShareState:
+      typeof donor.plexShareState === 'string'
+        ? donor.plexShareState
+        : null,
+  };
+
+  if (
+    shareState.plexShared === null &&
+    shareState.plexPending === null &&
+    shareState.needsPlexInvite === null &&
+    shareState.plexShareState === null
+  ) {
+    return null;
+  }
+
+  return shareState;
+}
+
 function buildShareResponse({
   shareLink,
   donor,
@@ -221,6 +254,7 @@ function buildShareResponse({
   inviteLimitReached = Boolean(invite),
   nextInviteAvailableAt = null,
   shareInvite = null,
+  plexContext = null,
 }) {
   const paypal = settingsStore.getPaypalSettings();
   const paypalEnvironment = getPaypalEnvironment(paypal.apiBase);
@@ -231,6 +265,14 @@ function buildShareResponse({
         apiBase: paypal.apiBase,
       })
     : '';
+  const shareState = buildPlexShareState(donor);
+  const plex = plexContext
+    ? {
+        configured: Boolean(plexContext.configured),
+        error: plexContext.error || null,
+      }
+    : null;
+
   return {
     donor: donor
       ? {
@@ -244,6 +286,10 @@ function buildShareResponse({
           plexLinked: hasPlexLink(donor),
           plexAccountId: donor.plexAccountId || null,
           plexEmail: donor.plexEmail || '',
+          plexShared: shareState ? shareState.plexShared : null,
+          plexPending: shareState ? shareState.plexPending : null,
+          needsPlexInvite: shareState ? shareState.needsPlexInvite : null,
+          plexShareState: shareState ? shareState.plexShareState : null,
         }
       : null,
     prospect: prospect
@@ -278,7 +324,32 @@ function buildShareResponse({
         ? nextInviteAvailableAt
         : null,
     shareInvite: shareInvite ? { ...shareInvite } : null,
+    shareState,
+    plex,
   };
+}
+
+async function createShareResponse(
+  payload,
+  { logContext = 'share dashboard', plexContext: providedContext = null } = {}
+) {
+  let plexContext = providedContext || null;
+  let donor = payload.donor || null;
+
+  if (donor) {
+    if (!plexContext) {
+      plexContext = await loadPlexContext({ logContext });
+    }
+    donor = annotateDonorWithPlex(donor, plexContext);
+  }
+
+  const response = buildShareResponse({
+    ...payload,
+    donor,
+    plexContext,
+  });
+
+  return { response, plexContext };
 }
 
 function hasActiveSubscription(donor) {
@@ -407,8 +478,8 @@ router.get(
         invitePayload.shareLink = shareInviteDetails;
       }
 
-      return res.json(
-        buildShareResponse({
+      const { response } = await createShareResponse(
+        {
           shareLink,
           donor,
           invite: invitePayload,
@@ -416,13 +487,17 @@ router.get(
           inviteLimitReached,
           nextInviteAvailableAt,
           shareInvite: shareInviteDetails,
-        })
+        },
+        { logContext: 'share dashboard' }
       );
+      return res.json(response);
     }
 
-    return res.json(
-      buildShareResponse({ shareLink, donor: null, invite: null, prospect })
+    const { response } = await createShareResponse(
+      { shareLink, donor: null, invite: null, prospect },
+      { logContext: 'share dashboard' }
     );
+    return res.json(response);
   })
 );
 
@@ -578,14 +653,17 @@ router.post(
       if (invitePayload && currentShareInviteDetails) {
         invitePayload.shareLink = currentShareInviteDetails;
       }
-      const response = buildShareResponse({
-        shareLink,
-        donor: activeDonor,
-        invite: invitePayload,
-        inviteLimitReached: true,
-        nextInviteAvailableAt,
-        shareInvite: currentShareInviteDetails,
-      });
+      const { response } = await createShareResponse(
+        {
+          shareLink,
+          donor: activeDonor,
+          invite: invitePayload,
+          inviteLimitReached: true,
+          nextInviteAvailableAt,
+          shareInvite: currentShareInviteDetails,
+        },
+        { logContext: 'share dashboard' }
+      );
       if (warnings.length > 0) {
         response.warnings = warnings;
       }
@@ -603,15 +681,18 @@ router.post(
       if (invitePayload && currentShareInviteDetails) {
         invitePayload.shareLink = currentShareInviteDetails;
       }
-      const payload = buildShareResponse({
-        shareLink,
-        donor: activeDonor,
-        invite: invitePayload,
-        prospect: null,
-        inviteLimitReached: true,
-        nextInviteAvailableAt,
-        shareInvite: currentShareInviteDetails,
-      });
+      const { response: payload } = await createShareResponse(
+        {
+          shareLink,
+          donor: activeDonor,
+          invite: invitePayload,
+          prospect: null,
+          inviteLimitReached: true,
+          nextInviteAvailableAt,
+          shareInvite: currentShareInviteDetails,
+        },
+        { logContext: 'share dashboard' }
+      );
       if (warnings.length > 0) {
         payload.warnings = warnings;
       }
@@ -660,15 +741,18 @@ router.post(
     if (shareInviteDetails) {
       invitePayload.shareLink = shareInviteDetails;
     }
-    const response = buildShareResponse({
-      shareLink,
-      donor: activeDonor,
-      invite: invitePayload,
-      prospect: null,
-      inviteLimitReached: true,
-      nextInviteAvailableAt: updatedNextInviteAvailableAt,
-      shareInvite: shareInviteDetails,
-    });
+    const { response } = await createShareResponse(
+      {
+        shareLink,
+        donor: activeDonor,
+        invite: invitePayload,
+        prospect: null,
+        inviteLimitReached: true,
+        nextInviteAvailableAt: updatedNextInviteAvailableAt,
+        shareInvite: shareInviteDetails,
+      },
+      { logContext: 'share dashboard' }
+    );
     if (warnings.length > 0) {
       response.warnings = warnings;
     }
@@ -974,8 +1058,8 @@ router.post(
         shareLinkId: updatedLink.id,
       });
 
-      return res.json(
-        buildShareResponse({
+      const { response } = await createShareResponse(
+        {
           shareLink: updatedLink,
           donor: activeDonor,
           invite: invitePayload,
@@ -983,8 +1067,10 @@ router.post(
           inviteLimitReached,
           nextInviteAvailableAt,
           shareInvite: shareInviteDetails,
-        })
+        },
+        { logContext: 'share dashboard' }
       );
+      return res.json(response);
     }
 
     // Prospect promotion flow
@@ -1128,8 +1214,8 @@ router.post(
       prospectId: prospect ? prospect.id : null,
     });
 
-    return res.json(
-      buildShareResponse({
+    const { response } = await createShareResponse(
+      {
         shareLink: updatedLink,
         donor: activeDonor,
         invite: invitePayload,
@@ -1137,8 +1223,10 @@ router.post(
         inviteLimitReached,
         nextInviteAvailableAt,
         shareInvite: shareInviteDetails,
-      })
+      },
+      { logContext: 'share dashboard' }
     );
+    return res.json(response);
   })
 );
 
