@@ -2011,6 +2011,21 @@
       const settingsForms = Array.from(
         document.querySelectorAll('.settings-form[data-group]')
       );
+
+      function markSettingsFormDirty(form) {
+        if (!form || !form.dataset) {
+          return;
+        }
+        form.dataset.dirty = 'true';
+      }
+
+      function clearSettingsFormDirtyFlags() {
+        settingsForms.forEach((form) => {
+          if (form && form.dataset) {
+            delete form.dataset.dirty;
+          }
+        });
+      }
       const plexLibraryPicker = settingsPanel
         ? settingsPanel.querySelector('[data-library-picker]')
         : null;
@@ -2785,6 +2800,7 @@
         if (response.status === 401) {
           state.authenticated = false;
           state.settings = null;
+          clearSettingsFormDirtyFlags();
           stopDashboardAutoRefresh();
           setSessionToken(null);
           render();
@@ -3430,6 +3446,9 @@
         }
         if (state.settings) {
           settingsForms.forEach((form) => {
+            if (form.dataset && form.dataset.dirty === 'true') {
+              return;
+            }
             const group = form.dataset.group;
             const values = group && state.settings ? state.settings[group] : null;
             form.querySelectorAll('[name]').forEach((input) => {
@@ -3714,12 +3733,16 @@
           return;
         }
         try {
+          const previousSettings = state.settings;
           const previousSignature = getPlexCredentialSignature(state.settings);
           const response = await api('/api/admin/settings');
           const nextSettings = response.settings || {};
           const nextSignature = getPlexCredentialSignature(nextSettings);
           const credentialsChanged = previousSignature !== nextSignature;
           state.settings = nextSettings;
+          if (!previousSettings) {
+            clearSettingsFormDirtyFlags();
+          }
           if (credentialsChanged) {
             state.plexLibraries = null;
             hasCachedPlexLibraries = false;
@@ -4184,6 +4207,7 @@
           } else {
             stopDashboardAutoRefresh();
             state.settings = null;
+            clearSettingsFormDirtyFlags();
             state.paypalPlan = null;
             state.paypalProduct = null;
             state.paypalPlanError = '';
@@ -4365,6 +4389,7 @@
           state.shareLinks = [];
           state.events = [];
           state.settings = null;
+          clearSettingsFormDirtyFlags();
           state.paypalPlan = null;
           state.paypalProduct = null;
           state.paypalPlanError = '';
@@ -4539,6 +4564,9 @@
       }
 
       settingsForms.forEach((form) => {
+        const handleDirty = () => markSettingsFormDirty(form);
+        form.addEventListener('input', handleDirty);
+        form.addEventListener('change', handleDirty);
         form.addEventListener('submit', async (event) => {
           event.preventDefault();
           const group = form.dataset.group;
@@ -4560,6 +4588,7 @@
               state.settings = {};
             }
             state.settings[group] = response.settings || {};
+            delete form.dataset.dirty;
             if (group === 'paypal') {
               await loadPaypalPlan();
             }
