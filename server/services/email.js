@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { getSmtpSettings } = require('../state/settings');
+const { getSmtpSettings, getAppSettings } = require('../state/settings');
 
 function formatAccessEndDate(value) {
   if (!value) {
@@ -254,7 +254,45 @@ async function sendAccountWelcomeEmail(
   const recipientName = name || 'there';
   const subject = 'Verify your Plex dashboard email';
   const dashboardUrl = loginUrl || verificationUrl;
-  const text = `Hi ${recipientName},\n\nThanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:\n\n${verificationUrl}\n\nOnce verified you can manage your dashboard at ${dashboardUrl}. If you did not request this email or need help, reply to this message.\n\n— Plex Donate`;
+  let supportUrl = '';
+
+  try {
+    const appSettings = getAppSettings();
+    const configuredBase =
+      appSettings && appSettings.publicBaseUrl
+        ? String(appSettings.publicBaseUrl).trim()
+        : '';
+    if (configuredBase) {
+      try {
+        const parsed = new URL(configuredBase);
+        supportUrl = `${parsed.origin}/support`;
+      } catch (err) {
+        supportUrl = `${configuredBase.replace(/\/+$/, '')}/support`;
+      }
+    }
+  } catch (err) {
+    supportUrl = '';
+  }
+
+  if (!supportUrl) {
+    const fallbackBase = loginUrl || verificationUrl || '';
+    if (fallbackBase && /^https?:\/\//i.test(fallbackBase)) {
+      try {
+        const parsed = new URL(fallbackBase);
+        supportUrl = `${parsed.origin}/support`;
+      } catch (err) {
+        supportUrl = `${fallbackBase.replace(/\/+$/, '')}/support`;
+      }
+    }
+  }
+
+  const supportInstruction = supportUrl
+    ? `If you did not request this email or need help, visit ${supportUrl} to contact support instead of replying.`
+    : 'If you did not request this email or need help, visit your dashboard support center to contact us instead of replying.';
+
+  const safeSupportUrl = supportUrl ? escapeHtml(supportUrl) : '';
+
+  const text = `Hi ${recipientName},\n\nThanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:\n\n${verificationUrl}\n\nOnce verified you can manage your dashboard at ${dashboardUrl}. ${supportInstruction}\n\n— Plex Donate`;
 
   const html = `
   <p>Hi ${recipientName},</p>
@@ -263,7 +301,11 @@ async function sendAccountWelcomeEmail(
     <a href="${verificationUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
   </p>
   <p>Once verified you can manage your dashboard anytime at <a href="${dashboardUrl}">${dashboardUrl}</a>.</p>
-  <p>If you need help or did not request this email, just reply to this message.</p>
+  <p>${
+    supportUrl
+      ? `If you did not request this email or need help, visit <a href="${safeSupportUrl}">${safeSupportUrl}</a> to contact support instead of replying.`
+      : 'If you did not request this email or need help, visit your dashboard support center to contact us instead of replying.'
+  }</p>
   <p style="margin-top:24px;">— Plex Donate</p>
   `;
 
