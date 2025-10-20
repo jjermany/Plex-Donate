@@ -2026,6 +2026,12 @@
           }
         });
       }
+
+      function anySettingsFormDirty() {
+        return settingsForms.some(
+          (form) => form && form.dataset && form.dataset.dirty === 'true'
+        );
+      }
       const plexLibraryPicker = settingsPanel
         ? settingsPanel.querySelector('[data-library-picker]')
         : null;
@@ -3740,7 +3746,7 @@
           const nextSignature = getPlexCredentialSignature(nextSettings);
           const credentialsChanged = previousSignature !== nextSignature;
           state.settings = nextSettings;
-          if (!previousSettings) {
+          if (!previousSettings && !anySettingsFormDirty()) {
             clearSettingsFormDirtyFlags();
           }
           if (credentialsChanged) {
