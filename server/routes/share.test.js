@@ -5,6 +5,7 @@ process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'share-test-session';
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const vm = require('node:vm');
 
 if (!process.env.DATABASE_FILE || process.env.DATABASE_FILE === ':memory:') {
   const testDbDir = fs.mkdtempSync(
@@ -39,6 +40,7 @@ const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const SqliteSessionStore = require('../session-store');
 const emailService = require('../services/email');
+const plexService = require('../services/plex');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
 const { ensureSessionToken } = require('../utils/session-tokens');
 
@@ -175,6 +177,197 @@ async function requestJson(server, method, path, { headers = {}, body } = {}) {
     }
   }
   return { status: response.status, body: payload };
+}
+
+let cachedShareDashboardScript = null;
+
+function getShareDashboardScript() {
+  if (!cachedShareDashboardScript) {
+    const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
+    const html = fs.readFileSync(shareHtmlPath, 'utf8');
+    const match = html.match(/<script>([\s\S]*)<\/script>/i);
+    if (!match) {
+      throw new Error('Unable to locate share dashboard script for tests');
+    }
+    cachedShareDashboardScript = match[1];
+  }
+  return cachedShareDashboardScript;
+}
+
+function createDomElementStub(id) {
+  const element = {
+    id,
+    dataset: {},
+    disabled: false,
+    value: '',
+    href: '',
+    style: {},
+    addEventListener() {},
+    removeEventListener() {},
+    removeAttribute(attr) {
+      if (attr === 'href') {
+        this.href = '';
+      }
+    },
+    setAttribute(attr, value) {
+      if (attr === 'href') {
+        this.href = value;
+      }
+    },
+    focus() {},
+  };
+  let classTokens = new Set();
+  const syncClassName = () => {
+    element._className = Array.from(classTokens).join(' ');
+  };
+  Object.defineProperty(element, 'className', {
+    get() {
+      return element._className || '';
+    },
+    set(value) {
+      const stringValue = String(value || '');
+      element._className = stringValue;
+      classTokens = new Set(stringValue.split(/\s+/).filter(Boolean));
+    },
+  });
+  element.classList = {
+    add(...classes) {
+      classes.flat().forEach((cls) => {
+        if (cls) {
+          classTokens.add(cls);
+        }
+      });
+      syncClassName();
+    },
+    remove(...classes) {
+      classes.flat().forEach((cls) => {
+        classTokens.delete(cls);
+      });
+      syncClassName();
+    },
+    toggle(cls, force) {
+      if (!cls) {
+        return false;
+      }
+      if (force === undefined) {
+        if (classTokens.has(cls)) {
+          classTokens.delete(cls);
+        } else {
+          classTokens.add(cls);
+        }
+      } else if (force) {
+        classTokens.add(cls);
+      } else {
+        classTokens.delete(cls);
+      }
+      syncClassName();
+      return classTokens.has(cls);
+    },
+    contains(cls) {
+      return classTokens.has(cls);
+    },
+  };
+  Object.defineProperty(element, 'textContent', {
+    get() {
+      return element._textContent || '';
+    },
+    set(value) {
+      element._textContent = value;
+    },
+  });
+  return element;
+}
+
+function createShareUiHarness() {
+  const elementIds = [
+    'loading',
+    'error-panel',
+    'content',
+    'account-description',
+    'account-form',
+    'account-email',
+    'account-name',
+    'account-password',
+    'account-confirm',
+    'account-subscription-row',
+    'account-subscription',
+    'account-submit',
+    'account-status',
+    'invite-description',
+    'invite-form',
+    'recipient-email',
+    'display-name',
+    'generate-button',
+    'action-status',
+    'invite-ready',
+    'invite-link',
+    'invite-created',
+    'invite-email',
+  ];
+  const elements = new Map();
+  elementIds.forEach((id) => {
+    elements.set(id, createDomElementStub(id));
+  });
+  const documentStub = {
+    getElementById(id) {
+      if (!elements.has(id)) {
+        elements.set(id, createDomElementStub(id));
+      }
+      return elements.get(id);
+    },
+    activeElement: null,
+    title: '',
+  };
+  const windowStub = {
+    location: { pathname: '/' },
+    addEventListener() {},
+    setInterval() {
+      return 0;
+    },
+    clearInterval() {},
+    setTimeout() {
+      return 0;
+    },
+    clearTimeout() {},
+  };
+  const navigatorStub = {
+    serviceWorker: {
+      register: async () => {},
+    },
+  };
+  documentStub.defaultView = windowStub;
+  windowStub.document = documentStub;
+  windowStub.console = console;
+  const context = {
+    window: windowStub,
+    document: documentStub,
+    navigator: navigatorStub,
+    console,
+    fetch: async () => {
+      throw new Error('fetch not implemented in test harness');
+    },
+  };
+  return { context, elements };
+}
+
+function loadShareRendererForTest() {
+  const script = getShareDashboardScript();
+  const { context, elements } = createShareUiHarness();
+  const vmContext = vm.createContext(context);
+  vm.runInContext(script, vmContext, { filename: 'share.html' });
+  const renderFn = vmContext.window.render || vmContext.render;
+  if (typeof renderFn !== 'function') {
+    throw new Error('Share renderer is not available');
+  }
+  return {
+    render(data) {
+      renderFn.call(vmContext.window, data);
+    },
+    elements: {
+      actionStatus: elements.get('action-status'),
+      inviteDescription: elements.get('invite-description'),
+    },
+  };
 }
 
 function resetDatabase() {
@@ -399,6 +592,60 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(tokenRow.used_at, null);
     } finally {
       welcomeMock.mock.restore();
+      await server.close();
+    }
+  });
+
+  await t.test('share response marks donors already shared on Plex', async (t) => {
+    resetDatabase();
+    const plexConfiguredMock = t.mock.method(plexService, 'isConfigured', () => true);
+    const plexListMock = t.mock.method(plexService, 'listUsers', async () => [
+      { email: 'shared@example.com', id: 'plex-123', pending: false },
+    ]);
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'shared@example.com',
+        name: 'Shared Donor',
+        subscriptionId: 'I-SHARED',
+        status: 'active',
+        passwordHash: await hashPassword('SharedAccess123!'),
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'shared-token',
+        sessionToken: 'shared-session',
+      });
+
+      const viewResponse = await requestJson(server, 'GET', `/share/${shareLink.token}`);
+      assert.equal(viewResponse.status, 200);
+      assert.ok(viewResponse.body.donor);
+      assert.equal(viewResponse.body.donor.plexShared, true);
+      assert.equal(viewResponse.body.donor.needsPlexInvite, false);
+      assert.ok(viewResponse.body.shareState);
+      assert.equal(viewResponse.body.shareState.plexShared, true);
+      assert.equal(viewResponse.body.shareState.needsPlexInvite, false);
+      assert.equal(viewResponse.body.shareState.plexShareState, 'shared');
+      assert.ok(viewResponse.body.plex);
+      assert.equal(viewResponse.body.plex.configured, true);
+      assert.equal(viewResponse.body.plex.error, null);
+
+      const renderer = loadShareRendererForTest();
+      renderer.render(viewResponse.body);
+      assert.equal(
+        renderer.elements.actionStatus.textContent,
+        'Plex access is already active—no new invite is needed.'
+      );
+      assert.equal(renderer.elements.actionStatus.className, 'status-text success');
+      assert.equal(
+        renderer.elements.inviteDescription.textContent,
+        'Plex access is already active. Follow the link below if you ever need to restore it.'
+      );
+    } finally {
+      plexConfiguredMock.mock.restore();
+      plexListMock.mock.restore();
       await server.close();
     }
   });

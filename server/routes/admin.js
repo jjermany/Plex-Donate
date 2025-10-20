@@ -39,6 +39,11 @@ const {
   updateAdminCredentials,
 } = require('../state/admin-credentials');
 const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
+const {
+  normalizeValue,
+  annotateDonorWithPlex,
+  loadPlexContext,
+} = require('../utils/plex');
 
 function notifyDonorOfSupportReply(thread) {
   if (!thread || !thread.request || !Array.isArray(thread.messages)) {
@@ -102,200 +107,9 @@ function resolvePublicBaseUrl(req) {
   return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
 }
 
-function normalizeValue(value) {
-  if (value === undefined || value === null) {
-    return '';
-  }
-  return String(value).trim().toLowerCase();
-}
-
-function gatherStrings(candidate) {
-  if (!candidate) {
-    return [];
-  }
-  if (Array.isArray(candidate)) {
-    return candidate.flatMap(gatherStrings);
-  }
-  if (typeof candidate === 'object') {
-    return [];
-  }
-  const value = String(candidate).trim();
-  return value ? [value] : [];
-}
-
-function extractUserEmailCandidates(user) {
-  if (!user) {
-    return [];
-  }
-  const account = user.account || {};
-  const values = [
-    user.email,
-    user.username,
-    user.title,
-    user.name,
-    user.friendlyName,
-    user.displayName,
-    user.invitedEmail,
-    account.email,
-    account.username,
-    account.title,
-  ];
-  if (Array.isArray(user.emails)) {
-    values.push(...user.emails);
-  }
-  if (Array.isArray(user.invitations)) {
-    values.push(
-      ...user.invitations.flatMap((invitation) =>
-        gatherStrings(invitation && (invitation.email || invitation.username))
-      )
-    );
-  }
-  return values
-    .flatMap(gatherStrings)
-    .map(normalizeValue)
-    .filter((value) => value);
-}
-
-function extractUserIdCandidates(user) {
-  if (!user) {
-    return [];
-  }
-  const account = user.account || {};
-  const values = [
-    user.id,
-    user.uuid,
-    user.userID,
-    user.machineIdentifier,
-    user.accountID,
-    account.id,
-    account.uuid,
-    account.machineIdentifier,
-  ];
-  return values
-    .flatMap(gatherStrings)
-    .map(normalizeValue)
-    .filter((value) => value);
-}
-
-function isPlexUserPending(user) {
-  if (!user) {
-    return false;
-  }
-  if (user.pending === true) {
-    return true;
-  }
-  const states = [user.status, user.state, user.friendStatus, user.requestStatus];
-  return states
-    .flatMap(gatherStrings)
-    .map((value) => value.toLowerCase())
-    .some((value) => value.includes('pending') || value.includes('invited'));
-}
-
-function preparePlexUserIndex(users) {
-  return (Array.isArray(users) ? users : []).map((user) => ({
-    user,
-    emails: new Set(extractUserEmailCandidates(user)),
-    ids: new Set(extractUserIdCandidates(user)),
-    pending: isPlexUserPending(user),
-  }));
-}
-
-function collectDonorEmailCandidates(donor) {
-  const invites = Array.isArray(donor && donor.invites) ? donor.invites : [];
-  const values = [donor && donor.email];
-  invites.forEach((invite) => {
-    values.push(invite && invite.recipientEmail);
-    values.push(invite && invite.plexEmail);
-  });
-  return values
-    .flatMap(gatherStrings)
-    .map(normalizeValue)
-    .filter((value) => value);
-}
-
-function collectDonorIdCandidates(donor) {
-  const invites = Array.isArray(donor && donor.invites) ? donor.invites : [];
-  const values = [donor && donor.plexAccountId];
-  invites.forEach((invite) => {
-    values.push(invite && invite.plexAccountId);
-    values.push(invite && invite.plexInviteId);
-  });
-  return values
-    .flatMap(gatherStrings)
-    .map(normalizeValue)
-    .filter((value) => value);
-}
-
-function annotateDonorWithPlex(donor, context) {
-  const invites = Array.isArray(donor.invites) ? donor.invites : [];
-  const emailCandidates = collectDonorEmailCandidates(donor);
-  const idCandidates = collectDonorIdCandidates(donor);
-  const emailSet = new Set(emailCandidates);
-  const idSet = new Set(idCandidates);
-  const index = context && Array.isArray(context.index) ? context.index : [];
-  const matchedEntry = index.find((entry) => {
-    if (!entry) {
-      return false;
-    }
-    const hasEmailMatch = emailCandidates.some((value) => entry.emails.has(value));
-    const hasIdMatch = !hasEmailMatch && idCandidates.some((value) => entry.ids.has(value));
-    return hasEmailMatch || hasIdMatch;
-  });
-
-  const plexShared = Boolean(matchedEntry && !matchedEntry.pending);
-  const plexPendingFromUser = Boolean(matchedEntry && matchedEntry.pending);
-  const hasActiveInvite = invites.some(
-    (invite) => invite && !invite.revokedAt && (invite.plexInviteId || invite.inviteUrl)
-  );
-  const plexPending = plexPendingFromUser || (!plexShared && hasActiveInvite);
-  const normalizedStatus = normalizeValue(donor.status || '');
-  const statusIsRevoked = ['cancelled', 'canceled', 'expired', 'suspended'].includes(
-    normalizedStatus
-  );
-  const statusIsActive = normalizedStatus === 'active';
-  const hasEmail = emailSet.size > 0 && normalizeValue(donor.email || '') !== '';
-  const canInvite = Boolean(
-    context && context.configured && hasEmail && !statusIsRevoked && statusIsActive
-  );
-  const needsPlexInvite =
-    canInvite && !plexShared && !plexPending && !hasActiveInvite;
-  const plexShareState = plexShared
-    ? 'shared'
-    : plexPending
-    ? 'pending'
-    : 'not_shared';
-
-  return {
-    ...donor,
-    plexShared,
-    plexPending,
-    needsPlexInvite,
-    plexShareState,
-  };
-}
-
-async function getPlexContext() {
-  if (!plexService.isConfigured()) {
-    return { configured: false, users: [], index: [], error: null };
-  }
-  try {
-    const users = await plexService.listUsers();
-    const index = preparePlexUserIndex(users);
-    return { configured: true, users, index, error: null };
-  } catch (err) {
-    logger.warn('Failed to load Plex users for admin dashboard', err.message);
-    return {
-      configured: true,
-      users: [],
-      index: [],
-      error: err && err.message ? String(err.message) : 'Failed to load Plex users',
-    };
-  }
-}
-
 async function buildDonorListWithPlex() {
   const donors = listDonorsWithDetails();
-  const plexContext = await getPlexContext();
+  const plexContext = await loadPlexContext({ logContext: 'admin dashboard' });
   const annotatedDonors = donors.map((donor) => annotateDonorWithPlex(donor, plexContext));
   return { donors: annotatedDonors, plexContext };
 }
