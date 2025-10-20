@@ -392,6 +392,7 @@ test('customer support workflow creates thread and notifies admin', async (t) =>
     port: 2525,
     secure: false,
     from: 'Plex Donate <notify@example.com>',
+    supportNotificationEmail: 'Support Team <support@example.com>',
   });
 
   const sentMessages = [];
@@ -455,6 +456,8 @@ test('customer support workflow creates thread and notifies admin', async (t) =>
   assert.equal(sentMessages.length, 2);
   const recipientAddresses = sentMessages.map((mail) => mail.to);
   assert.ok(
-    recipientAddresses.every((address) => address === 'Plex Donate <notify@example.com>')
+    recipientAddresses.every(
+      (address) => address === 'Support Team <support@example.com>'
+    )
   );
 });

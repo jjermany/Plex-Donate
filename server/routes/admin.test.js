@@ -494,6 +494,7 @@ test('announcements settings round-trip through admin API', async (t) => {
   assert.ok(body.csrfToken);
   assert.ok(body.settings);
   assert.ok(body.settings.announcements);
+  assert.ok(body.settings.smtp);
   assert.deepEqual(body.settings.announcements, {
     bannerEnabled: false,
     bannerTitle: '',
@@ -505,6 +506,7 @@ test('announcements settings round-trip through admin API', async (t) => {
     bannerCtaUrl: '',
     bannerCtaOpenInNewTab: true,
   });
+  assert.equal(body.settings.smtp.supportNotificationEmail, '');
 
   const updatePayload = {
     bannerEnabled: true,
