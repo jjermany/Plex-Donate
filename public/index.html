@@ -648,6 +648,164 @@
         gap: 24px;
       }
 
+      #support-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .support-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .support-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .support-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+      }
+
+      .support-layout {
+        display: grid;
+        gap: 24px;
+        grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+      }
+
+      .support-request-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .support-request-card {
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.65);
+        color: inherit;
+        display: grid;
+        gap: 6px;
+        cursor: pointer;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      :root[data-theme='dark'] .support-request-card {
+        background: rgba(15, 23, 42, 0.75);
+      }
+
+      .support-request-card:hover,
+      .support-request-card[aria-current='true'] {
+        border-color: rgba(99, 102, 241, 0.6);
+        box-shadow: 0 12px 24px -16px rgba(79, 70, 229, 0.5);
+      }
+
+      .support-request-card h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .support-request-meta {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+      }
+
+      .support-conversation {
+        border: 1px solid var(--table-border);
+        border-radius: 16px;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.7);
+        display: grid;
+        gap: 20px;
+      }
+
+      :root[data-theme='dark'] .support-conversation {
+        background: rgba(15, 23, 42, 0.85);
+      }
+
+      .support-conversation-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .support-message-thread {
+        display: grid;
+        gap: 12px;
+        max-height: 420px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
+      .support-message-card {
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        padding: 12px 14px;
+        display: grid;
+        gap: 6px;
+        background: rgba(241, 245, 249, 0.9);
+      }
+
+      .support-message-card[data-author='admin'] {
+        background: rgba(129, 140, 248, 0.18);
+        border-color: rgba(99, 102, 241, 0.45);
+      }
+
+      :root[data-theme='dark'] .support-message-card {
+        background: rgba(30, 41, 59, 0.8);
+      }
+
+      .support-message-author {
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+
+      .support-message-meta {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .support-reply-form {
+        display: grid;
+        gap: 12px;
+      }
+
+      .support-reply-form textarea {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--input-border);
+        padding: 10px 12px;
+        font-family: inherit;
+        font-size: 1rem;
+      }
+
+      .support-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .support-empty-state {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        padding: 18px;
+        border: 1px dashed var(--table-border);
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.12);
+      }
+
       .grid {
         display: grid;
         gap: 24px;
@@ -669,6 +827,12 @@
         .dashboard-legend button {
           width: 100%;
           text-align: left;
+        }
+      }
+
+      @media (max-width: 960px) {
+        .support-layout {
+          grid-template-columns: 1fr;
         }
       }
 
@@ -1371,6 +1535,18 @@
             type="button"
             class="dashboard-legend-button"
             role="tab"
+            id="dashboard-tab-support"
+            data-dashboard-target="support"
+            aria-controls="dashboard-view-support"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Support requests
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
             id="dashboard-tab-integration"
             data-dashboard-target="integration"
             aria-controls="dashboard-view-integration"
@@ -1659,6 +1835,61 @@
                 </div>
               </section>
             </div>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-support"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-support"
+            data-dashboard-view="support"
+            hidden
+          >
+            <section class="panel" id="support-panel">
+              <div class="support-panel-header">
+                <div>
+                  <h2 style="margin:0 0 4px;">Support requests</h2>
+                  <p class="muted-text" style="margin:0;">
+                    Follow up with donors, reply to new questions, and mark tickets resolved when everything looks good.
+                  </p>
+                </div>
+                <div class="support-controls">
+                  <label class="support-filter">
+                    <input type="checkbox" id="support-include-resolved" />
+                    <span>Show resolved</span>
+                  </label>
+                  <button type="button" class="secondary" id="support-refresh">Refresh</button>
+                </div>
+              </div>
+              <p id="support-error" class="form-status" hidden></p>
+              <div class="support-layout">
+                <div class="support-request-list" id="support-request-list"></div>
+                <div class="support-conversation" id="support-conversation" hidden>
+                  <div class="support-conversation-header">
+                    <h3 id="support-request-subject"></h3>
+                    <span id="support-request-status" class="support-status-pill support-status-open">Open</span>
+                  </div>
+                  <p id="support-request-meta" class="muted-text"></p>
+                  <div id="support-message-thread" class="support-message-thread"></div>
+                  <form id="support-reply-admin-form" class="support-reply-form">
+                    <label for="support-reply-admin">Reply to donor</label>
+                    <textarea id="support-reply-admin" rows="4" required></textarea>
+                    <div class="support-actions-row">
+                      <button type="submit">Send reply</button>
+                      <button type="button" class="secondary" id="support-mark-resolved">
+                        Mark resolved
+                      </button>
+                      <button type="button" class="secondary" id="support-reopen" hidden>
+                        Reopen
+                      </button>
+                      <button type="button" class="danger secondary" id="support-delete-thread">
+                        Delete thread
+                      </button>
+                    </div>
+                    <p id="support-reply-admin-status" class="form-status"></p>
+                  </form>
+                </div>
+              </div>
+            </section>
           </div>
           <div
             class="dashboard-view"
@@ -2117,6 +2348,22 @@
       const dashboardLegendButtons = dashboardLegend
         ? Array.from(dashboardLegend.querySelectorAll('[data-dashboard-target]'))
         : [];
+      const supportPanel = document.getElementById('support-panel');
+      const supportRequestList = document.getElementById('support-request-list');
+      const supportConversation = document.getElementById('support-conversation');
+      const supportRequestSubject = document.getElementById('support-request-subject');
+      const supportRequestStatus = document.getElementById('support-request-status');
+      const supportRequestMeta = document.getElementById('support-request-meta');
+      const supportMessageThread = document.getElementById('support-message-thread');
+      const supportIncludeResolved = document.getElementById('support-include-resolved');
+      const supportRefreshButton = document.getElementById('support-refresh');
+      const supportReplyForm = document.getElementById('support-reply-admin-form');
+      const supportReplyTextarea = document.getElementById('support-reply-admin');
+      const supportReplyStatus = document.getElementById('support-reply-admin-status');
+      const supportMarkResolvedButton = document.getElementById('support-mark-resolved');
+      const supportReopenButton = document.getElementById('support-reopen');
+      const supportDeleteButton = document.getElementById('support-delete-thread');
+      const supportError = document.getElementById('support-error');
       const dashboardViewContainers = Array.from(
         document.querySelectorAll('[data-dashboard-view]')
       );
@@ -2240,6 +2487,10 @@
 
         activeDashboardView = normalized;
         applyActiveDashboardView();
+
+        if (activeDashboardView === 'support' && state.authenticated) {
+          loadSupportRequests({ silent: true });
+        }
 
         if (persist) {
           storeDashboardView(normalized);
@@ -2468,6 +2719,13 @@
         adminUsername: 'admin',
         plex: null,
         plexLibraries: null,
+        support: {
+          threads: [],
+          activeThreadId: null,
+          includeResolved: false,
+          error: '',
+          loaded: false,
+        },
       };
 
       function setLoginStatus(message = '', stateAttr = '') {
@@ -2851,6 +3109,300 @@
         }
       }
 
+      function getSupportThreads() {
+        return Array.isArray(state.support && state.support.threads)
+          ? state.support.threads
+          : [];
+      }
+
+      function findSupportThread(threadId) {
+        const threads = getSupportThreads();
+        return threads.find(
+          (thread) => thread && thread.request && thread.request.id === threadId
+        );
+      }
+
+      function updateSupportThreadInState(updatedThread) {
+        if (!updatedThread || !updatedThread.request) {
+          return;
+        }
+        const threads = getSupportThreads();
+        const filtered = threads.filter(
+          (thread) =>
+            !thread ||
+            !thread.request ||
+            thread.request.id !== updatedThread.request.id
+        );
+        filtered.push(updatedThread);
+        filtered.sort((a, b) => {
+          const aTime = a && a.request && a.request.updatedAt
+            ? new Date(a.request.updatedAt).getTime()
+            : 0;
+          const bTime = b && b.request && b.request.updatedAt
+            ? new Date(b.request.updatedAt).getTime()
+            : 0;
+          return bTime - aTime;
+        });
+        state.support.threads = filtered;
+      }
+
+      function removeSupportThreadFromState(threadId) {
+        if (!threadId) {
+          return;
+        }
+        const threads = getSupportThreads();
+        const filtered = threads.filter(
+          (thread) => !(thread && thread.request && thread.request.id === threadId)
+        );
+        state.support.threads = filtered;
+        if (
+          state.support.activeThreadId &&
+          state.support.activeThreadId === threadId
+        ) {
+          state.support.activeThreadId = filtered.length
+            ? filtered[0].request.id
+            : null;
+        }
+      }
+
+      function setSupportError(message = '', stateAttr = 'error') {
+        if (!supportError) {
+          return;
+        }
+        if (!message) {
+          supportError.textContent = '';
+          supportError.hidden = true;
+          delete supportError.dataset.state;
+          state.support.error = '';
+          return;
+        }
+        supportError.textContent = message;
+        supportError.hidden = false;
+        if (stateAttr) {
+          supportError.dataset.state = stateAttr;
+        } else {
+          delete supportError.dataset.state;
+        }
+        state.support.error = message;
+      }
+
+      function setSupportReplyStatusMessage(message = '', stateAttr = '') {
+        if (!supportReplyStatus) {
+          return;
+        }
+        supportReplyStatus.textContent = message;
+        if (stateAttr) {
+          supportReplyStatus.dataset.state = stateAttr;
+        } else {
+          delete supportReplyStatus.dataset.state;
+        }
+      }
+
+      function renderSupportConversation() {
+        if (!supportConversation) {
+          return;
+        }
+        const thread = findSupportThread(state.support.activeThreadId);
+        if (!thread) {
+          supportConversation.hidden = true;
+          setSupportReplyStatusMessage('');
+          return;
+        }
+
+        supportConversation.hidden = false;
+        const donorName =
+          thread.request.donorDisplayName ||
+          thread.request.donorName ||
+          thread.request.donorEmail ||
+          'Donor';
+        if (supportRequestSubject) {
+          supportRequestSubject.textContent =
+            thread.request.subject || `Request #${thread.request.id}`;
+        }
+        const isResolved = Boolean(thread.request.resolved);
+        if (supportRequestStatus) {
+          supportRequestStatus.textContent = isResolved ? 'Resolved' : 'Open';
+          supportRequestStatus.classList.toggle('support-status-open', !isResolved);
+          supportRequestStatus.classList.toggle('support-status-resolved', isResolved);
+        }
+        if (supportRequestMeta) {
+          const openedAt = formatDateTime(thread.request.createdAt);
+          const updatedAt = formatDateTime(thread.request.updatedAt);
+          supportRequestMeta.textContent = `${donorName} • Updated ${updatedAt} • Created ${openedAt}`;
+        }
+        if (supportMessageThread) {
+          supportMessageThread.innerHTML = '';
+          const messages = Array.isArray(thread.messages) ? thread.messages : [];
+          if (messages.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'support-empty-state';
+            empty.textContent = 'No messages yet.';
+            supportMessageThread.appendChild(empty);
+          } else {
+            messages.forEach((message) => {
+              const card = document.createElement('div');
+              card.className = 'support-message-card';
+              card.dataset.author = message.authorRole || 'donor';
+              const authorEl = document.createElement('div');
+              authorEl.className = 'support-message-author';
+              authorEl.textContent =
+                message.authorName ||
+                (message.authorRole === 'admin' ? 'Admin' : donorName);
+              const metaEl = document.createElement('div');
+              metaEl.className = 'support-message-meta';
+              metaEl.textContent = formatDateTime(message.createdAt);
+              const bodyEl = document.createElement('div');
+              bodyEl.textContent = message.body || '';
+              card.append(authorEl, metaEl, bodyEl);
+              supportMessageThread.appendChild(card);
+            });
+            supportMessageThread.scrollTop = supportMessageThread.scrollHeight;
+          }
+        }
+
+        if (supportReplyTextarea) {
+          supportReplyTextarea.value = '';
+        }
+        if (supportReplyStatus) {
+          setSupportReplyStatusMessage('');
+        }
+        if (supportMarkResolvedButton) {
+          supportMarkResolvedButton.hidden = isResolved;
+        }
+        if (supportReopenButton) {
+          supportReopenButton.hidden = !isResolved;
+        }
+      }
+
+      function renderSupportPanel() {
+        if (!supportPanel || !supportRequestList) {
+          return;
+        }
+
+        if (supportIncludeResolved) {
+          supportIncludeResolved.checked = Boolean(state.support.includeResolved);
+        }
+
+        const threads = getSupportThreads();
+        supportRequestList.innerHTML = '';
+
+        if (!state.support.loaded) {
+          const loading = document.createElement('div');
+          loading.className = 'support-empty-state';
+          loading.textContent = 'Loading support requests…';
+          supportRequestList.appendChild(loading);
+        } else if (threads.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'support-empty-state';
+          empty.textContent = state.support.includeResolved
+            ? 'No support requests to show.'
+            : 'All caught up! No open support requests.';
+          supportRequestList.appendChild(empty);
+        } else {
+          if (
+            !threads.some((thread) => thread.request.id === state.support.activeThreadId)
+          ) {
+            state.support.activeThreadId = threads[0].request.id;
+          }
+
+          threads.forEach((thread) => {
+            if (!thread || !thread.request) {
+              return;
+            }
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'support-request-card';
+            card.setAttribute(
+              'aria-current',
+              thread.request.id === state.support.activeThreadId ? 'true' : 'false'
+            );
+
+            const subjectEl = document.createElement('h3');
+            subjectEl.textContent =
+              thread.request.subject || `Request #${thread.request.id}`;
+            const statusEl = document.createElement('span');
+            const resolved = Boolean(thread.request.resolved);
+            statusEl.className = `support-status-pill ${resolved ? 'support-status-resolved' : 'support-status-open'}`;
+            statusEl.textContent = resolved ? 'Resolved' : 'Open';
+            const metaEl = document.createElement('div');
+            metaEl.className = 'support-request-meta';
+            const donorName =
+              thread.request.donorDisplayName ||
+              thread.request.donorName ||
+              thread.request.donorEmail ||
+              'Donor';
+            metaEl.textContent = `${donorName} • Updated ${formatDateTime(
+              thread.request.updatedAt
+            )}`;
+
+            card.append(subjectEl, statusEl, metaEl);
+            card.addEventListener('click', () => {
+              state.support.activeThreadId = thread.request.id;
+              renderSupportPanel();
+            });
+
+            supportRequestList.appendChild(card);
+          });
+        }
+
+        if (state.support.error) {
+          setSupportError(state.support.error);
+        } else {
+          setSupportError('');
+        }
+
+        renderSupportConversation();
+      }
+
+      async function loadSupportRequests(options = {}) {
+        if (!state.authenticated) {
+          return false;
+        }
+        const { silent = false } = options;
+        const query = state.support.includeResolved ? '?includeResolved=1' : '';
+        state.support.loaded = false;
+        if (!silent) {
+          renderSupportPanel();
+        }
+        try {
+          const response = await api(`/api/admin/support${query}`);
+          const threads = Array.isArray(response.threads) ? response.threads : [];
+          state.support.threads = threads;
+          if (
+            !threads.some((thread) => thread.request && thread.request.id === state.support.activeThreadId)
+          ) {
+            state.support.activeThreadId = threads.length > 0 ? threads[0].request.id : null;
+          }
+          state.support.error = '';
+          state.support.loaded = true;
+          renderSupportPanel();
+          return true;
+        } catch (err) {
+          console.error('Failed to load support requests', err);
+          state.support.threads = [];
+          state.support.loaded = true;
+          if (!silent) {
+            setSupportError(
+              err && err.message
+                ? err.message
+                : 'Failed to load support requests.'
+            );
+          } else {
+            state.support.error = '';
+            setSupportError('');
+          }
+          renderSupportPanel();
+          return false;
+        }
+      }
+
+      function formatSupportPayload({ subject, message }) {
+        return {
+          subject: subject ? subject.trim() : '',
+          message: message ? message.trim() : '',
+        };
+      }
+
       function render() {
         renderAdminAccountPanel();
         renderProspectSharePanel();
@@ -2863,6 +3415,7 @@
           renderSubscribers();
           renderEvents();
           renderSettings();
+          renderSupportPanel();
         } else {
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
@@ -4173,6 +4726,7 @@
           await loadSettings();
           await loadPaypalPlan();
           await refreshShareLinks();
+          await loadSupportRequests({ silent: true });
         } finally {
           try {
             render();
@@ -4223,6 +4777,20 @@
             state.paypalPlanManageUrl = '';
             state.paypalPlanLoading = false;
             state.prospectShare = null;
+            state.support = {
+              threads: [],
+              activeThreadId: null,
+              includeResolved: false,
+              error: '',
+              loaded: false,
+            };
+            if (supportError) {
+              supportError.textContent = '';
+              supportError.hidden = true;
+              delete supportError.dataset.state;
+            }
+            setSupportReplyStatusMessage('');
+            renderSupportPanel();
             render();
           }
         } catch (err) {
@@ -4387,6 +4955,200 @@
         });
       }
 
+      if (supportIncludeResolved) {
+        supportIncludeResolved.addEventListener('change', async () => {
+          state.support.includeResolved = Boolean(supportIncludeResolved.checked);
+          const success = await loadSupportRequests({ silent: true });
+          if (success) {
+            setSupportError('');
+          } else {
+            setSupportError('Failed to load support requests.', 'error');
+          }
+        });
+      }
+
+      if (supportRefreshButton) {
+        supportRefreshButton.addEventListener('click', async () => {
+          if (supportRefreshButton.disabled) {
+            return;
+          }
+          supportRefreshButton.disabled = true;
+          try {
+            const success = await loadSupportRequests();
+            if (success) {
+              showDashboardToast('Support requests refreshed.', 'success');
+            }
+          } finally {
+            supportRefreshButton.disabled = false;
+          }
+        });
+      }
+
+      if (supportReplyForm) {
+        supportReplyForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const threadId = state.support.activeThreadId;
+          if (!threadId) {
+            setSupportReplyStatusMessage('Select a support request first.', 'error');
+            return;
+          }
+          const messageValue = supportReplyTextarea
+            ? supportReplyTextarea.value.trim()
+            : '';
+          if (!messageValue) {
+            setSupportReplyStatusMessage('Enter a reply before sending.', 'error');
+            return;
+          }
+          setSupportReplyStatusMessage('Sending reply…', 'info');
+          const previousDisabled = supportReplySubmit
+            ? supportReplySubmit.disabled
+            : false;
+          if (supportReplySubmit) {
+            supportReplySubmit.disabled = true;
+          }
+          try {
+            const payload = await api(`/api/admin/support/${threadId}/replies`, {
+              method: 'POST',
+              body: {
+                message: messageValue,
+                authorName: state.adminUsername || 'Admin',
+              },
+            });
+            if (payload && payload.thread && payload.thread.request) {
+              updateSupportThreadInState(payload.thread);
+              state.support.loaded = true;
+              state.support.activeThreadId = payload.thread.request.id;
+              renderSupportPanel();
+              setSupportReplyStatusMessage('Reply sent!', 'success');
+              scheduleStatusClear(supportReplyForm, 4000);
+              showDashboardToast('Reply sent to supporter.', 'success');
+            } else {
+              throw new Error('Unexpected response from server.');
+            }
+          } catch (err) {
+            const message =
+              err && err.message ? err.message : 'Failed to send reply.';
+            setSupportReplyStatusMessage(message, 'error');
+          } finally {
+            if (supportReplySubmit) {
+              supportReplySubmit.disabled = previousDisabled;
+            }
+          }
+        });
+      }
+
+      async function updateSupportResolution(resolved) {
+        const threadId = state.support.activeThreadId;
+        if (!threadId) {
+          setSupportError('Select a support request first.', 'error');
+          return false;
+        }
+        try {
+          const payload = await api(`/api/admin/support/${threadId}/resolve`, {
+            method: 'POST',
+            body: { resolved },
+          });
+          if (payload && payload.thread && payload.thread.request) {
+            updateSupportThreadInState(payload.thread);
+            state.support.loaded = true;
+            state.support.activeThreadId = payload.thread.request.id;
+            renderSupportPanel();
+            setSupportError('');
+            showDashboardToast(
+              resolved
+                ? 'Support request marked resolved.'
+                : 'Support request reopened.',
+              'success'
+            );
+            return true;
+          }
+          throw new Error('Unexpected response from server.');
+        } catch (err) {
+          const message =
+            err && err.message
+              ? err.message
+              : 'Failed to update support request.';
+          setSupportError(message, 'error');
+          return false;
+        }
+      }
+
+      if (supportMarkResolvedButton) {
+        supportMarkResolvedButton.addEventListener('click', async () => {
+          if (supportMarkResolvedButton.disabled) {
+            return;
+          }
+          supportMarkResolvedButton.disabled = true;
+          if (supportReopenButton) {
+            supportReopenButton.disabled = true;
+          }
+          try {
+            await updateSupportResolution(true);
+          } finally {
+            supportMarkResolvedButton.disabled = false;
+            if (supportReopenButton) {
+              supportReopenButton.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (supportReopenButton) {
+        supportReopenButton.addEventListener('click', async () => {
+          if (supportReopenButton.disabled) {
+            return;
+          }
+          supportReopenButton.disabled = true;
+          if (supportMarkResolvedButton) {
+            supportMarkResolvedButton.disabled = true;
+          }
+          try {
+            await updateSupportResolution(false);
+          } finally {
+            supportReopenButton.disabled = false;
+            if (supportMarkResolvedButton) {
+              supportMarkResolvedButton.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (supportDeleteButton) {
+        supportDeleteButton.addEventListener('click', async () => {
+          if (supportDeleteButton.disabled) {
+            return;
+          }
+          const threadId = state.support.activeThreadId;
+          if (!threadId) {
+            setSupportError('Select a support request first.', 'error');
+            return;
+          }
+          const confirmed = window.confirm(
+            'Delete this support request and all messages? This cannot be undone.'
+          );
+          if (!confirmed) {
+            return;
+          }
+          supportDeleteButton.disabled = true;
+          try {
+            await api(`/api/admin/support/${threadId}`, { method: 'DELETE' });
+            removeSupportThreadFromState(threadId);
+            state.support.loaded = true;
+            renderSupportPanel();
+            setSupportError('');
+            showDashboardToast('Support request deleted.', 'success');
+          } catch (err) {
+            const message =
+              err && err.message
+                ? err.message
+                : 'Failed to delete support request.';
+            setSupportError(message, 'error');
+          } finally {
+            supportDeleteButton.disabled = false;
+          }
+        });
+      }
+
       logoutButton.addEventListener('click', async () => {
         try {
           await api('/api/admin/logout', { method: 'POST' });
@@ -4406,6 +5168,15 @@
           state.paypalPlanLoading = false;
           state.prospectShare = null;
           state.adminUsername = 'admin';
+          state.support = {
+            threads: [],
+            activeThreadId: null,
+            includeResolved: false,
+            error: '',
+            loaded: false,
+          };
+          setSupportReplyStatusMessage('');
+          setSupportError('');
           render();
         }
       });

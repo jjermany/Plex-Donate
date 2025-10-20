@@ -21,6 +21,11 @@ const {
   logEvent,
   getRecentEvents,
   createInvite: createInviteRecord,
+  listSupportRequests,
+  getSupportThreadById,
+  markSupportRequestResolved,
+  deleteSupportRequestById,
+  addSupportMessageToRequest,
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
@@ -34,6 +39,37 @@ const {
   updateAdminCredentials,
 } = require('../state/admin-credentials');
 const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
+
+function notifyDonorOfSupportReply(thread) {
+  if (!thread || !thread.request || !Array.isArray(thread.messages)) {
+    return;
+  }
+  const latestMessage = thread.messages[thread.messages.length - 1];
+  if (!latestMessage) {
+    return;
+  }
+  const donorId = thread.request.donorId;
+  if (!donorId) {
+    return;
+  }
+  const donor = getDonorById(donorId);
+  if (!donor || !donor.email) {
+    return;
+  }
+  emailService
+    .sendSupportResponseNotification({
+      request: thread.request,
+      message: latestMessage,
+      donor,
+    })
+    .catch((err) => {
+      logger.warn('Failed to send donor support notification email', {
+        donorId,
+        requestId: thread.request && thread.request.id,
+        error: err && err.message,
+      });
+    });
+}
 
 const router = express.Router();
 const csrfProtection = csurf();
@@ -1040,6 +1076,117 @@ router.post(
       shareLink: { ...shareLink, url },
       csrfToken: res.locals.csrfToken,
     });
+  })
+);
+
+router.get(
+  '/support',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const includeResolvedParam = String(req.query.includeResolved || '').trim();
+    const includeResolved = includeResolvedParam
+      ? !['0', 'false', 'no'].includes(includeResolvedParam.toLowerCase())
+      : true;
+    const requests = listSupportRequests({ includeResolved });
+    const threads = requests
+      .map((request) => getSupportThreadById(request.id))
+      .filter(Boolean);
+    res.json({ threads });
+  })
+);
+
+router.get(
+  '/support/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const thread = getSupportThreadById(requestId);
+    if (!thread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    res.json({ thread });
+  })
+);
+
+router.post(
+  '/support/:id/replies',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const existingThread = getSupportThreadById(requestId);
+    if (!existingThread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    const { message, authorName } = req.body || {};
+    const adminName = typeof authorName === 'string' && authorName.trim()
+      ? authorName.trim()
+      : 'Admin';
+    let thread;
+    try {
+      thread = addSupportMessageToRequest({
+        requestId,
+        donorId: existingThread.request.donorId,
+        authorRole: 'admin',
+        authorName: adminName,
+        message,
+      });
+    } catch (err) {
+      return res.status(400).json({
+        error: err && err.message ? String(err.message) : 'Failed to send reply',
+      });
+    }
+    if (!thread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    notifyDonorOfSupportReply(thread);
+    res.status(201).json({ thread });
+  })
+);
+
+router.post(
+  '/support/:id/resolve',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const { resolved = true } = req.body || {};
+    const normalized = typeof resolved === 'string'
+      ? !['0', 'false', 'no'].includes(resolved.trim().toLowerCase())
+      : Boolean(resolved);
+    const thread = markSupportRequestResolved(requestId, normalized);
+    if (!thread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    res.json({ thread });
+  })
+);
+
+router.delete(
+  '/support/:id',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const deleted = deleteSupportRequestById(requestId);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    res.status(204).end();
   })
 );
 

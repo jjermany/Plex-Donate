@@ -18,9 +18,14 @@ const {
   markDonorEmailVerified,
   markEmailVerificationTokenUsed,
   clearDonorEmailVerificationTokens,
+  createSupportRequest,
+  addSupportMessageToRequest,
+  listSupportRequests,
+  getSupportThreadForDonor,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
+const emailService = require('../services/email');
 const logger = require('../utils/logger');
 const { verifyPassword } = require('../utils/passwords');
 const {
@@ -55,6 +60,44 @@ const ANNOUNCEMENT_TONES = new Set([
   'danger',
   'neutral',
 ]);
+
+function resolveSupportDisplayName(donor, preferred) {
+  const trimmedPreferred = typeof preferred === 'string' ? preferred.trim() : '';
+  if (trimmedPreferred) {
+    return trimmedPreferred;
+  }
+  if (donor && donor.name) {
+    return donor.name;
+  }
+  if (donor && donor.email) {
+    return donor.email;
+  }
+  return 'Supporter';
+}
+
+function notifyAdminOfSupportUpdate({ thread, donor, type }) {
+  if (!thread || !thread.request || !Array.isArray(thread.messages)) {
+    return;
+  }
+  const latestMessage = thread.messages[thread.messages.length - 1];
+  if (!latestMessage) {
+    return;
+  }
+  emailService
+    .sendSupportRequestNotification({
+      request: thread.request,
+      message: latestMessage,
+      donor,
+      type,
+    })
+    .catch((err) => {
+      logger.warn('Failed to send support notification email', {
+        donorId: donor && donor.id,
+        requestId: thread.request && thread.request.id,
+        error: err && err.message,
+      });
+    });
+}
 
 function sanitizeAnnouncement(settings) {
   const announcementSettings = settings || {};
@@ -1432,6 +1475,112 @@ router.post(
       response.warnings = warnings;
     }
     return res.json(response);
+  })
+);
+
+router.get(
+  '/support',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    res.locals.sessionToken = ensureSessionToken(req);
+    const includeResolvedParam = String(req.query.includeResolved || '').trim();
+    const includeResolved = includeResolvedParam
+      ? !['0', 'false', 'no'].includes(includeResolvedParam.toLowerCase())
+      : true;
+    const requests = listSupportRequests({
+      includeResolved,
+      donorId: donor.id,
+    });
+    const threads = requests
+      .map((request) => getSupportThreadForDonor(request.id, donor.id))
+      .filter(Boolean);
+    res.json({
+      threads,
+    });
+  })
+);
+
+router.get(
+  '/support/:id',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const thread = getSupportThreadForDonor(requestId, donor.id);
+    if (!thread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    res.json({ thread });
+  })
+);
+
+router.post(
+  '/support',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    res.locals.sessionToken = ensureSessionToken(req);
+    const { subject, message, displayName } = req.body || {};
+    const donorDisplayName = resolveSupportDisplayName(donor, displayName);
+    let thread;
+    try {
+      thread = createSupportRequest({
+        donorId: donor.id,
+        subject,
+        message,
+        donorDisplayName,
+        authorName: donorDisplayName,
+      });
+    } catch (err) {
+      return res.status(400).json({
+        error: err && err.message ? String(err.message) : 'Failed to create support request',
+      });
+    }
+    notifyAdminOfSupportUpdate({ thread, donor, type: 'new' });
+    res.status(201).json({ thread });
+  })
+);
+
+router.post(
+  '/support/:id/replies',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    res.locals.sessionToken = ensureSessionToken(req);
+    const requestId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+      return res.status(400).json({ error: 'Invalid support request id' });
+    }
+    const existingThread = getSupportThreadForDonor(requestId, donor.id);
+    if (!existingThread) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    const { message, displayName } = req.body || {};
+    const donorDisplayName = resolveSupportDisplayName(donor, displayName);
+    let thread;
+    try {
+      thread = addSupportMessageToRequest({
+        requestId,
+        donorId: donor.id,
+        authorRole: 'donor',
+        authorName: donorDisplayName,
+        message,
+      });
+    } catch (err) {
+      return res.status(400).json({
+        error: err && err.message ? String(err.message) : 'Failed to send reply',
+      });
+    }
+    if (!thread || thread.request.donorId !== donor.id) {
+      return res.status(404).json({ error: 'Support request not found' });
+    }
+    notifyAdminOfSupportUpdate({ thread, donor, type: 'message' });
+    res.status(201).json({ thread });
   })
 );
 

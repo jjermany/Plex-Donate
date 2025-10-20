@@ -27,7 +27,7 @@ config.dataDir = testDataDir;
 
 const adminRouter = require('./admin');
 const customerRouter = require('./customer');
-const { createDonor } = require('../db');
+const { createDonor, markDonorEmailVerified } = require('../db');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
 
 const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
@@ -302,6 +302,7 @@ test('customer login regenerates the session and preserves Plex link data', asyn
     status: 'active',
     passwordHash,
   });
+  markDonorEmailVerified(donor.id);
 
   const setupResponse = await agent.post('/test/setup-session', {
     body: {
@@ -376,6 +377,7 @@ test('customer can link an existing subscription from the profile form', async (
     status: 'pending',
     passwordHash,
   });
+  markDonorEmailVerified(donor.id);
 
   const loginResponse = await agent.post('/api/customer/login', {
     body: { email: donor.email, password },

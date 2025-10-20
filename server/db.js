@@ -114,6 +114,34 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
   expires_at TEXT NOT NULL,
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS support_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  donor_id INTEGER NOT NULL,
+  donor_display_name TEXT,
+  subject TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open',
+  resolved INTEGER NOT NULL DEFAULT 0,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS support_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL,
+  donor_id INTEGER,
+  author_role TEXT NOT NULL,
+  author_name TEXT,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (request_id) REFERENCES support_requests(id) ON DELETE CASCADE,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS support_requests_donor_idx ON support_requests(donor_id);
+CREATE INDEX IF NOT EXISTS support_messages_request_idx ON support_messages(request_id);
 `);
 
 function generateShareSessionToken() {
@@ -327,6 +355,36 @@ function ensureInviteLinksSupportsProspects() {
   createInviteLinkIndexes();
 }
 
+function ensureSupportTables() {
+  const requestsColumns = db.prepare("PRAGMA table_info('support_requests')").all();
+  const hasRequestsTable = requestsColumns.length > 0;
+  if (hasRequestsTable) {
+    const hasDisplayName = requestsColumns.some(
+      (column) => column.name === 'donor_display_name'
+    );
+    if (!hasDisplayName) {
+      db.exec('ALTER TABLE support_requests ADD COLUMN donor_display_name TEXT');
+    }
+    const hasResolvedAt = requestsColumns.some(
+      (column) => column.name === 'resolved_at'
+    );
+    if (!hasResolvedAt) {
+      db.exec('ALTER TABLE support_requests ADD COLUMN resolved_at TEXT');
+    }
+  }
+
+  const messagesColumns = db.prepare("PRAGMA table_info('support_messages')").all();
+  const hasMessagesTable = messagesColumns.length > 0;
+  if (hasMessagesTable) {
+    const hasAuthorName = messagesColumns.some(
+      (column) => column.name === 'author_name'
+    );
+    if (!hasAuthorName) {
+      db.exec('ALTER TABLE support_messages ADD COLUMN author_name TEXT');
+    }
+  }
+}
+
 function ensureInviteLinkExpirationColumns() {
   const columns = db.prepare("PRAGMA table_info('invite_links')").all();
   if (columns.length === 0) {
@@ -385,12 +443,13 @@ function ensureDonorSubscriptionOptional() {
         password_hash TEXT,
         plex_account_id TEXT,
         plex_email TEXT,
+        email_verified_at TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
-      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, created_at, updated_at)
-        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, created_at, updated_at
+      INSERT INTO donors_new (id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at, created_at, updated_at)
+        SELECT id, email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at, created_at, updated_at
         FROM donors;
 
       DROP TABLE donors;
@@ -413,6 +472,7 @@ ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInviteLinkExpirationColumns();
 ensureInvitePlexColumns();
+ensureSupportTables();
 
 function normalizeEmail(email) {
   if (!email) {
@@ -775,6 +835,73 @@ const statements = {
   deleteVerificationTokenById: db.prepare(
     'DELETE FROM email_verification_tokens WHERE id = ?'
   ),
+  insertSupportRequest: db.prepare(
+    `INSERT INTO support_requests (donor_id, donor_display_name, subject)
+     VALUES (@donorId, @donorDisplayName, @subject)`
+  ),
+  insertSupportMessage: db.prepare(
+    `INSERT INTO support_messages (request_id, donor_id, author_role, author_name, body)
+     VALUES (@requestId, @donorId, @authorRole, @authorName, @body)`
+  ),
+  updateSupportRequestAfterMessage: db.prepare(
+    `UPDATE support_requests
+     SET updated_at = CURRENT_TIMESTAMP,
+         status = COALESCE(@status, status),
+         resolved = CASE WHEN @resolved IS NULL THEN resolved ELSE @resolved END,
+         resolved_at = CASE
+           WHEN @resolved IS NULL THEN resolved_at
+           WHEN @resolved = 1 THEN COALESCE(resolved_at, CURRENT_TIMESTAMP)
+           ELSE NULL
+         END
+     WHERE id = @id`
+  ),
+  listSupportRequests: db.prepare(`
+    SELECT sr.*, d.email AS donor_email, d.name AS donor_name
+      FROM support_requests sr
+      LEFT JOIN donors d ON d.id = sr.donor_id
+     ORDER BY sr.updated_at DESC, sr.created_at DESC
+  `),
+  listSupportRequestsForDonor: db.prepare(`
+    SELECT sr.*, d.email AS donor_email, d.name AS donor_name
+      FROM support_requests sr
+      LEFT JOIN donors d ON d.id = sr.donor_id
+     WHERE sr.donor_id = ?
+     ORDER BY sr.updated_at DESC, sr.created_at DESC
+  `),
+  listOpenSupportRequests: db.prepare(`
+    SELECT sr.*, d.email AS donor_email, d.name AS donor_name
+      FROM support_requests sr
+      LEFT JOIN donors d ON d.id = sr.donor_id
+     WHERE sr.resolved = 0
+     ORDER BY sr.updated_at DESC, sr.created_at DESC
+  `),
+  getSupportRequestById: db.prepare(`
+    SELECT sr.*, d.email AS donor_email, d.name AS donor_name
+      FROM support_requests sr
+      LEFT JOIN donors d ON d.id = sr.donor_id
+     WHERE sr.id = ?
+  `),
+  getSupportRequestForDonor: db.prepare(`
+    SELECT sr.*, d.email AS donor_email, d.name AS donor_name
+      FROM support_requests sr
+      LEFT JOIN donors d ON d.id = sr.donor_id
+     WHERE sr.id = @id
+       AND sr.donor_id = @donorId
+  `),
+  listSupportMessagesForRequest: db.prepare(
+    `SELECT * FROM support_messages WHERE request_id = ? ORDER BY created_at ASC, id ASC`
+  ),
+  updateSupportRequestResolution: db.prepare(
+    `UPDATE support_requests
+     SET status = @status,
+         resolved = @resolved,
+         resolved_at = CASE WHEN @resolved = 1 THEN CURRENT_TIMESTAMP ELSE NULL END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  deleteSupportRequestById: db.prepare(
+    'DELETE FROM support_requests WHERE id = ?'
+  ),
 };
 
 function mapDonor(row) {
@@ -844,6 +971,36 @@ function mapInviteLink(row) {
   };
 }
 
+function mapSupportRequest(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    donorDisplayName: row.donor_display_name || null,
+    subject: row.subject,
+    status: row.status,
+    resolved: Boolean(row.resolved),
+    resolvedAt: row.resolved_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    donorEmail: row.donor_email || null,
+    donorName: row.donor_name || null,
+  };
+}
+
+function mapSupportMessage(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    requestId: row.request_id,
+    donorId: row.donor_id,
+    authorRole: row.author_role,
+    authorName: row.author_name || null,
+    body: row.body,
+    createdAt: row.created_at,
+  };
+}
+
 function mapEmailVerificationToken(row) {
   if (!row) return null;
   return {
@@ -896,6 +1053,97 @@ function mapPayment(row) {
     paidAt: row.paid_at,
     createdAt: row.created_at,
   };
+}
+
+function mapSupportThread(requestRow, messageRows) {
+  const request = mapSupportRequest(requestRow);
+  const messages = Array.isArray(messageRows)
+    ? messageRows.map(mapSupportMessage).filter(Boolean)
+    : [];
+  return { request, messages };
+}
+
+function normalizeSupportSubject(subject) {
+  if (subject === undefined || subject === null) {
+    return '';
+  }
+  return String(subject).trim();
+}
+
+function normalizeSupportBody(body) {
+  if (body === undefined || body === null) {
+    return '';
+  }
+  return String(body).trim();
+}
+
+function normalizeSupportAuthorName(name) {
+  if (name === undefined || name === null) {
+    return '';
+  }
+  return String(name).trim();
+}
+
+const createSupportRequestTransaction = db.transaction(
+  ({ donorId, donorDisplayName, subject, body, authorName }) => {
+    const info = statements.insertSupportRequest.run({
+      donorId,
+      donorDisplayName: donorDisplayName || null,
+      subject,
+    });
+    const requestId = info.lastInsertRowid;
+    statements.insertSupportMessage.run({
+      requestId,
+      donorId,
+      authorRole: 'donor',
+      authorName: authorName || donorDisplayName || null,
+      body,
+    });
+    statements.updateSupportRequestAfterMessage.run({
+      id: requestId,
+      status: 'open',
+      resolved: 0,
+    });
+    return requestId;
+  }
+);
+
+const addSupportMessageTransaction = db.transaction(
+  ({ requestId, donorId, authorRole, authorName, body }) => {
+    statements.insertSupportMessage.run({
+      requestId,
+      donorId: donorId || null,
+      authorRole,
+      authorName: authorName || null,
+      body,
+    });
+    statements.updateSupportRequestAfterMessage.run({
+      id: requestId,
+      status: 'open',
+      resolved: 0,
+    });
+  }
+);
+
+function getSupportRequestRecord(requestId) {
+  if (!requestId) {
+    return null;
+  }
+  return statements.getSupportRequestById.get(requestId);
+}
+
+function getSupportRequestForDonorRecord(requestId, donorId) {
+  if (!requestId || !donorId) {
+    return null;
+  }
+  return statements.getSupportRequestForDonor.get({ id: requestId, donorId });
+}
+
+function listSupportMessagesRows(requestId) {
+  if (!requestId) {
+    return [];
+  }
+  return statements.listSupportMessagesForRequest.all(requestId);
 }
 
 function upsertDonor({
@@ -1583,6 +1831,144 @@ function getAllSettings() {
   }, {});
 }
 
+function listSupportRequests({ includeResolved = true, donorId = null } = {}) {
+  let rows;
+  if (donorId) {
+    rows = statements.listSupportRequestsForDonor.all(donorId);
+  } else if (includeResolved) {
+    rows = statements.listSupportRequests.all();
+  } else {
+    rows = statements.listOpenSupportRequests.all();
+  }
+  if (!includeResolved) {
+    rows = rows.filter((row) => !row.resolved);
+  }
+  return rows.map(mapSupportRequest);
+}
+
+function getSupportRequestById(requestId) {
+  const row = getSupportRequestRecord(requestId);
+  if (!row) {
+    return null;
+  }
+  return mapSupportRequest(row);
+}
+
+function getSupportThreadById(requestId) {
+  const row = getSupportRequestRecord(requestId);
+  if (!row) {
+    return null;
+  }
+  const messages = listSupportMessagesRows(requestId);
+  return mapSupportThread(row, messages);
+}
+
+function getSupportThreadForDonor(requestId, donorId) {
+  const row = getSupportRequestForDonorRecord(requestId, donorId);
+  if (!row) {
+    return null;
+  }
+  const messages = listSupportMessagesRows(requestId);
+  return mapSupportThread(row, messages);
+}
+
+function createSupportRequest({
+  donorId,
+  subject,
+  message,
+  donorDisplayName,
+  authorName,
+}) {
+  if (!donorId) {
+    throw new Error('donorId is required to create support request');
+  }
+  const normalizedSubject = normalizeSupportSubject(subject);
+  if (!normalizedSubject) {
+    throw new Error('Subject is required to create support request');
+  }
+  const normalizedBody = normalizeSupportBody(message);
+  if (!normalizedBody) {
+    throw new Error('Message body is required to create support request');
+  }
+  const normalizedDisplayName = normalizeSupportAuthorName(donorDisplayName);
+  const normalizedAuthorName =
+    normalizeSupportAuthorName(authorName) || normalizedDisplayName || null;
+  const requestId = createSupportRequestTransaction({
+    donorId,
+    donorDisplayName: normalizedDisplayName || null,
+    subject: normalizedSubject,
+    body: normalizedBody,
+    authorName: normalizedAuthorName,
+  });
+  return getSupportThreadById(requestId);
+}
+
+function addSupportMessageToRequest({
+  requestId,
+  donorId = null,
+  authorRole,
+  authorName,
+  message,
+}) {
+  const normalizedRequestId = requestId;
+  const normalizedRole = normalizeSupportAuthorName(authorRole).toLowerCase();
+  if (!normalizedRequestId) {
+    throw new Error('requestId is required to add support message');
+  }
+  if (!['donor', 'admin'].includes(normalizedRole)) {
+    throw new Error('Invalid support message author role');
+  }
+  const row = getSupportRequestRecord(normalizedRequestId);
+  if (!row) {
+    return null;
+  }
+  const normalizedBody = normalizeSupportBody(message);
+  if (!normalizedBody) {
+    throw new Error('Message body is required to add support message');
+  }
+  const normalizedAuthorName = normalizeSupportAuthorName(authorName);
+  let effectiveAuthorName = normalizedAuthorName;
+  if (!effectiveAuthorName && normalizedRole === 'donor') {
+    effectiveAuthorName =
+      normalizeSupportAuthorName(row.donor_display_name) ||
+      normalizeSupportAuthorName(row.donor_name) ||
+      normalizeSupportAuthorName(row.donor_email);
+  }
+  addSupportMessageTransaction({
+    requestId: normalizedRequestId,
+    donorId,
+    authorRole: normalizedRole,
+    authorName: effectiveAuthorName || null,
+    body: normalizedBody,
+  });
+  return getSupportThreadById(normalizedRequestId);
+}
+
+function markSupportRequestResolved(requestId, resolved = true) {
+  if (!requestId) {
+    throw new Error('requestId is required to update support request');
+  }
+  const row = getSupportRequestRecord(requestId);
+  if (!row) {
+    return null;
+  }
+  const resolvedFlag = resolved ? 1 : 0;
+  statements.updateSupportRequestResolution.run({
+    id: requestId,
+    resolved: resolvedFlag,
+    status: resolvedFlag ? 'resolved' : 'open',
+  });
+  return getSupportThreadById(requestId);
+}
+
+function deleteSupportRequestById(requestId) {
+  if (!requestId) {
+    return false;
+  }
+  const result = statements.deleteSupportRequestById.run(requestId);
+  return result.changes > 0;
+}
+
 function getSetting(key) {
   const row = statements.getSetting.get(key);
   if (!row) {
@@ -1668,4 +2054,12 @@ module.exports = {
   getSetting,
   saveSettings,
   updateInvitePlexDetails,
+  listSupportRequests,
+  getSupportRequestById,
+  getSupportThreadById,
+  getSupportThreadForDonor,
+  createSupportRequest,
+  addSupportMessageToRequest,
+  markSupportRequestResolved,
+  deleteSupportRequestById,
 };

@@ -56,6 +56,8 @@ const {
   createInvite,
   listDonorsWithDetails,
   getRecentEvents,
+  createSupportRequest,
+  addSupportMessageToRequest,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const plexService = require('../services/plex');
@@ -69,6 +71,8 @@ function resetDatabase() {
     DELETE FROM donors;
     DELETE FROM prospects;
     DELETE FROM settings;
+    DELETE FROM support_messages;
+    DELETE FROM support_requests;
   `);
 }
 
@@ -800,3 +804,100 @@ test('POST /api/admin/announcements/email validates announcement content', async
   assert.equal(createTransportCalls, 0);
 });
 
+
+test('admin support endpoints list, reply, resolve, and delete requests', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.test',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const donor = createDonor({
+    email: 'admin-support@example.com',
+    name: 'Admin Support Donor',
+    status: 'active',
+  });
+
+  const thread = createSupportRequest({
+    donorId: donor.id,
+    subject: 'Playback issue',
+    message: 'Streaming stops after a few minutes.',
+    donorDisplayName: 'Admin Support Donor',
+    authorName: 'Admin Support Donor',
+  });
+
+  addSupportMessageToRequest({
+    requestId: thread.request.id,
+    donorId: donor.id,
+    authorRole: 'donor',
+    authorName: 'Admin Support Donor',
+    message: 'It happened twice today.',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const listResponse = await agent.get('/api/admin/support');
+  assert.equal(listResponse.status, 200);
+  const listBody = await listResponse.json();
+  assert.ok(Array.isArray(listBody.threads));
+  assert.equal(listBody.threads.length, 1);
+  assert.equal(listBody.threads[0].request.donorId, donor.id);
+  assert.equal(listBody.threads[0].request.subject, 'Playback issue');
+
+  const replyResponse = await agent.post(
+    `/api/admin/support/${thread.request.id}/replies`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { message: 'We adjusted the transcoder settings.' },
+    }
+  );
+  assert.equal(replyResponse.status, 201);
+  const replyBody = await replyResponse.json();
+  assert.equal(replyBody.thread.messages.length, 3);
+  assert.equal(replyBody.thread.messages[2].authorRole, 'admin');
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].to, donor.email);
+  assert.ok(sentMessages[0].subject.includes('Playback issue'));
+
+  const resolveResponse = await agent.post(
+    `/api/admin/support/${thread.request.id}/resolve`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { resolved: true },
+    }
+  );
+  assert.equal(resolveResponse.status, 200);
+  const resolveBody = await resolveResponse.json();
+  assert.equal(resolveBody.thread.request.resolved, true);
+  assert.equal(resolveBody.thread.request.status, 'resolved');
+
+  const deleteResponse = await agent.request(
+    `/api/admin/support/${thread.request.id}`,
+    {
+      method: 'DELETE',
+      headers: { 'x-csrf-token': csrfToken },
+    }
+  );
+  assert.equal(deleteResponse.status, 204);
+
+  const afterDeleteList = await agent.get('/api/admin/support');
+  assert.equal(afterDeleteList.status, 200);
+  const afterDeleteBody = await afterDeleteList.json();
+  assert.equal(afterDeleteBody.threads.length, 0);
+});
