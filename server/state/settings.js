@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS = {
     user: '',
     pass: '',
     from: '',
+    supportNotificationEmail: '',
   },
   plex: {
     baseUrl: '',
