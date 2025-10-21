@@ -651,6 +651,16 @@ test('plexService.listSharedServerMembers parses friends payload', async () => {
                         },
                       ],
                     },
+                    {
+                      id: 'user-3',
+                      email: 'other@example.com',
+                      sharedServers: [
+                        {
+                          machineIdentifier: 'other-server',
+                          status: 'accepted',
+                        },
+                      ],
+                    },
                   ],
                 },
               }),
@@ -681,6 +691,11 @@ test('plexService.listSharedServerMembers parses friends payload', async () => {
         assert.equal(pendingMember.ids.includes('account-2'), true);
         assert.equal(pendingMember.pending, true);
         assert.equal(pendingMember.status, 'pending');
+
+        const unrelatedMember = members.find((member) =>
+          member.emails.includes('other@example.com')
+        );
+        assert.equal(unrelatedMember, undefined);
       }
     );
   } finally {
