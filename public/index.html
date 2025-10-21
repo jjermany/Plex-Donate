@@ -4372,6 +4372,9 @@
 
       function renderSubscribers() {
         closeSubscriberActionMenu();
+        if (!subscribersTable) {
+          return;
+        }
         if (plexStatusNote) {
           plexStatusNote.textContent = '';
           plexStatusNote.hidden = true;
@@ -5529,144 +5532,146 @@
         });
       });
 
-      subscribersTable.addEventListener('click', async (event) => {
-        const toggle = event.target.closest('[data-menu-toggle]');
-        if (toggle) {
-          const menu = toggle.closest('.action-menu');
-          toggleSubscriberActionMenu(menu);
-          return;
-        }
-
-        const button = event.target.closest('button[data-action]');
-        if (!button) return;
-        const row = event.target.closest('tr');
-        const donorId = row && row.dataset.id;
-        if (!donorId) return;
-        const action = button.dataset.action;
-        const menu = button.closest('.action-menu');
-        if (menu) {
-          closeSubscriberActionMenu(menu);
-        }
-        button.disabled = true;
-        let requiresReload = true;
-        try {
-          if (action === 'invite') {
-            requiresReload = false;
-            const response = await api(`/api/admin/subscribers/${donorId}/invite`, {
-              method: 'POST',
-            });
-            if (response && response.plex) {
-              state.plex = response.plex;
-            }
-            if (response && response.donor) {
+      if (subscribersTable) {
+        subscribersTable.addEventListener('click', async (event) => {
+          const toggle = event.target.closest('[data-menu-toggle]');
+          if (toggle) {
+            const menu = toggle.closest('.action-menu');
+            toggleSubscriberActionMenu(menu);
+            return;
+          }
+  
+          const button = event.target.closest('button[data-action]');
+          if (!button) return;
+          const row = event.target.closest('tr');
+          const donorId = row && row.dataset.id;
+          if (!donorId) return;
+          const action = button.dataset.action;
+          const menu = button.closest('.action-menu');
+          if (menu) {
+            closeSubscriberActionMenu(menu);
+          }
+          button.disabled = true;
+          let requiresReload = true;
+          try {
+            if (action === 'invite') {
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/invite`, {
+                method: 'POST',
+              });
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex(
+                  (item) => String(item.id) === String(response.donor.id)
+                );
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                } else {
+                  donors.push(response.donor);
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage =
+                (response && response.message) || 'Plex invite created successfully.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'share' || action === 'share-generate') {
+              const regenerate = action === 'share-generate' ? true : event.shiftKey;
+              const options = { method: 'POST' };
+              if (regenerate) {
+                options.body = { regenerate: true };
+              }
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/share-link`,
+                options
+              );
+              const shareLink = response.shareLink || {};
+              const configuredBase = getPublicBaseUrl();
+              const origin =
+                configuredBase || window.location.origin.replace(/\/$/, '');
+              const shareUrl =
+                shareLink.url ||
+                (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
+              if (!shareUrl) {
+                throw new Error('Unable to determine invite page URL');
+              }
+              let copied = false;
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                try {
+                  await navigator.clipboard.writeText(shareUrl);
+                  copied = true;
+                } catch (err) {
+                  console.warn('Clipboard copy failed', err);
+                }
+              }
+              if (copied) {
+                alert(
+                  action === 'share-generate'
+                    ? 'New invite page link generated and copied to clipboard.'
+                    : regenerate
+                      ? 'Invite page link regenerated and copied to clipboard.'
+                      : 'Invite page link copied to clipboard.'
+                );
+              } else {
+                const promptMessage =
+                  action === 'share-generate'
+                    ? 'New invite page link generated. Share this link with the user:'
+                    : 'Share this invite page link with the user:';
+                window.prompt(promptMessage, shareUrl);
+              }
+            } else if (action === 'refresh') {
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
+                method: 'POST',
+              });
+              const normalizedError =
+                typeof response.error === 'string' ? response.error : '';
               const donors = Array.isArray(state.donors) ? [...state.donors] : [];
               const index = donors.findIndex(
-                (item) => String(item.id) === String(response.donor.id)
+                (item) => String(item.id) === String(donorId)
               );
               if (index !== -1) {
-                donors[index] = { ...donors[index], ...response.donor };
-              } else {
-                donors.push(response.donor);
+                const updatedDonor = response.donor || null;
+                donors[index] = {
+                  ...donors[index],
+                  ...(updatedDonor || {}),
+                  paypalRefreshError: normalizedError,
+                };
               }
               state.donors = donors;
-            } else {
-              requiresReload = true;
-            }
-            const successMessage =
-              (response && response.message) || 'Plex invite created successfully.';
-            showDashboardToast(successMessage, 'success');
-          } else if (action === 'share' || action === 'share-generate') {
-            const regenerate = action === 'share-generate' ? true : event.shiftKey;
-            const options = { method: 'POST' };
-            if (regenerate) {
-              options.body = { regenerate: true };
-            }
-            const response = await api(
-              `/api/admin/subscribers/${donorId}/share-link`,
-              options
-            );
-            const shareLink = response.shareLink || {};
-            const configuredBase = getPublicBaseUrl();
-            const origin =
-              configuredBase || window.location.origin.replace(/\/$/, '');
-            const shareUrl =
-              shareLink.url ||
-              (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
-            if (!shareUrl) {
-              throw new Error('Unable to determine invite page URL');
-            }
-            let copied = false;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              try {
-                await navigator.clipboard.writeText(shareUrl);
-                copied = true;
-              } catch (err) {
-                console.warn('Clipboard copy failed', err);
+            } else if (action === 'resend') {
+              await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
+            } else if (action === 'revoke') {
+              if (!confirm('Revoke the latest invite for this user?')) {
+                return;
               }
-            }
-            if (copied) {
-              alert(
-                action === 'share-generate'
-                  ? 'New invite page link generated and copied to clipboard.'
-                  : regenerate
-                    ? 'Invite page link regenerated and copied to clipboard.'
-                    : 'Invite page link copied to clipboard.'
+              await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
+            } else if (action === 'remove') {
+              const confirmation = confirm(
+                'Remove this user and delete all related invites, payments, and share links?'
               );
+              if (!confirmation) {
+                return;
+              }
+              await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
+            }
+            if (requiresReload) {
+              await loadDashboardData();
             } else {
-              const promptMessage =
-                action === 'share-generate'
-                  ? 'New invite page link generated. Share this link with the user:'
-                  : 'Share this invite page link with the user:';
-              window.prompt(promptMessage, shareUrl);
+              render();
             }
-          } else if (action === 'refresh') {
-            requiresReload = false;
-            const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
-              method: 'POST',
-            });
-            const normalizedError =
-              typeof response.error === 'string' ? response.error : '';
-            const donors = Array.isArray(state.donors) ? [...state.donors] : [];
-            const index = donors.findIndex(
-              (item) => String(item.id) === String(donorId)
-            );
-            if (index !== -1) {
-              const updatedDonor = response.donor || null;
-              donors[index] = {
-                ...donors[index],
-                ...(updatedDonor || {}),
-                paypalRefreshError: normalizedError,
-              };
-            }
-            state.donors = donors;
-          } else if (action === 'resend') {
-            await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
-          } else if (action === 'revoke') {
-            if (!confirm('Revoke the latest invite for this user?')) {
-              return;
-            }
-            await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
-          } else if (action === 'remove') {
-            const confirmation = confirm(
-              'Remove this user and delete all related invites, payments, and share links?'
-            );
-            if (!confirmation) {
-              return;
-            }
-            await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
+          } catch (err) {
+            console.error(err);
+            showDashboardToast(err.message || 'Action failed', 'error', 6000);
+          } finally {
+            button.disabled = false;
           }
-          if (requiresReload) {
-            await loadDashboardData();
-          } else {
-            render();
-          }
-        } catch (err) {
-          console.error(err);
-          showDashboardToast(err.message || 'Action failed', 'error', 6000);
-        } finally {
-          button.disabled = false;
-        }
-      });
+        });
+      }
 
       if (shareLinksTable) {
         shareLinksTable.addEventListener('click', async (event) => {
