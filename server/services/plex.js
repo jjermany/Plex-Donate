@@ -8,7 +8,7 @@ const PLEX_TV_BASE_URL = 'https://plex.tv';
 const userListPathCache = new Map();
 const serverDescriptorCache = new Map();
 
-const V2_SHARED_SERVERS_PATH = '/api/v2/shared_servers';
+const V2_SHARED_SERVERS_PATH = '/api/v2/friends';
 const LEGACY_SHARED_SERVERS_PATH = (serverId) =>
   `/api/servers/${encodeURIComponent(String(serverId))}/shared_servers`;
 const HOME_USER_EMAIL_KEYS = [
@@ -43,12 +43,22 @@ const SHARED_MEMBER_STATUS_KEYS = [
   'state',
   'friendStatus',
   'friend_status',
+  'friendState',
+  'friend_state',
   'requestStatus',
   'request_status',
   'shareStatus',
   'share_status',
+  'sharingStatus',
+  'sharing_status',
+  'sharingState',
+  'sharing_state',
+  'connectionState',
+  'connection_state',
   'invitedState',
   'invited_state',
+  'accepted',
+  'approved',
 ];
 const SHARED_MEMBER_TOP_LEVEL_ID_KEYS = HOME_USER_ID_KEYS.filter((key) => key !== 'id');
 const SHARED_MEMBER_NESTED_KEYS = [
@@ -58,6 +68,8 @@ const SHARED_MEMBER_NESTED_KEYS = [
   'home_user',
   'sharedServer',
   'shared_server',
+  'sharedServers',
+  'shared_servers',
   'member',
   'friend',
   'recipient',
@@ -65,6 +77,10 @@ const SHARED_MEMBER_NESTED_KEYS = [
   'invited',
   'invitedUser',
   'invited_user',
+  'server',
+  'servers',
+  'sharingSettings',
+  'sharing_settings',
 ];
 const SHARED_MEMBER_DEFAULT_STATUS = 'accepted';
 const to01 = (value) => (value ? '1' : '0');
@@ -217,6 +233,7 @@ function normalizeSharedServerMember(candidate) {
   const emailValues = [];
   const idValues = [];
   const statusValues = [];
+  const visitedStatusSources = new Set();
 
   gatherValuesFromSource(emailValues, candidate, HOME_USER_EMAIL_KEYS);
   gatherValuesFromSource(idValues, candidate, SHARED_MEMBER_TOP_LEVEL_ID_KEYS);
@@ -240,6 +257,77 @@ function normalizeSharedServerMember(candidate) {
     emailValues.push(...candidate.emails.flatMap(collectStrings));
   }
 
+  const collectBooleanStatuses = (source) => {
+    if (!source || typeof source !== 'object') {
+      return;
+    }
+
+    if (visitedStatusSources.has(source)) {
+      return;
+    }
+
+    visitedStatusSources.add(source);
+
+    if (Array.isArray(source)) {
+      source.forEach((entry) => collectBooleanStatuses(entry));
+      return;
+    }
+
+    Object.entries(source).forEach(([key, value]) => {
+      const normalizedKey = String(key || '').trim().toLowerCase();
+      if (!normalizedKey) {
+        return;
+      }
+
+      if (value && typeof value === 'object') {
+        collectBooleanStatuses(value);
+        return;
+      }
+
+      if (
+        !normalizedKey.includes('pending') &&
+        !normalizedKey.includes('invite') &&
+        !normalizedKey.includes('accept') &&
+        !normalizedKey.includes('approve')
+      ) {
+        return;
+      }
+
+      const normalizedValue = String(value).trim().toLowerCase();
+      if (!normalizedValue) {
+        return;
+      }
+
+      const isTruthy =
+        value === true ||
+        normalizedValue === 'true' ||
+        normalizedValue === '1' ||
+        normalizedValue === 'yes';
+      const isFalsy =
+        value === false ||
+        normalizedValue === 'false' ||
+        normalizedValue === '0' ||
+        normalizedValue === 'no';
+
+      if (normalizedKey.includes('pending') || normalizedKey.includes('invite')) {
+        if (isTruthy || normalizedValue.includes('pending') || normalizedValue.includes('invite')) {
+          statusValues.push('pending');
+        }
+      }
+
+      if (normalizedKey.includes('accept') || normalizedKey.includes('approve')) {
+        if (isTruthy || normalizedValue.includes('accept') || normalizedValue.includes('approve')) {
+          statusValues.push('accepted');
+        } else if (isFalsy) {
+          statusValues.push('pending');
+        }
+      }
+    });
+  };
+
+  collectBooleanStatuses(candidate);
+  nestedSources.forEach((source) => collectBooleanStatuses(source));
+
   const emails = Array.from(
     new Set(emailValues.map((value) => String(value).trim()).filter((value) => value))
   );
@@ -249,16 +337,48 @@ function normalizeSharedServerMember(candidate) {
   const statuses = Array.from(
     new Set(statusValues.map((value) => String(value).trim()).filter((value) => value))
   );
+  const normalizedStatuses = statuses.map((status) => status.toLowerCase());
 
   if (!emails.length && !ids.length) {
     return null;
   }
 
-  const pending = statuses.some((status) => {
-    const normalized = status.toLowerCase();
-    return normalized.includes('pending') || normalized.includes('invite');
+  let pending = normalizedStatuses.some((status) => {
+    return (
+      status.includes('pending') ||
+      status.includes('invite') ||
+      status.includes('request') ||
+      status === 'false' ||
+      status === '0' ||
+      status === 'no'
+    );
   });
-  const status = statuses[0] || (pending ? 'pending' : SHARED_MEMBER_DEFAULT_STATUS);
+
+  const prioritizedStatus = statuses.find((status) => {
+    const normalized = status.toLowerCase();
+    if (normalized === 'true' || normalized === 'false' || normalized === '1' || normalized === '0') {
+      return false;
+    }
+    return true;
+  });
+
+  let status = prioritizedStatus || null;
+
+  if (!status) {
+    if (normalizedStatuses.includes('accepted')) {
+      status = 'accepted';
+    } else if (normalizedStatuses.includes('approved')) {
+      status = 'approved';
+    }
+  }
+
+  if (!pending && normalizedStatuses.includes('pending')) {
+    pending = true;
+  }
+
+  if (!status) {
+    status = pending ? 'pending' : SHARED_MEMBER_DEFAULT_STATUS;
+  }
 
   return { emails, ids, pending, status };
 }
