@@ -1200,6 +1200,7 @@
       let plexLinkStatusSticky = false;
       let supportPanelOpen = false;
       let supportLoading = false;
+      let supportThreadsRequest = null;
 
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
@@ -1963,33 +1964,56 @@
       }
 
       async function loadSupportThreads(options = {}) {
-        if (supportLoading) {
-          return;
+        while (supportThreadsRequest) {
+          try {
+            await supportThreadsRequest;
+          } catch (err) {
+            // Previous invocation already handled the error display.
+          }
         }
-        supportLoading = true;
-        try {
-          const response = await sessionFetch('/api/customer/support');
-          const payload = await response.json();
-          updateSessionTokenFromResponse(payload);
-          if (!response.ok) {
-            throw new Error(payload && payload.error ? payload.error : 'Failed to load support requests');
+
+        const request = (async () => {
+          supportLoading = true;
+          try {
+            const response = await sessionFetch('/api/customer/support');
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                payload && payload.error
+                  ? payload.error
+                  : 'Failed to load support requests'
+              );
+            }
+            const threads = Array.isArray(payload.threads) ? payload.threads : [];
+            state.support.threads = threads;
+            if (threads.length === 0) {
+              state.support.activeThreadId = null;
+            }
+            renderSupportThreads();
+            return payload;
+          } catch (err) {
+            if (!options.silent && supportStatus) {
+              setStatusText(
+                supportStatus,
+                err.message || 'Failed to load support requests.',
+                'error'
+              );
+            }
+            return null;
+          } finally {
+            supportLoading = false;
           }
-          const threads = Array.isArray(payload.threads) ? payload.threads : [];
-          state.support.threads = threads;
-          if (threads.length === 0) {
-            state.support.activeThreadId = null;
-          }
-          renderSupportThreads();
-        } catch (err) {
-          if (!options.silent && supportStatus) {
-            setStatusText(supportStatus, err.message || 'Failed to load support requests.', 'error');
-          }
-        } finally {
-          supportLoading = false;
-        }
+        })();
+
+        supportThreadsRequest = request.finally(() => {
+          supportThreadsRequest = null;
+        });
+
+        return supportThreadsRequest;
       }
 
-      function setSupportPanelOpen(open) {
+      async function setSupportPanelOpen(open) {
         if (!supportContainer || !supportToggle) {
           return;
         }
@@ -1997,7 +2021,7 @@
         if (supportPanelOpen) {
           supportContainer.classList.remove('hidden');
           supportToggle.textContent = 'Hide support';
-          loadSupportThreads({ silent: true });
+          await loadSupportThreads({ silent: true });
         } else {
           supportContainer.classList.add('hidden');
           supportToggle.textContent = 'Contact support';
@@ -3310,8 +3334,8 @@
       }
 
       if (supportToggle && supportContainer) {
-        supportToggle.addEventListener('click', () => {
-          setSupportPanelOpen(!supportPanelOpen);
+        supportToggle.addEventListener('click', async () => {
+          await setSupportPanelOpen(!supportPanelOpen);
         });
       }
 
