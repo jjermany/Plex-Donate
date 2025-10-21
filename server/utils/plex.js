@@ -177,6 +177,11 @@ async function loadPlexContext({ logContext } = {}) {
 
   try {
     const users = await plexService.listUsers();
+    const normalizedUsers = Array.isArray(users)
+      ? users
+      : users && typeof users === 'object'
+      ? [users]
+      : [];
     let sharedMembers = [];
 
     try {
@@ -242,8 +247,8 @@ async function loadPlexContext({ logContext } = {}) {
       })
       .filter(Boolean);
 
-    const index = preparePlexUserIndex([...users, ...sharedUsers]);
-    return { configured: true, users, index, error: null };
+    const index = preparePlexUserIndex([...normalizedUsers, ...sharedUsers]);
+    return { configured: true, users: normalizedUsers, index, error: null };
   } catch (err) {
     logger.warn(`Failed to load Plex users${contextSuffix}`, err && err.message);
     return {

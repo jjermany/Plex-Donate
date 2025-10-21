@@ -6,6 +6,7 @@ const path = require('path');
 
 const fetchModulePath = require.resolve('node-fetch');
 const plexModulePath = path.join(__dirname, 'plex.js');
+const settingsStore = require('../state/settings');
 
 async function withMockedFetch(mockImpl, run) {
   require('node-fetch');
@@ -1578,3 +1579,74 @@ test('plexService.verifyConnection parses XML library list responses', async () 
     assert.equal(result.details.inviteEndpointVersion, 'legacy');
   });
 });
+test(
+  'plexService.listUsers normalizes singular Plex user responses',
+  { concurrency: false },
+  async (t) => {
+    const originalGetPlexSettings = settingsStore.getPlexSettings;
+    settingsStore.getPlexSettings = () => ({
+      baseUrl: 'https://plex.local',
+      token: 'token123',
+    });
+
+    try {
+      await withMockedFetch(
+        async (url) => {
+          if (url === 'https://plex.local/accounts?X-Plex-Token=token123') {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                MediaContainer: {
+                  size: 1,
+                  totalSize: 1,
+                  User: {
+                    id: 'user-1',
+                    email: 'friend@example.com',
+                    username: 'friend@example.com',
+                  },
+                },
+              }),
+            };
+          }
+
+          throw new Error(`Unexpected URL: ${url}`);
+        },
+        async (plexService) => {
+          const users = await plexService.listUsers();
+
+          assert.equal(Array.isArray(users), true);
+          assert.equal(users.length, 1);
+          assert.deepEqual(users[0], {
+            id: 'user-1',
+            email: 'friend@example.com',
+            username: 'friend@example.com',
+          });
+
+          const utilsModulePath = path.join(__dirname, '../utils/plex.js');
+          delete require.cache[utilsModulePath];
+          const plexUtils = require('../utils/plex');
+
+          const sharedMembersMock = t.mock.method(
+            plexService,
+            'listSharedServerMembers',
+            async () => []
+          );
+
+          const context = await plexUtils.loadPlexContext();
+
+          assert.equal(Array.isArray(context.users), true);
+          assert.equal(context.users.length, 1);
+          assert.equal(context.users[0].email, 'friend@example.com');
+          assert.equal(context.error, null);
+
+          sharedMembersMock.mock.restore();
+          delete require.cache[utilsModulePath];
+        }
+      );
+    } finally {
+      settingsStore.getPlexSettings = originalGetPlexSettings;
+    }
+  }
+);
+

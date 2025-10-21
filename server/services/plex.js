@@ -585,6 +585,64 @@ function coerceArray(value) {
   return [value];
 }
 
+const POSSIBLE_USER_INDICATOR_KEYS = new Set([
+  ...HOME_USER_EMAIL_KEYS,
+  ...HOME_USER_ID_KEYS,
+  'emails',
+  'invitations',
+  'pending',
+  'status',
+  'state',
+  'friendStatus',
+  'requestStatus',
+]);
+
+function looksLikePlexUser(candidate) {
+  if (!candidate || typeof candidate !== 'object') {
+    return false;
+  }
+
+  return Array.from(POSSIBLE_USER_INDICATOR_KEYS).some((key) =>
+    Object.prototype.hasOwnProperty.call(candidate, key)
+  );
+}
+
+function normalizeUserPayload(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeUserPayload).filter(Boolean);
+  }
+
+  if (typeof value !== 'object') {
+    return [];
+  }
+
+  const nestedCandidates = [];
+
+  if (Object.prototype.hasOwnProperty.call(value, 'MediaContainer')) {
+    nestedCandidates.push(value.MediaContainer);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(value, 'mediaContainer')) {
+    nestedCandidates.push(value.mediaContainer);
+  }
+
+  ['users', 'user', 'Users', 'User'].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      nestedCandidates.push(value[key]);
+    }
+  });
+
+  if (nestedCandidates.length > 0) {
+    return nestedCandidates.flatMap(normalizeUserPayload).filter(Boolean);
+  }
+
+  return looksLikePlexUser(value) ? [value] : [];
+}
+
 function mapSharedLibrariesFromResponse(data) {
   const container = data && (data.invitation || data);
   if (!container) {
@@ -2379,7 +2437,7 @@ async function fetchUsersList(plex) {
     }
 
     const data = await response.json().catch(() => ({}));
-    const users = data.users || data;
+    const users = normalizeUserPayload(data);
 
     if (cacheKey) {
       userListPathCache.set(cacheKey, basePath);
@@ -2412,7 +2470,7 @@ async function listUsers() {
 
   try {
     const { users } = await fetchUsersList(plex);
-    return users;
+    return coerceArray(users).filter((user) => user && typeof user === 'object');
   } catch (err) {
     throw new Error(`Failed to fetch Plex users: ${err.message}`);
   }
