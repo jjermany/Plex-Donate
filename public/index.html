@@ -870,58 +870,6 @@
         gap: 6px;
       }
 
-      .timezone-control {
-        display: grid;
-        gap: 6px;
-        min-width: 220px;
-      }
-
-      .timezone-control label {
-        font-weight: 600;
-        font-size: 0.9rem;
-      }
-
-      .timezone-select-wrapper {
-        position: relative;
-        width: 100%;
-      }
-
-      .timezone-select {
-        width: 100%;
-        border-radius: 12px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        padding: 10px 38px 10px 14px;
-        font-size: 0.95rem;
-        box-sizing: border-box;
-        background: var(--input-background);
-        color: var(--text-primary);
-        box-shadow: 0 18px 36px -28px rgba(15, 23, 42, 0.6);
-        backdrop-filter: blur(12px);
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-      }
-
-      .timezone-select:focus {
-        border-color: rgba(79, 70, 229, 0.8);
-        box-shadow: 0 22px 44px -28px rgba(79, 70, 229, 0.65);
-        outline: none;
-      }
-
-      .timezone-select-icon {
-        position: absolute;
-        top: 50%;
-        right: 12px;
-        transform: translateY(-50%);
-        pointer-events: none;
-        color: var(--text-muted);
-        font-size: 0.8rem;
-      }
-
-      .timezone-note {
-        margin: 0;
-      }
-
       .event-payload {
         white-space: pre-wrap;
         background: var(--event-payload-bg);
@@ -2195,18 +2143,6 @@
                     Review webhook events and admin actions as they happen.
                   </p>
                 </div>
-                <div class="timezone-control">
-                  <label for="timezone-select">Timezone</label>
-                  <div class="timezone-select-wrapper">
-                    <select
-                      id="timezone-select"
-                      class="timezone-select"
-                      aria-describedby="timezone-note"
-                    ></select>
-                    <span class="timezone-select-icon" aria-hidden="true">▾</span>
-                  </div>
-                  <p id="timezone-note" class="muted-text subtle-text timezone-note"></p>
-                </div>
               </div>
               <ul id="events-list" class="events-list"></ul>
             </section>
@@ -2310,90 +2246,6 @@
     </template>
 
     <script>
-      const TIMEZONE_STORAGE_KEY = 'plexDonateAdminTimezone';
-      const TIMEZONE_AUTO_OPTION_VALUE = '';
-      const FALLBACK_TIMEZONES = [
-        'UTC',
-        'America/New_York',
-        'America/Chicago',
-        'America/Denver',
-        'America/Los_Angeles',
-        'Europe/London',
-        'Europe/Berlin',
-        'Europe/Paris',
-        'Asia/Tokyo',
-        'Australia/Sydney',
-      ];
-
-      let activeTimezonePreference = null;
-
-      function normalizeTimezone(value) {
-        if (typeof value !== 'string') {
-          return null;
-        }
-        const trimmed = value.trim();
-        return trimmed ? trimmed : null;
-      }
-
-      function loadStoredTimezonePreference() {
-        try {
-          const stored = localStorage.getItem(TIMEZONE_STORAGE_KEY);
-          return normalizeTimezone(stored);
-        } catch (err) {
-          return null;
-        }
-      }
-
-      function saveTimezonePreference(timezone) {
-        try {
-          if (timezone) {
-            localStorage.setItem(TIMEZONE_STORAGE_KEY, timezone);
-          } else {
-            localStorage.removeItem(TIMEZONE_STORAGE_KEY);
-          }
-        } catch (err) {
-          /* noop */
-        }
-      }
-
-      function setActiveTimezonePreference(timezone) {
-        activeTimezonePreference = normalizeTimezone(timezone);
-      }
-
-      function getActiveTimezonePreference() {
-        return activeTimezonePreference;
-      }
-
-      function getDeviceTimezone() {
-        try {
-          const resolved = Intl.DateTimeFormat().resolvedOptions();
-          return normalizeTimezone(resolved && resolved.timeZone);
-        } catch (err) {
-          return null;
-        }
-      }
-
-      function formatTimezoneLabel(timezone) {
-        const normalized = normalizeTimezone(timezone);
-        if (!normalized) {
-          return '';
-        }
-        if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
-          try {
-            const display = new Intl.DisplayNames(undefined, { type: 'timeZone' });
-            const label = display.of(normalized);
-            if (label && label !== normalized) {
-              return `${label} (${normalized.replace(/_/g, ' ')})`;
-            }
-          } catch (err) {
-            /* noop */
-          }
-        }
-        return normalized.replace(/_/g, ' ');
-      }
-
-      setActiveTimezonePreference(loadStoredTimezonePreference());
-
       const loginPanel = document.getElementById('login-panel');
       const loginForm = document.getElementById('login-form');
       const loginUsernameInput = document.getElementById('username');
@@ -2413,8 +2265,6 @@
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
       const eventsList = document.getElementById('events-list');
-      const timezoneSelect = document.getElementById('timezone-select');
-      const timezoneNote = document.getElementById('timezone-note');
       const refreshButton = document.getElementById('refresh-button');
       const settingsPanel = document.getElementById('settings-panel');
       const settingsForms = Array.from(
@@ -2904,7 +2754,7 @@
         paypalPlanManageUrl: '',
         paypalPlanLoading: false,
         adminUsername: 'admin',
-        timezone: getActiveTimezonePreference(),
+        timezone: null,
         plex: null,
         plexLibraries: null,
         support: {
@@ -2915,131 +2765,6 @@
           loaded: false,
         },
       };
-
-      let timezoneOptionsBuilt = false;
-
-      function getCandidateTimezones() {
-        if (typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function') {
-          try {
-            const supported = Intl.supportedValuesOf('timeZone');
-            if (Array.isArray(supported) && supported.length > 0) {
-              return supported;
-            }
-          } catch (err) {
-            /* noop */
-          }
-        }
-        return FALLBACK_TIMEZONES;
-      }
-
-      function populateTimezoneOptions() {
-        if (!timezoneSelect || timezoneOptionsBuilt) {
-          return;
-        }
-
-        timezoneOptionsBuilt = true;
-        timezoneSelect.innerHTML = '';
-
-        const autoOption = document.createElement('option');
-        autoOption.value = TIMEZONE_AUTO_OPTION_VALUE;
-        autoOption.textContent = 'Use device timezone';
-        timezoneSelect.appendChild(autoOption);
-
-        const seen = new Set([TIMEZONE_AUTO_OPTION_VALUE]);
-        const deviceTimezone = getDeviceTimezone();
-        if (deviceTimezone) {
-          seen.add(deviceTimezone);
-        }
-
-        getCandidateTimezones().forEach((timezone) => {
-          const normalized = normalizeTimezone(timezone);
-          if (!normalized || seen.has(normalized)) {
-            return;
-          }
-          seen.add(normalized);
-          const option = document.createElement('option');
-          option.value = normalized;
-          option.textContent = formatTimezoneLabel(normalized);
-          timezoneSelect.appendChild(option);
-        });
-      }
-
-      function ensureTimezoneOptionPresent(timezone) {
-        if (!timezoneSelect || !timezone) {
-          return;
-        }
-        const exists = Array.from(timezoneSelect.options).some(
-          (option) => option.value === timezone
-        );
-        if (!exists) {
-          const option = document.createElement('option');
-          option.value = timezone;
-          option.textContent = formatTimezoneLabel(timezone);
-          timezoneSelect.appendChild(option);
-        }
-      }
-
-      function renderTimezonePreference() {
-        if (!timezoneSelect) {
-          return;
-        }
-
-        populateTimezoneOptions();
-
-        const deviceTimezone = getDeviceTimezone();
-        if (timezoneSelect.options.length > 0) {
-          const autoOption = timezoneSelect.options[0];
-          autoOption.textContent = deviceTimezone
-            ? `Use device timezone (${formatTimezoneLabel(deviceTimezone)})`
-            : 'Use device timezone';
-        }
-
-        const currentTimezone = getActiveTimezonePreference();
-        if (currentTimezone) {
-          ensureTimezoneOptionPresent(currentTimezone);
-        }
-
-        timezoneSelect.value = currentTimezone || TIMEZONE_AUTO_OPTION_VALUE;
-
-        if (timezoneNote) {
-          if (currentTimezone) {
-            timezoneNote.textContent = `Timestamps display in ${formatTimezoneLabel(
-              currentTimezone
-            )}.`;
-          } else if (deviceTimezone) {
-            timezoneNote.textContent = `Timestamps use your device timezone (${formatTimezoneLabel(
-              deviceTimezone
-            )}).`;
-          } else {
-            timezoneNote.textContent = 'Timestamps use your device timezone.';
-          }
-        }
-      }
-
-      renderTimezonePreference();
-
-      function applyTimezonePreference(nextTimezone, options = {}) {
-        const normalized = normalizeTimezone(nextTimezone);
-        const { skipSave = false, skipRender = false } = options;
-        if (normalized === getActiveTimezonePreference()) {
-          if (!skipRender) {
-            renderTimezonePreference();
-          }
-          return;
-        }
-
-        setActiveTimezonePreference(normalized);
-        state.timezone = normalized;
-
-        if (!skipSave) {
-          saveTimezonePreference(normalized);
-        }
-
-        if (!skipRender) {
-          render();
-        }
-      }
-
       function setLoginStatus(message = '', stateAttr = '') {
         if (!statusMessage) {
           return;
@@ -3178,7 +2903,18 @@
           return String(value);
         }
 
-        const timezone = getActiveTimezonePreference();
+        let timezone = typeof state.timezone === 'string' ? state.timezone.trim() : '';
+        if (!timezone && typeof Intl !== 'undefined') {
+          try {
+            const resolved = Intl.DateTimeFormat().resolvedOptions();
+            timezone = resolved && typeof resolved.timeZone === 'string'
+              ? resolved.timeZone
+              : '';
+          } catch (err) {
+            timezone = '';
+          }
+        }
+
         if (timezone) {
           try {
             return date.toLocaleString(undefined, { timeZone: timezone });
@@ -5100,6 +4836,9 @@
         const data = await api('/api/admin/session');
         csrfToken = data.csrfToken;
         state.authenticated = data.authenticated;
+        const timezoneValue =
+          data && typeof data.timezone === 'string' ? data.timezone.trim() : '';
+        state.timezone = timezoneValue ? timezoneValue : null;
         if (data.adminUsername) {
           state.adminUsername = data.adminUsername;
         } else if (!state.authenticated && !state.adminUsername) {
@@ -5253,12 +4992,6 @@
         });
       }
 
-      if (timezoneSelect) {
-        timezoneSelect.addEventListener('change', () => {
-          applyTimezonePreference(timezoneSelect.value);
-        });
-      }
-
       if (loginForm) {
         loginForm.addEventListener('submit', async (event) => {
           event.preventDefault();
@@ -5288,6 +5021,13 @@
             csrfToken = response.csrfToken;
             state.authenticated = true;
             state.adminUsername = response.adminUsername || username;
+            const loginTimezone =
+              response && typeof response.timezone === 'string'
+                ? response.timezone.trim()
+                : '';
+            if (loginTimezone) {
+              state.timezone = loginTimezone;
+            }
             loginPasswordInput.value = '';
             await loadDashboardData();
             startDashboardAutoRefresh();
