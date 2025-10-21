@@ -85,6 +85,9 @@
       .hidden {
         display: none !important;
       }
+      [hidden] {
+        display: none !important;
+      }
       .panel {
         width: min(780px, 100%);
         background: rgba(15, 23, 42, 0.82);
@@ -109,6 +112,68 @@
       .canvas {
         display: grid;
         gap: 28px;
+      }
+      .dashboard-tabs {
+        display: grid;
+        gap: 24px;
+      }
+      .dashboard-legend {
+        position: sticky;
+        top: 16px;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.78);
+        box-shadow: 0 20px 50px -28px rgba(79, 70, 229, 0.55);
+        backdrop-filter: blur(18px);
+      }
+      .dashboard-legend-button {
+        appearance: none;
+        border: none;
+        border-radius: 12px;
+        padding: 10px 18px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: rgba(203, 213, 225, 0.85);
+        background: transparent;
+        cursor: pointer;
+        transition: color 0.2s ease, background 0.2s ease,
+          box-shadow 0.2s ease, transform 0.2s ease;
+      }
+      .dashboard-legend-button:hover,
+      .dashboard-legend-button:focus-visible {
+        color: #c7d2fe;
+        background: rgba(99, 102, 241, 0.14);
+        outline: none;
+      }
+      .dashboard-legend-button.is-active,
+      .dashboard-legend-button[aria-selected='true'] {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        color: #ffffff;
+        box-shadow: 0 18px 36px -24px rgba(79, 70, 229, 0.9);
+        transform: translateY(-1px);
+      }
+      .dashboard-legend-button.is-active:focus-visible,
+      .dashboard-legend-button[aria-selected='true']:focus-visible {
+        outline: 2px solid rgba(199, 210, 254, 0.85);
+        outline-offset: 2px;
+      }
+      .dashboard-tabpanels {
+        display: grid;
+        gap: 24px;
+      }
+      .dashboard-tabpanel {
+        display: grid;
+        gap: 24px;
+      }
+      .dashboard-tabpanel:focus-visible {
+        outline: 2px solid rgba(129, 140, 248, 0.6);
+        outline-offset: 4px;
       }
       .surface {
         background: rgba(15, 23, 42, 0.76);
@@ -805,375 +870,472 @@
           </p>
         </section>
 
-        <section id="dashboard-panel" class="grid hidden">
-          <article class="surface">
-            <div class="profile-summary">
-              <div>
-                <h2 class="section-title">Your membership</h2>
-                <p id="member-name" class="muted"></p>
-                <p id="member-email" class="muted"></p>
-              </div>
-              <div class="header-actions">
-                <span
-                  id="member-status"
-                  class="status-pill"
-                  data-status="pending"
-                  >pending</span
-                >
-                <button
-                  id="change-password-button"
-                  class="button-secondary"
-                  type="button"
-                >
-                  Change password
-                </button>
-                <button id="logout-button" class="button-secondary" type="button">
-                  Sign out
-                </button>
-              </div>
-            </div>
-            <div class="detail-list">
-              <div id="member-plan" class="detail hidden"></div>
-              <div id="member-subscription-row" class="detail hidden">
-                <span class="label">Subscription ID</span>
-                <span id="member-subscription-id"></span>
-              </div>
-              <div id="member-last-payment-row" class="detail hidden">
-                <span class="label">Last payment</span>
-                <span id="member-last-payment"></span>
-              </div>
-            </div>
-            <p
-              id="member-status-message"
-              class="status-text small"
-              aria-live="polite"
-            ></p>
-            <div id="subscription-cta" class="subscription-cta hidden">
-              <button id="subscription-button" class="button-primary" type="button">
-                Start PayPal subscription
-              </button>
-              <p id="subscription-note" class="status-text small">
-                Opens PayPal checkout in a new tab.
-              </p>
-            </div>
-          </article>
-
-          <article id="onboarding-panel" class="surface onboarding hidden">
-            <h2 class="section-title">Unlock endless content in three steps</h2>
-            <p class="muted">
-              You're only moments away from streaming everything you love.
-              Follow the guided path below to complete your setup.
-            </p>
-            <p class="status-text info">
-              <strong>
-                Before continuing, create or recover your Plex account at
-                <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
-                  >plex.tv</a
-                > so you can link it here—checkout stays disabled until Plex is ready.
-              </strong>
-            </p>
-            <div class="steps">
-              <div id="step-plex" class="step" data-state="current">
-                <div class="step-header">
-                  <span class="step-number" data-step-number="1">1</span>
-                  <div>
-                    <h3 class="step-title">Authenticate with Plex</h3>
-                    <p id="step-plex-note" class="muted small">
-                      Use the button below to launch the Plex prompt and link
-                      the account you use for streaming.
-                    </p>
-                  </div>
-                </div>
-                <p class="step-footnote muted small">
-                  We rely on Plex to deliver the library—linking your account
-                  keeps access seamless.
-                </p>
-                <div id="plex-link-controls" class="plex-link-controls">
-                  <button id="plex-link-button" class="button-primary" type="button">
-                    Link Plex account
-                  </button>
-                  <div
-                    id="plex-link-pin"
-                    class="plex-link-pin hidden"
-                    aria-live="polite"
-                  >
-                    <span class="muted small">Use this PIN if Plex asks for it:</span>
-                    <span id="plex-link-pin-code" class="plex-link-pin-code">----</span>
-                    <span
-                      id="plex-link-pin-expiry"
-                      class="plex-link-pin-expiry"
-                    ></span>
-                  </div>
-                  <p
-                    id="plex-link-status"
-                    class="status-text small"
-                    aria-live="polite"
-                  ></p>
-                </div>
-              </div>
-              <div id="step-subscription" class="step" data-state="upcoming">
-                <div class="step-header">
-                  <span class="step-number" data-step-number="2">2</span>
-                  <div>
-                    <h3 class="step-title">Start your support subscription</h3>
-                    <p id="step-subscription-note" class="muted small">
-                      Once Plex is linked, use the PayPal button above to kick
-                      off your membership.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div id="step-invite" class="step" data-state="upcoming">
-                <div class="step-header">
-                  <span class="step-number" data-step-number="3">3</span>
-                  <div>
-                    <h3 class="step-title">Share a referral invite</h3>
-                    <p id="step-invite-note" class="muted small">
-                      Send a referral invite each month to welcome someone new.
-                      Lost your own library access? Regenerate your link here
-                      when you’re eligible.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="surface">
-            <h2 class="section-title">Update your profile</h2>
-            <p class="muted">
-              Keep your preferred streaming email and display name current so we
-              can reach you when new invites are generated.
-            </p>
-            <form id="profile-form">
-              <label>
-                <span>Streaming email</span>
-                <input
-                  id="profile-email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autocomplete="email"
-                  required
-                />
-              </label>
-              <label>
-                <span>Display name</span>
-                <input
-                  id="profile-name"
-                  type="text"
-                  placeholder="How should we greet you?"
-                  autocomplete="name"
-                />
-              </label>
-              <label>
-                <span>PayPal subscription ID</span>
-                <input
-                  id="profile-subscription"
-                  type="text"
-                  placeholder="Starts with I-..."
-                  autocomplete="off"
-                  inputmode="text"
-                  spellcheck="false"
-                />
-                <p class="helper-text">
-                  Already supporting the server? Paste your PayPal subscription ID to
-                  link it to this account.
-                </p>
-              </label>
-              <div class="cta-actions">
-                <button id="profile-save" type="submit" class="button-primary">
-                  Save changes
-                </button>
-                <p id="profile-status" class="status-text"></p>
-              </div>
-            </form>
-          </article>
-
-          <article id="password-panel" class="surface">
-            <h2 class="section-title">Password &amp; security</h2>
-            <p id="password-guidance" class="muted small password-guidance">
-              Update your dashboard password to keep your account secure.
-            </p>
-            <form id="password-form">
-              <label id="password-current-row">
-                <span>Current password</span>
-                <input
-                  id="password-current"
-                  type="password"
-                  placeholder="••••••••"
-                  autocomplete="current-password"
-                />
-              </label>
-              <label>
-                <span>New password</span>
-                <input
-                  id="password-new"
-                  type="password"
-                  placeholder="Choose something memorable"
-                  autocomplete="new-password"
-                  required
-                />
-              </label>
-              <label>
-                <span>Confirm new password</span>
-                <input
-                  id="password-confirm"
-                  type="password"
-                  placeholder="Repeat your new password"
-                  autocomplete="new-password"
-                />
-              </label>
-              <div class="cta-actions">
-                <button id="password-save" type="submit" class="button-primary">
-                  Update password
-                </button>
-                <p id="password-status" class="status-text"></p>
-              </div>
-            </form>
-          </article>
-
-          <article class="surface">
-            <h2 class="section-title">Your referral invites</h2>
-            <p class="muted" id="invite-description">
-              Active subscribers can share one referral invite each month. We'll
-              highlight when the next referral unlocks. If you lost access,
-              regenerate your personal link here once the cooldown ends.
-            </p>
-            <form id="invite-form">
-              <label>
-                <span>Email for this referral invite</span>
-                <input
-                  id="invite-email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autocomplete="email"
-                  required
-                />
-              </label>
-              <label>
-                <span>Optional note for the recipient</span>
-                <input
-                  id="invite-note"
-                  type="text"
-                  placeholder="Used for tracking referral invites"
-                />
-              </label>
-              <div class="cta-actions">
-                <button id="invite-submit" type="submit" class="button-primary">
-                  Send referral invite
-                </button>
-                <p id="invite-status" class="status-text"></p>
-              </div>
-            </form>
-            <div id="invite-ready" class="invite-ready hidden">
-              <span class="badge success">Referral invite ready</span>
-              <a id="invite-link" class="invite-link" href="#" target="_blank" rel="noopener"></a>
-              <p id="invite-email-display" class="muted small"></p>
-              <p id="invite-created" class="muted small"></p>
-            </div>
-          </article>
-
-          <article class="surface" id="support-panel">
-            <h2 class="section-title">Need help?</h2>
-            <p class="muted">
-              Reach out to the Plex Donate team for account help or streaming
-              questions. We’ll send updates to the email on your account.
-            </p>
-            <button id="support-toggle" type="button" class="button-link button-primary support-toggle">
-              Contact support
-            </button>
-            <div id="support-container" class="support-container hidden">
-              <div class="support-wrapper">
-                <form id="support-form" class="support-form">
-                  <div class="support-actions">
-                    <label for="support-name">Your name or display name</label>
-                    <input id="support-name" name="name" type="text" autocomplete="name" />
-                  </div>
-                  <div class="support-actions">
-                    <label for="support-subject">Subject</label>
-                    <input id="support-subject" name="subject" type="text" required />
-                  </div>
-                  <div class="support-actions">
-                    <label for="support-message">Message</label>
-                    <textarea id="support-message" name="message" rows="4" required></textarea>
-                  </div>
-                  <button id="support-submit" type="submit" class="button-link button-primary">
-                    Send support request
-                  </button>
-                  <p id="support-status" class="status-text small"></p>
-                </form>
-
-                <div class="support-threads" id="support-threads">
-                  <div class="support-thread-list" id="support-thread-list"></div>
-                  <p id="support-empty" class="support-empty hidden">
-                    You haven't opened any support requests yet.
-                  </p>
-                  <div id="support-thread-detail" class="support-thread-detail hidden">
-                    <div class="support-thread-meta">
-                      <h3 id="support-thread-subject"></h3>
-                      <span id="support-thread-status" class="support-status-pill support-status-open">Open</span>
-                    </div>
-                    <div id="support-messages" class="support-messages"></div>
-                    <form id="support-reply-form" class="support-form">
-                      <label for="support-reply-message">Reply</label>
-                      <textarea id="support-reply-message" rows="3" required></textarea>
-                      <button id="support-reply-submit" type="submit" class="button-link button-primary">
-                        Send reply
-                      </button>
-                      <p id="support-reply-status" class="status-text small"></p>
-                    </form>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="surface hidden" id="overseerr-section">
-            <h2 class="section-title">Request new content through Overseerr</h2>
-            <p class="muted">
-              Looking for a movie or show we don't have yet? Submit a request in
-              Overseerr so the server team can queue it up for you.
-            </p>
-            <ol class="request-list muted small">
-              <li>Sign in with your Plex account so requests stay linked.</li>
-              <li>
-                Search for the title you want and choose
-                <strong>Request</strong> to send it to the admins.
-              </li>
-              <li>
-                Visit the <strong>Activity</strong> tab to follow approvals and
-                downloads once they're underway.
-              </li>
-            </ol>
-            <a
-              class="button-link button-primary"
-              id="overseerr-link"
-              href="#"
-              aria-disabled="true"
+        <section id="dashboard-panel" class="dashboard-tabs hidden">
+          <nav
+            class="dashboard-legend"
+            aria-label="Dashboard sections"
+            data-dashboard-tablist
+            role="tablist"
+          >
+            <button
+              id="dashboard-tab-account"
+              type="button"
+              class="dashboard-legend-button is-active"
+              role="tab"
+              aria-selected="true"
+              aria-controls="dashboard-tabpanel-account"
+              data-dashboard-tab="account"
+              tabindex="0"
             >
-              Open Overseerr
-            </a>
-          </article>
+              Account
+            </button>
+            <button
+              id="dashboard-tab-plex"
+              type="button"
+              class="dashboard-legend-button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="dashboard-tabpanel-plex"
+              data-dashboard-tab="plex"
+              tabindex="-1"
+            >
+              Plex setup
+            </button>
+            <button
+              id="dashboard-tab-support"
+              type="button"
+              class="dashboard-legend-button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="dashboard-tabpanel-support"
+              data-dashboard-tab="support"
+              tabindex="-1"
+            >
+              Support
+            </button>
+            <button
+              id="dashboard-tab-resources"
+              type="button"
+              class="dashboard-legend-button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="dashboard-tabpanel-resources"
+              data-dashboard-tab="resources"
+              tabindex="-1"
+            >
+              Resources
+            </button>
+          </nav>
 
-          <article class="surface">
-            <h2 class="section-title">Streaming libraries</h2>
-            <p class="muted">
-              Jump into your Plex library once your referral invite is accepted.
-              Save the link below for quick access.
-            </p>
-            <ul>
-              <li>
-                <a href="https://app.plex.tv/" target="_blank" rel="noopener"
-                  >Launch Plex</a
+          <div class="dashboard-tabpanels">
+            <section
+              id="dashboard-tabpanel-account"
+              class="dashboard-tabpanel"
+              role="tabpanel"
+              aria-labelledby="dashboard-tab-account"
+              data-dashboard-panel="account"
+              tabindex="0"
+            >
+              <article class="surface">
+                <div class="profile-summary">
+                  <div>
+                    <h2 class="section-title">Your membership</h2>
+                    <p id="member-name" class="muted"></p>
+                    <p id="member-email" class="muted"></p>
+                  </div>
+                  <div class="header-actions">
+                    <span
+                      id="member-status"
+                      class="status-pill"
+                      data-status="pending"
+                      >pending</span
+                    >
+                    <button
+                      id="change-password-button"
+                      class="button-secondary"
+                      type="button"
+                    >
+                      Change password
+                    </button>
+                    <button id="logout-button" class="button-secondary" type="button">
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+                <div class="detail-list">
+                  <div id="member-plan" class="detail hidden"></div>
+                  <div id="member-subscription-row" class="detail hidden">
+                    <span class="label">Subscription ID</span>
+                    <span id="member-subscription-id"></span>
+                  </div>
+                  <div id="member-last-payment-row" class="detail hidden">
+                    <span class="label">Last payment</span>
+                    <span id="member-last-payment"></span>
+                  </div>
+                </div>
+                <p
+                  id="member-status-message"
+                  class="status-text small"
+                  aria-live="polite"
+                ></p>
+                <div id="subscription-cta" class="subscription-cta hidden">
+                  <button id="subscription-button" class="button-primary" type="button">
+                    Start PayPal subscription
+                  </button>
+                  <p id="subscription-note" class="status-text small">
+                    Opens PayPal checkout in a new tab.
+                  </p>
+                </div>
+              </article>
+
+              <article class="surface">
+                <h2 class="section-title">Update your profile</h2>
+                <p class="muted">
+                  Keep your preferred streaming email and display name current so we
+                  can reach you when new invites are generated.
+                </p>
+                <form id="profile-form">
+                  <label>
+                    <span>Streaming email</span>
+                    <input
+                      id="profile-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      autocomplete="email"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Display name</span>
+                    <input
+                      id="profile-name"
+                      type="text"
+                      placeholder="How should we greet you?"
+                      autocomplete="name"
+                    />
+                  </label>
+                  <label>
+                    <span>PayPal subscription ID</span>
+                    <input
+                      id="profile-subscription"
+                      type="text"
+                      placeholder="Starts with I-..."
+                      autocomplete="off"
+                      inputmode="text"
+                      spellcheck="false"
+                    />
+                    <p class="helper-text">
+                      Already supporting the server? Paste your PayPal subscription ID to
+                      link it to this account.
+                    </p>
+                  </label>
+                  <div class="cta-actions">
+                    <button id="profile-save" type="submit" class="button-primary">
+                      Save changes
+                    </button>
+                    <p id="profile-status" class="status-text"></p>
+                  </div>
+                </form>
+              </article>
+
+              <article id="password-panel" class="surface">
+                <h2 class="section-title">Password &amp; security</h2>
+                <p id="password-guidance" class="muted small password-guidance">
+                  Update your dashboard password to keep your account secure.
+                </p>
+                <form id="password-form">
+                  <label id="password-current-row">
+                    <span>Current password</span>
+                    <input
+                      id="password-current"
+                      type="password"
+                      placeholder="••••••••"
+                      autocomplete="current-password"
+                    />
+                  </label>
+                  <label>
+                    <span>New password</span>
+                    <input
+                      id="password-new"
+                      type="password"
+                      placeholder="Choose something memorable"
+                      autocomplete="new-password"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Confirm new password</span>
+                    <input
+                      id="password-confirm"
+                      type="password"
+                      placeholder="Repeat your new password"
+                      autocomplete="new-password"
+                    />
+                  </label>
+                  <div class="cta-actions">
+                    <button id="password-save" type="submit" class="button-primary">
+                      Update password
+                    </button>
+                    <p id="password-status" class="status-text"></p>
+                  </div>
+                </form>
+              </article>
+
+              <article class="surface">
+                <h2 class="section-title">Your referral invites</h2>
+                <p class="muted" id="invite-description">
+                  Active subscribers can share one referral invite each month. We'll
+                  highlight when the next referral unlocks. If you lost access,
+                  regenerate your personal link here once the cooldown ends.
+                </p>
+                <form id="invite-form">
+                  <label>
+                    <span>Email for this referral invite</span>
+                    <input
+                      id="invite-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      autocomplete="email"
+                      required
+                    />
+                  </label>
+                  <label>
+                    <span>Optional note for the recipient</span>
+                    <input
+                      id="invite-note"
+                      type="text"
+                      placeholder="Used for tracking referral invites"
+                    />
+                  </label>
+                  <div class="cta-actions">
+                    <button id="invite-submit" type="submit" class="button-primary">
+                      Send referral invite
+                    </button>
+                    <p id="invite-status" class="status-text"></p>
+                  </div>
+                </form>
+                <div id="invite-ready" class="invite-ready hidden">
+                  <span class="badge success">Referral invite ready</span>
+                  <a id="invite-link" class="invite-link" href="#" target="_blank" rel="noopener"></a>
+                  <p id="invite-email-display" class="muted small"></p>
+                  <p id="invite-created" class="muted small"></p>
+                </div>
+              </article>
+            </section>
+
+            <section
+              id="dashboard-tabpanel-plex"
+              class="dashboard-tabpanel"
+              role="tabpanel"
+              aria-labelledby="dashboard-tab-plex"
+              data-dashboard-panel="plex"
+              tabindex="-1"
+              hidden
+            >
+              <article id="onboarding-panel" class="surface onboarding hidden">
+                <h2 class="section-title">Unlock endless content in three steps</h2>
+                <p class="muted">
+                  You're only moments away from streaming everything you love.
+                  Follow the guided path below to complete your setup.
+                </p>
+                <p class="status-text info">
+                  <strong>
+                    Before continuing, create or recover your Plex account at
+                    <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
+                      >plex.tv</a
+                    > so you can link it here—checkout stays disabled until Plex is ready.
+                  </strong>
+                </p>
+                <div class="steps">
+                  <div id="step-plex" class="step" data-state="current">
+                    <div class="step-header">
+                      <span class="step-number" data-step-number="1">1</span>
+                      <div>
+                        <h3 class="step-title">Authenticate with Plex</h3>
+                        <p id="step-plex-note" class="muted small">
+                          Use the button below to launch the Plex prompt and link
+                          the account you use for streaming.
+                        </p>
+                      </div>
+                    </div>
+                    <p class="step-footnote muted small">
+                      We rely on Plex to deliver the library—linking your account
+                      keeps access seamless.
+                    </p>
+                    <div id="plex-link-controls" class="plex-link-controls">
+                      <button id="plex-link-button" class="button-primary" type="button">
+                        Link Plex account
+                      </button>
+                      <div
+                        id="plex-link-pin"
+                        class="plex-link-pin hidden"
+                        aria-live="polite"
+                      >
+                        <span class="muted small">Use this PIN if Plex asks for it:</span>
+                        <span id="plex-link-pin-code" class="plex-link-pin-code">----</span>
+                        <span
+                          id="plex-link-pin-expiry"
+                          class="plex-link-pin-expiry"
+                        ></span>
+                      </div>
+                      <p
+                        id="plex-link-status"
+                        class="status-text small"
+                        aria-live="polite"
+                      ></p>
+                    </div>
+                  </div>
+                  <div id="step-subscription" class="step" data-state="upcoming">
+                    <div class="step-header">
+                      <span class="step-number" data-step-number="2">2</span>
+                      <div>
+                        <h3 class="step-title">Start your support subscription</h3>
+                        <p id="step-subscription-note" class="muted small">
+                          Once Plex is linked, use the PayPal button above to kick
+                          off your membership.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="step-invite" class="step" data-state="upcoming">
+                    <div class="step-header">
+                      <span class="step-number" data-step-number="3">3</span>
+                      <div>
+                        <h3 class="step-title">Share a referral invite</h3>
+                        <p id="step-invite-note" class="muted small">
+                          Send a referral invite each month to welcome someone new.
+                          Lost your own library access? Regenerate your link here
+                          when you’re eligible.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            <section
+              id="dashboard-tabpanel-support"
+              class="dashboard-tabpanel"
+              role="tabpanel"
+              aria-labelledby="dashboard-tab-support"
+              data-dashboard-panel="support"
+              tabindex="-1"
+              hidden
+            >
+              <article class="surface" id="support-panel">
+                <h2 class="section-title">Need help?</h2>
+                <p class="muted">
+                  Reach out to the Plex Donate team for account help or streaming
+                  questions. We’ll send updates to the email on your account.
+                </p>
+                <button id="support-toggle" type="button" class="button-link button-primary support-toggle">
+                  Contact support
+                </button>
+                <div id="support-container" class="support-container hidden">
+                  <div class="support-wrapper">
+                    <form id="support-form" class="support-form">
+                      <div class="support-actions">
+                        <label for="support-name">Your name or display name</label>
+                        <input id="support-name" name="name" type="text" autocomplete="name" />
+                      </div>
+                      <div class="support-actions">
+                        <label for="support-subject">Subject</label>
+                        <input id="support-subject" name="subject" type="text" required />
+                      </div>
+                      <div class="support-actions">
+                        <label for="support-message">Message</label>
+                        <textarea id="support-message" name="message" rows="4" required></textarea>
+                      </div>
+                      <button id="support-submit" type="submit" class="button-link button-primary">
+                        Send support request
+                      </button>
+                      <p id="support-status" class="status-text small"></p>
+                    </form>
+
+                    <div class="support-threads" id="support-threads">
+                      <div class="support-thread-list" id="support-thread-list"></div>
+                      <p id="support-empty" class="support-empty hidden">
+                        You haven't opened any support requests yet.
+                      </p>
+                      <div id="support-thread-detail" class="support-thread-detail hidden">
+                        <div class="support-thread-meta">
+                          <h3 id="support-thread-subject"></h3>
+                          <span id="support-thread-status" class="support-status-pill support-status-open">Open</span>
+                        </div>
+                        <div id="support-messages" class="support-messages"></div>
+                        <form id="support-reply-form" class="support-form">
+                          <label for="support-reply-message">Reply</label>
+                          <textarea id="support-reply-message" rows="3" required></textarea>
+                          <button id="support-reply-submit" type="submit" class="button-link button-primary">
+                            Send reply
+                          </button>
+                          <p id="support-reply-status" class="status-text small"></p>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+
+            <section
+              id="dashboard-tabpanel-resources"
+              class="dashboard-tabpanel"
+              role="tabpanel"
+              aria-labelledby="dashboard-tab-resources"
+              data-dashboard-panel="resources"
+              tabindex="-1"
+              hidden
+            >
+              <article class="surface hidden" id="overseerr-section">
+                <h2 class="section-title">Request new content through Overseerr</h2>
+                <p class="muted">
+                  Looking for a movie or show we don't have yet? Submit a request in
+                  Overseerr so the server team can queue it up for you.
+                </p>
+                <ol class="request-list muted small">
+                  <li>Sign in with your Plex account so requests stay linked.</li>
+                  <li>
+                    Search for the title you want and choose
+                    <strong>Request</strong> to send it to the admins.
+                  </li>
+                  <li>
+                    Visit the <strong>Activity</strong> tab to follow approvals and
+                    downloads once they're underway.
+                  </li>
+                </ol>
+                <a
+                  class="button-link button-primary"
+                  id="overseerr-link"
+                  href="#"
+                  aria-disabled="true"
                 >
-              </li>
-              <li class="muted small">
-                Need another referral? Active supporters can send a new invite
-                once the monthly cooldown resets—or regenerate their own link if
-                they’ve lost access.
-              </li>
-            </ul>
-          </article>
+                  Open Overseerr
+                </a>
+              </article>
+
+              <article class="surface">
+                <h2 class="section-title">Streaming libraries</h2>
+                <p class="muted">
+                  Jump into your Plex library once your referral invite is accepted.
+                  Save the link below for quick access.
+                </p>
+                <ul>
+                  <li>
+                    <a href="https://app.plex.tv/" target="_blank" rel="noopener"
+                      >Launch Plex</a
+                    >
+                  </li>
+                  <li class="muted small">
+                    Need another referral? Active supporters can send a new invite
+                    once the monthly cooldown resets—or regenerate their own link if
+                    they’ve lost access.
+                  </li>
+                </ul>
+              </article>
+            </section>
+          </div>
         </section>
       </main>
     </div>
@@ -1208,6 +1370,19 @@
       const app = document.getElementById('app');
       const loginPanel = document.getElementById('login-panel');
       const dashboardPanel = document.getElementById('dashboard-panel');
+      const dashboardTablist = document.querySelector('[data-dashboard-tablist]');
+      const dashboardTabButtons = dashboardTablist
+        ? Array.from(
+            dashboardTablist.querySelectorAll('[data-dashboard-tab]')
+          )
+        : [];
+      const dashboardTabPanels = Array.from(
+        document.querySelectorAll('[data-dashboard-panel]')
+      );
+      const DASHBOARD_TAB_DEFAULT = dashboardTabButtons.length > 0
+        ? dashboardTabButtons[0].getAttribute('data-dashboard-tab') || 'account'
+        : 'account';
+      let activeDashboardTab = DASHBOARD_TAB_DEFAULT;
 
       const loginForm = document.getElementById('login-form');
       const loginButton = document.getElementById('login-button');
@@ -1480,6 +1655,134 @@
         } catch (err) {
           // ignore storage errors
         }
+      }
+
+      function setElementVisibility(element, visible) {
+        if (!element) {
+          return;
+        }
+        if (visible) {
+          element.classList.remove('hidden');
+          element.removeAttribute('hidden');
+        } else {
+          element.classList.add('hidden');
+          element.setAttribute('hidden', '');
+        }
+      }
+
+      function isValidDashboardTab(value) {
+        if (!value) {
+          return false;
+        }
+        return dashboardTabPanels.some((panel) => {
+          const panelName =
+            (panel.dataset && panel.dataset.dashboardPanel) ||
+            panel.getAttribute('data-dashboard-panel');
+          return panelName === value;
+        });
+      }
+
+      function applyActiveDashboardTab() {
+        if (dashboardTabButtons.length === 0 || dashboardTabPanels.length === 0) {
+          return;
+        }
+
+        dashboardTabButtons.forEach((button) => {
+          const tabName = button.getAttribute('data-dashboard-tab');
+          const isActive = tabName === activeDashboardTab;
+          button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          button.setAttribute('tabindex', isActive ? '0' : '-1');
+          button.classList.toggle('is-active', isActive);
+        });
+
+        dashboardTabPanels.forEach((panel) => {
+          const panelName =
+            (panel.dataset && panel.dataset.dashboardPanel) ||
+            panel.getAttribute('data-dashboard-panel');
+          const isActive = panelName === activeDashboardTab;
+          if (isActive) {
+            panel.removeAttribute('hidden');
+            panel.setAttribute('tabindex', '0');
+          } else {
+            panel.setAttribute('hidden', '');
+            panel.setAttribute('tabindex', '-1');
+          }
+        });
+      }
+
+      function setActiveDashboardTab(next, options = {}) {
+        if (dashboardTabButtons.length === 0 || dashboardTabPanels.length === 0) {
+          return;
+        }
+        const { force = false } = options;
+        const normalized = isValidDashboardTab(next)
+          ? next
+          : DASHBOARD_TAB_DEFAULT;
+        if (!force && normalized === activeDashboardTab) {
+          return;
+        }
+        activeDashboardTab = normalized;
+        applyActiveDashboardTab();
+      }
+
+      if (dashboardTabButtons.length > 0) {
+        const focusDashboardTabByIndex = (index) => {
+          const button = dashboardTabButtons[index];
+          if (!button) {
+            return;
+          }
+          const target = button.getAttribute('data-dashboard-tab');
+          setActiveDashboardTab(target);
+          try {
+            button.focus();
+          } catch (err) {
+            // ignore focus errors
+          }
+        };
+
+        dashboardTabButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const target = button.getAttribute('data-dashboard-tab');
+            setActiveDashboardTab(target);
+          });
+        });
+
+        if (dashboardTablist) {
+          dashboardTablist.addEventListener('keydown', (event) => {
+            const { key } = event;
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) {
+              return;
+            }
+            event.preventDefault();
+            const activeElement = document.activeElement;
+            let currentIndex = dashboardTabButtons.indexOf(activeElement);
+            if (currentIndex === -1) {
+              currentIndex = dashboardTabButtons.findIndex((button) =>
+                button.getAttribute('data-dashboard-tab') === activeDashboardTab
+              );
+            }
+            if (key === 'Home') {
+              focusDashboardTabByIndex(0);
+              return;
+            }
+            if (key === 'End') {
+              focusDashboardTabByIndex(dashboardTabButtons.length - 1);
+              return;
+            }
+            if (key === 'ArrowLeft') {
+              const previousIndex =
+                currentIndex <= 0
+                  ? dashboardTabButtons.length - 1
+                  : currentIndex - 1;
+              focusDashboardTabByIndex(previousIndex);
+            } else if (key === 'ArrowRight') {
+              const nextIndex = (currentIndex + 1) % dashboardTabButtons.length;
+              focusDashboardTabByIndex(nextIndex);
+            }
+          });
+        }
+
+        setActiveDashboardTab(activeDashboardTab, { force: true });
       }
 
       function resetAnnouncementCta() {
@@ -2494,7 +2797,7 @@
 
         const donor = data && data.donor ? data.donor : null;
         if (donor && !emailVerified) {
-          onboardingPanel.classList.remove('hidden');
+          setElementVisibility(onboardingPanel, true);
           if (stepPlex) {
             setStepState(stepPlex, 'upcoming');
           }
@@ -2537,11 +2840,11 @@
         const allComplete = plexLinked && subscriptionComplete && inviteReadyState;
 
         if (allComplete) {
-          onboardingPanel.classList.add('hidden');
+          setElementVisibility(onboardingPanel, false);
           return;
         }
 
-        onboardingPanel.classList.remove('hidden');
+        setElementVisibility(onboardingPanel, true);
 
         const steps = [
           { el: stepPlex, complete: plexLinked },
@@ -2638,6 +2941,9 @@
       }
 
       function renderDashboard(data) {
+        const previouslyAuthenticated = Boolean(
+          state.data && state.data.authenticated
+        );
         state.data = data;
         showApp();
 
@@ -2652,6 +2958,7 @@
         if (!data || !data.authenticated) {
           loginPanel.classList.remove('hidden');
           dashboardPanel.classList.add('hidden');
+          setActiveDashboardTab(DASHBOARD_TAB_DEFAULT, { force: true });
           loginForm.reset();
           setStatusText(loginStatus, '');
           setStatusText(memberStatusMessage, '');
@@ -2685,7 +2992,7 @@
             forgotPasswordLink.setAttribute('aria-expanded', 'false');
           }
           if (onboardingPanel) {
-            onboardingPanel.classList.add('hidden');
+            setElementVisibility(onboardingPanel, false);
           }
           if (passwordForm) {
             passwordForm.reset();
@@ -2704,6 +3011,9 @@
 
         loginPanel.classList.add('hidden');
         dashboardPanel.classList.remove('hidden');
+        if (!previouslyAuthenticated) {
+          setActiveDashboardTab('account', { force: true });
+        }
 
         const donor = data.donor || {};
         const emailVerified = Boolean(donor.emailVerified);
@@ -3108,6 +3418,7 @@
 
       if (changePasswordButton) {
         changePasswordButton.addEventListener('click', () => {
+          setActiveDashboardTab('account');
           if (passwordPanel) {
             passwordPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
