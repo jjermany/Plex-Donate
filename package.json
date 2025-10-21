@@ -6,7 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "NODE_ENV=development nodemon --watch server server/index.js"
+    "dev": "NODE_ENV=development nodemon --watch server server/index.js",
+    "test": "node --test"
   },
   "dependencies": {
     "better-sqlite3": "^9.6.0",

@@ -101,7 +101,7 @@ function preparePlexUserIndex(users) {
 
 function collectDonorEmailCandidates(donor) {
   const invites = Array.isArray(donor && donor.invites) ? donor.invites : [];
-  const values = [donor && donor.email];
+  const values = [donor && donor.email, donor && donor.plexEmail];
   invites.forEach((invite) => {
     values.push(invite && invite.recipientEmail);
     values.push(invite && invite.plexEmail);
