@@ -38,6 +38,35 @@ const HOME_USER_ID_KEYS = [
   'machine_id',
   'machineid',
 ];
+const SHARED_MEMBER_STATUS_KEYS = [
+  'status',
+  'state',
+  'friendStatus',
+  'friend_status',
+  'requestStatus',
+  'request_status',
+  'shareStatus',
+  'share_status',
+  'invitedState',
+  'invited_state',
+];
+const SHARED_MEMBER_TOP_LEVEL_ID_KEYS = HOME_USER_ID_KEYS.filter((key) => key !== 'id');
+const SHARED_MEMBER_NESTED_KEYS = [
+  'account',
+  'user',
+  'homeUser',
+  'home_user',
+  'sharedServer',
+  'shared_server',
+  'member',
+  'friend',
+  'recipient',
+  'profile',
+  'invited',
+  'invitedUser',
+  'invited_user',
+];
+const SHARED_MEMBER_DEFAULT_STATUS = 'accepted';
 const to01 = (value) => (value ? '1' : '0');
 
 const asStringArray = (value) => {
@@ -60,6 +89,373 @@ function normalizeId(value) {
     .trim()
     .toLowerCase()
     .replace(/-/g, '');
+}
+
+function collectStrings(value) {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap(collectStrings);
+  }
+
+  if (typeof value === 'object') {
+    return [];
+  }
+
+  const normalized = String(value).trim();
+  return normalized ? [normalized] : [];
+}
+
+function gatherValuesFromSource(result, source, keys) {
+  if (!source || typeof source !== 'object') {
+    return;
+  }
+
+  keys.forEach((key) => {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) {
+      return;
+    }
+
+    result.push(...collectStrings(source[key]));
+  });
+}
+
+function createSharedMemberAccumulator() {
+  const store = new Map();
+
+  const normalizeKeyPart = (values) =>
+    values
+      .map((value) => String(value).trim().toLowerCase())
+      .filter((value) => value.length > 0)
+      .sort()
+      .join('|');
+
+  const add = (member) => {
+    if (!member) {
+      return;
+    }
+
+    const emailKey = Array.isArray(member.emails)
+      ? normalizeKeyPart(member.emails)
+      : '';
+    const idKey = Array.isArray(member.ids) ? normalizeKeyPart(member.ids) : '';
+    const key = [emailKey, idKey].filter(Boolean).join('#');
+
+    if (!key) {
+      return;
+    }
+
+    if (store.has(key)) {
+      const existing = store.get(key);
+
+      const mergeArray = (target, values) => {
+        values
+          .map((value) => String(value).trim())
+          .filter((value) => value.length > 0)
+          .forEach((value) => {
+            if (!target.includes(value)) {
+              target.push(value);
+            }
+          });
+      };
+
+      mergeArray(existing.emails, Array.isArray(member.emails) ? member.emails : []);
+      mergeArray(existing.ids, Array.isArray(member.ids) ? member.ids : []);
+
+      existing.pending = existing.pending && Boolean(member.pending);
+
+      const existingStatus = existing.status ? String(existing.status) : '';
+      const candidateStatus = member.status ? String(member.status) : '';
+
+      if (!existingStatus && candidateStatus) {
+        existing.status = candidateStatus;
+      } else if (existingStatus && candidateStatus) {
+        const existingPending = existingStatus.toLowerCase().includes('pending');
+        const candidatePending = candidateStatus.toLowerCase().includes('pending');
+        if (existingPending && !candidatePending) {
+          existing.status = candidateStatus;
+        }
+      }
+
+      return;
+    }
+
+    const emails = Array.isArray(member.emails)
+      ? member.emails
+          .map((value) => String(value).trim())
+          .filter((value) => value.length > 0)
+      : [];
+    const ids = Array.isArray(member.ids)
+      ? member.ids
+          .map((value) => String(value).trim())
+          .filter((value) => value.length > 0)
+      : [];
+
+    store.set(key, {
+      emails,
+      ids,
+      pending: Boolean(member.pending),
+      status: member.status || (member.pending ? 'pending' : null),
+    });
+  };
+
+  return {
+    add,
+    values() {
+      return Array.from(store.values());
+    },
+  };
+}
+
+function normalizeSharedServerMember(candidate) {
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  const emailValues = [];
+  const idValues = [];
+  const statusValues = [];
+
+  gatherValuesFromSource(emailValues, candidate, HOME_USER_EMAIL_KEYS);
+  gatherValuesFromSource(idValues, candidate, SHARED_MEMBER_TOP_LEVEL_ID_KEYS);
+  gatherValuesFromSource(statusValues, candidate, SHARED_MEMBER_STATUS_KEYS);
+
+  const nestedSources = SHARED_MEMBER_NESTED_KEYS.map((key) => candidate[key]).filter(
+    (value) => value && typeof value === 'object'
+  );
+
+  nestedSources.forEach((source) => {
+    gatherValuesFromSource(emailValues, source, HOME_USER_EMAIL_KEYS);
+    gatherValuesFromSource(idValues, source, HOME_USER_ID_KEYS);
+    gatherValuesFromSource(statusValues, source, SHARED_MEMBER_STATUS_KEYS);
+
+    if (Array.isArray(source.emails)) {
+      emailValues.push(...source.emails.flatMap(collectStrings));
+    }
+  });
+
+  if (Array.isArray(candidate.emails)) {
+    emailValues.push(...candidate.emails.flatMap(collectStrings));
+  }
+
+  const emails = Array.from(
+    new Set(emailValues.map((value) => String(value).trim()).filter((value) => value))
+  );
+  const ids = Array.from(
+    new Set(idValues.map((value) => String(value).trim()).filter((value) => value))
+  );
+  const statuses = Array.from(
+    new Set(statusValues.map((value) => String(value).trim()).filter((value) => value))
+  );
+
+  if (!emails.length && !ids.length) {
+    return null;
+  }
+
+  const pending = statuses.some((status) => {
+    const normalized = status.toLowerCase();
+    return normalized.includes('pending') || normalized.includes('invite');
+  });
+  const status = statuses[0] || (pending ? 'pending' : SHARED_MEMBER_DEFAULT_STATUS);
+
+  return { emails, ids, pending, status };
+}
+
+function parseSharedServerMembersFromObject(data) {
+  if (!data || typeof data !== 'object') {
+    return [];
+  }
+
+  const accumulator = createSharedMemberAccumulator();
+  const visited = new Set();
+
+  const visit = (value) => {
+    if (!value) {
+      return;
+    }
+
+    if (typeof value !== 'object') {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => visit(entry));
+      return;
+    }
+
+    const member = normalizeSharedServerMember(value);
+    if (member) {
+      accumulator.add(member);
+    }
+
+    Object.values(value).forEach((child) => {
+      if (child && typeof child === 'object') {
+        visit(child);
+      }
+    });
+  };
+
+  visit(data);
+
+  return accumulator.values();
+}
+
+function parseSharedServerMembersFromXml(payload) {
+  if (!payload) {
+    return [];
+  }
+
+  const text = String(payload);
+  const accumulator = createSharedMemberAccumulator();
+
+  const attr = (source, key) => {
+    const pattern = new RegExp(`${key}="([^"]*)"`, 'i');
+    const match = pattern.exec(source);
+    return match ? match[1] : null;
+  };
+
+  const extractFromAttributes = (attributes = '', inner = '') => {
+    const emailValues = [];
+    const idValues = [];
+    const statusValues = [];
+
+    const emailAttr =
+      attr(attributes, 'invitedEmail') ||
+      attr(attributes, 'invited_email') ||
+      attr(attributes, 'email') ||
+      attr(attributes, 'username');
+    if (emailAttr) {
+      emailValues.push(emailAttr);
+    }
+
+    const idCandidates = [
+      attr(attributes, 'invitedId'),
+      attr(attributes, 'invited_id'),
+      attr(attributes, 'invitedID'),
+      attr(attributes, 'userId'),
+      attr(attributes, 'userID'),
+      attr(attributes, 'user_id'),
+      attr(attributes, 'uuid'),
+      attr(attributes, 'accountId'),
+      attr(attributes, 'accountID'),
+      attr(attributes, 'account_id'),
+      attr(attributes, 'machineIdentifier'),
+      attr(attributes, 'machineidentifier'),
+      attr(attributes, 'machineID'),
+      attr(attributes, 'machine_id'),
+      attr(attributes, 'machineid'),
+    ];
+    idCandidates.filter(Boolean).forEach((value) => idValues.push(value));
+
+    const statusCandidate =
+      attr(attributes, 'status') ||
+      attr(attributes, 'state') ||
+      attr(attributes, 'friendStatus') ||
+      attr(attributes, 'friend_status') ||
+      attr(attributes, 'requestStatus') ||
+      attr(attributes, 'request_status') ||
+      attr(attributes, 'shareStatus') ||
+      attr(attributes, 'share_status');
+    if (statusCandidate) {
+      statusValues.push(statusCandidate);
+    }
+
+    const nestedPattern = /<(User|Account)\b([^>]*)\/?>(?:<\/\1>)?/gi;
+    let nestedMatch;
+    while ((nestedMatch = nestedPattern.exec(inner))) {
+      const nestedAttributes = nestedMatch[2] || '';
+      const nestedEmail =
+        attr(nestedAttributes, 'email') ||
+        attr(nestedAttributes, 'username') ||
+        attr(nestedAttributes, 'title');
+      if (nestedEmail) {
+        emailValues.push(nestedEmail);
+      }
+      const nestedId =
+        attr(nestedAttributes, 'id') ||
+        attr(nestedAttributes, 'uuid') ||
+        attr(nestedAttributes, 'userID') ||
+        attr(nestedAttributes, 'accountID') ||
+        attr(nestedAttributes, 'machineIdentifier');
+      if (nestedId) {
+        idValues.push(nestedId);
+      }
+      const nestedStatus =
+        attr(nestedAttributes, 'status') ||
+        attr(nestedAttributes, 'state') ||
+        attr(nestedAttributes, 'friendStatus');
+      if (nestedStatus) {
+        statusValues.push(nestedStatus);
+      }
+    }
+
+    const emails = Array.from(
+      new Set(emailValues.map((value) => String(value).trim()).filter((value) => value))
+    );
+    const ids = Array.from(
+      new Set(idValues.map((value) => String(value).trim()).filter((value) => value))
+    );
+    const statuses = Array.from(
+      new Set(statusValues.map((value) => String(value).trim()).filter((value) => value))
+    );
+
+    if (!emails.length && !ids.length) {
+      return;
+    }
+
+    const pending = statuses.some((status) => {
+      const normalized = status.toLowerCase();
+      return normalized.includes('pending') || normalized.includes('invite');
+    });
+    const status = statuses[0] || (pending ? 'pending' : SHARED_MEMBER_DEFAULT_STATUS);
+
+    accumulator.add({ emails, ids, pending, status });
+  };
+
+  const blockPattern = /<SharedServer\b([^>]*)>([\s\S]*?)<\/SharedServer>/gi;
+  let blockMatch;
+  while ((blockMatch = blockPattern.exec(text))) {
+    extractFromAttributes(blockMatch[1] || '', blockMatch[2] || '');
+  }
+
+  const selfClosingPattern = /<SharedServer\b([^>]*)\/>/gi;
+  let selfClosingMatch;
+  while ((selfClosingMatch = selfClosingPattern.exec(text))) {
+    extractFromAttributes(selfClosingMatch[1] || '', '');
+  }
+
+  return accumulator.values();
+}
+
+function parseSharedServerMembersPayload(payload) {
+  if (!payload && payload !== 0) {
+    return [];
+  }
+
+  if (typeof payload === 'object') {
+    return parseSharedServerMembersFromObject(payload);
+  }
+
+  const text = String(payload).trim();
+  if (!text) {
+    return [];
+  }
+
+  try {
+    const json = JSON.parse(text);
+    return parseSharedServerMembersFromObject(json);
+  } catch (err) {
+    // fall back to XML parsing
+  }
+
+  return parseSharedServerMembersFromXml(text);
 }
 
 function hostFromUrl(url) {
@@ -1244,6 +1640,89 @@ function buildSharedServerHeaders(plex, extra = {}) {
   });
 }
 
+async function fetchSharedServerMembersLegacy(plex, headers) {
+  const workingPlex = { ...plex };
+  let serverIdentifier;
+
+  try {
+    serverIdentifier = await getOrResolveServerIdentifier(workingPlex);
+  } catch (err) {
+    throw new Error(
+      `Failed to resolve Plex server identifier for shared members: ${err.message}`
+    );
+  }
+
+  workingPlex.serverIdentifier = serverIdentifier;
+
+  const sharedServerUrl = await buildSharedServerUrl(workingPlex);
+
+  let response;
+  try {
+    response = await fetch(sharedServerUrl, {
+      method: 'GET',
+      headers,
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex shared server API: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (response.status === 404 || response.status === 410) {
+    return [];
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to fetch Plex shared servers: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const payload = await response.text();
+  return parseSharedServerMembersPayload(payload);
+}
+
+async function fetchSharedServerMembersV2(plex, headers) {
+  const url =
+    `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
+    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex shared server API: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token.');
+  }
+
+  if (response.status === 404 || response.status === 410) {
+    return { members: [], notFound: true };
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    const statusText = response.statusText || 'Error';
+    const suffix = details ? `: ${details}` : '';
+    throw new Error(
+      `Failed to fetch Plex shared server members: ${response.status} (${statusText})${suffix}`
+    );
+  }
+
+  const payload = await response.text();
+  return { members: parseSharedServerMembersPayload(payload), notFound: false };
+}
+
 function normalizeLibraryList(libraries) {
   const seen = new Set();
   return mapSharedLibrariesFromResponse({ libraries })
@@ -1939,6 +2418,36 @@ async function listUsers() {
   }
 }
 
+async function listSharedServerMembers(overrideSettings) {
+  const plex = getPlexConfig(overrideSettings);
+  ensureBaseConfiguration(plex);
+
+  const headers = buildSharedServerHeaders(plex, {
+    Accept: 'application/json',
+  });
+
+  let v2Result;
+  try {
+    v2Result = await fetchSharedServerMembersV2(plex, headers);
+  } catch (err) {
+    throw new Error(`Failed to fetch Plex shared members: ${err.message}`);
+  }
+
+  if (v2Result.notFound) {
+    try {
+      return await fetchSharedServerMembersLegacy(plex, headers);
+    } catch (err) {
+      throw new Error(`Failed to fetch Plex shared members: ${err.message}`);
+    }
+  }
+
+  if (Array.isArray(v2Result.members)) {
+    return v2Result.members;
+  }
+
+  return [];
+}
+
 async function revokeUserByEmail(email) {
   return revokeUser({ email });
 }
@@ -2489,6 +2998,7 @@ module.exports = {
   cancelInvite,
   authenticateAccount,
   listUsers,
+  listSharedServerMembers,
   revokeUser,
   revokeUserByEmail,
   verifyConnection,
