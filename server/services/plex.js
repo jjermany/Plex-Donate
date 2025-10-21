@@ -1865,6 +1865,111 @@ async function fetchSharedServerMembersLegacy(plex, headers) {
   return parseSharedServerMembersPayload(payload);
 }
 
+function friendSharesServer(candidate, normalizedServerId) {
+  if (!candidate || typeof candidate !== 'object' || !normalizedServerId) {
+    return false;
+  }
+
+  const visited = new Set();
+  const stack = [candidate];
+  const SERVER_ID_KEYS = [
+    'machineIdentifier',
+    'machineidentifier',
+    'serverId',
+    'server_id',
+    'serverid',
+    'serverUuid',
+    'server_uuid',
+    'serveruuid',
+  ];
+  const NESTED_SERVER_KEYS = [
+    'sharedServers',
+    'shared_servers',
+    'sharedServer',
+    'shared_server',
+    'servers',
+    'server',
+    'sharingSettings',
+    'sharing_settings',
+  ];
+
+  while (stack.length) {
+    const current = stack.pop();
+    if (!current || typeof current !== 'object' || visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+
+    for (const key of SERVER_ID_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(current, key)) {
+        continue;
+      }
+
+      const value = current[key];
+      if (Array.isArray(value)) {
+        if (value.some((entry) => normalizeId(entry) === normalizedServerId)) {
+          return true;
+        }
+      } else if (normalizeId(value) === normalizedServerId) {
+        return true;
+      }
+    }
+
+    for (const key of NESTED_SERVER_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(current, key)) {
+        continue;
+      }
+
+      const nested = current[key];
+      if (Array.isArray(nested)) {
+        nested.forEach((entry) => {
+          if (entry && typeof entry === 'object') {
+            stack.push(entry);
+          }
+        });
+      } else if (nested && typeof nested === 'object') {
+        stack.push(nested);
+      }
+    }
+  }
+
+  return false;
+}
+
+function filterFriendsPayloadByServer(data, serverIdentifier) {
+  if (!serverIdentifier || !data || typeof data !== 'object') {
+    return data;
+  }
+
+  const normalizedServerId = normalizeId(serverIdentifier);
+  if (!normalizedServerId) {
+    return data;
+  }
+
+  const mediaContainer = data.MediaContainer;
+  if (!mediaContainer || typeof mediaContainer !== 'object') {
+    return data;
+  }
+
+  const metadata = mediaContainer.Metadata;
+  if (!Array.isArray(metadata)) {
+    return data;
+  }
+
+  const filteredMetadata = metadata.filter((entry) => friendSharesServer(entry, normalizedServerId));
+  if (filteredMetadata.length === metadata.length) {
+    return data;
+  }
+
+  return {
+    ...data,
+    MediaContainer: {
+      ...mediaContainer,
+      Metadata: filteredMetadata,
+    },
+  };
+}
+
 async function fetchSharedServerMembersV2(plex, headers) {
   const url =
     `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
@@ -1898,7 +2003,14 @@ async function fetchSharedServerMembersV2(plex, headers) {
   }
 
   const payload = await response.text();
-  return { members: parseSharedServerMembersPayload(payload), notFound: false };
+
+  try {
+    const json = JSON.parse(payload);
+    const filtered = filterFriendsPayloadByServer(json, plex.serverIdentifier);
+    return { members: parseSharedServerMembersFromObject(filtered), notFound: false };
+  } catch (err) {
+    return { members: parseSharedServerMembersPayload(payload), notFound: false };
+  }
 }
 
 function normalizeLibraryList(libraries) {
