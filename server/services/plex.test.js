@@ -86,7 +86,7 @@ test('plexService.createInvite uses v2 when available', async () => {
       };
     }
 
-    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -130,7 +130,7 @@ test('plexService.createInvite uses v2 when available', async () => {
       calls[3].url,
       'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
     );
-    assert.equal(calls[4].url, 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123');
+    assert.equal(calls[4].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
     const v2Payload = JSON.parse(calls[4].options.body);
     assert.deepEqual(v2Payload, {
       machineIdentifier: 'd4e2machine',
@@ -212,7 +212,7 @@ test('plexService.createInvite extracts invite url from nested links arrays', as
       };
     }
 
-    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -253,7 +253,7 @@ test('plexService.createInvite extracts invite url from nested links arrays', as
       }
     );
 
-    assert.equal(calls[calls.length - 1].url, 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123');
+    assert.equal(calls[calls.length - 1].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
     assert.equal(result.inviteId, 'INV-200');
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-200');
   });
@@ -322,7 +322,7 @@ test('plexService.createInvite translates legacy configured section indices', as
       };
     }
 
-    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -363,7 +363,7 @@ test('plexService.createInvite translates legacy configured section indices', as
       calls[3].url,
       'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
     );
-    assert.equal(calls[4].url, 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123');
+    assert.equal(calls[4].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
     const v2Payload = JSON.parse(calls[4].options.body);
     assert.deepEqual(v2Payload.librarySectionIds, ['10', '12']);
 
@@ -485,7 +485,7 @@ test('plexService.createInvite uses provided invitedId when supplied', async () 
       throw new Error('home users endpoint should not be called');
     }
 
-    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
       const body = JSON.parse(options.body);
       assert.equal(body.invitedId, 'INVITED-2001');
       return {
@@ -574,7 +574,7 @@ test('plexService.createInvite surfaces Plex errors from v2 endpoint', async () 
       };
     }
 
-    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
       return {
         ok: false,
         status: 422,
@@ -601,6 +601,91 @@ test('plexService.createInvite surfaces Plex errors from v2 endpoint', async () 
       /User cannot be invited/
     );
   });
+});
+
+test('plexService.listSharedServerMembers parses friends payload', async () => {
+  const originalGetPlexSettings = settingsStore.getPlexSettings;
+  settingsStore.getPlexSettings = () => ({
+    baseUrl: 'https://plex.local',
+    token: 'token123',
+    serverIdentifier: 'server-uuid',
+  });
+
+  try {
+    await withMockedFetch(
+      async (url, options = {}) => {
+        if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
+          assert.equal(options.method, 'GET');
+          assert.equal(options.headers && options.headers.Accept, 'application/json');
+          return {
+            ok: true,
+            status: 200,
+            text: async () =>
+              JSON.stringify({
+                MediaContainer: {
+                  Metadata: [
+                    {
+                      id: 'user-1',
+                      uuid: 'uuid-1',
+                      email: 'friend@example.com',
+                      username: 'friend_user',
+                      accepted: true,
+                      sharedServers: [
+                        {
+                          machineIdentifier: 'server-uuid',
+                          status: 'accepted',
+                        },
+                      ],
+                    },
+                    {
+                      id: 'user-2',
+                      friend: {
+                        id: 'account-2',
+                        email: 'pending@example.com',
+                      },
+                      pending: true,
+                      sharedServers: [
+                        {
+                          machineIdentifier: 'server-uuid',
+                          status: 'pending',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              }),
+          };
+        }
+
+        throw new Error(`Unexpected URL: ${url}`);
+      },
+      async (plexService) => {
+        const members = await plexService.listSharedServerMembers();
+
+        assert.equal(Array.isArray(members), true);
+
+        const acceptedMember = members.find(
+          (member) =>
+            member.emails.includes('friend@example.com') && member.pending === false
+        );
+        assert.ok(acceptedMember);
+        assert.equal(acceptedMember.ids.includes('uuid-1'), true);
+        assert.equal(acceptedMember.pending, false);
+        assert.equal(acceptedMember.status, 'accepted');
+
+        const pendingMember = members.find(
+          (member) =>
+            member.emails.includes('pending@example.com') && member.pending === true
+        );
+        assert.ok(pendingMember);
+        assert.equal(pendingMember.ids.includes('account-2'), true);
+        assert.equal(pendingMember.pending, true);
+        assert.equal(pendingMember.status, 'pending');
+      }
+    );
+  } finally {
+    settingsStore.getPlexSettings = originalGetPlexSettings;
+  }
 });
 
 test('plexService.authenticateAccount returns invitedId from Plex', async () => {
