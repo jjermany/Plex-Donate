@@ -49,6 +49,10 @@ function parseHash(serialized) {
   return { iterations, salt, key };
 }
 
+function isSerializedHash(serialized) {
+  return Boolean(parseHash(serialized));
+}
+
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
     if (typeof password !== 'string' || password.length === 0) {
@@ -160,4 +164,5 @@ module.exports = {
   verifyPasswordSync,
   isPasswordStrong,
   MIN_PASSWORD_LENGTH,
+  isSerializedHash,
 };

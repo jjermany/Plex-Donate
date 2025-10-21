@@ -4,7 +4,11 @@ const crypto = require('crypto');
 
 const config = require('../config');
 const logger = require('../utils/logger');
-const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
+const {
+  hashPasswordSync,
+  verifyPasswordSync,
+  isSerializedHash,
+} = require('../utils/passwords');
 
 const CREDENTIALS_FILE = path.join(config.dataDir, 'admin-credentials.json');
 const MIN_PASSWORD_LENGTH = 12;
@@ -26,11 +30,24 @@ function readCredentialsFile() {
       return null;
     }
     const username = normalizeUsername(parsed.username) || 'admin';
-    const passwordHash = typeof parsed.passwordHash === 'string' ? parsed.passwordHash : '';
-    if (!passwordHash) {
-      return null;
+    const rawHash =
+      typeof parsed.passwordHash === 'string' && parsed.passwordHash.trim()
+        ? parsed.passwordHash.trim()
+        : '';
+    const passwordHash = rawHash && isSerializedHash(rawHash) ? rawHash : '';
+    if (passwordHash) {
+      return { username, passwordHash };
     }
-    return { username, passwordHash };
+
+    const legacyPassword =
+      typeof parsed.password === 'string' && parsed.password.trim()
+        ? parsed.password
+        : '';
+    if (legacyPassword) {
+      return { username, legacyPassword };
+    }
+
+    return null;
   } catch (err) {
     return null;
   }
@@ -59,11 +76,28 @@ function ensureCache() {
 
   const stored = readCredentialsFile();
   if (stored) {
-    cache = {
-      username: stored.username,
-      passwordHash: stored.passwordHash,
-    };
-    return cache;
+    if (stored.passwordHash) {
+      cache = {
+        username: stored.username,
+        passwordHash: stored.passwordHash,
+      };
+      return cache;
+    }
+
+    if (stored.legacyPassword) {
+      const passwordHash = hashPasswordSync(stored.legacyPassword);
+      writeCredentialsFile({ username: stored.username, passwordHash });
+      cache = {
+        username: stored.username,
+        passwordHash,
+      };
+
+      logger.info(
+        `Migrated legacy admin credentials to hashed format for account: ${stored.username}`
+      );
+
+      return cache;
+    }
   }
 
   const username = normalizeUsername(config.adminUsername) || 'admin';

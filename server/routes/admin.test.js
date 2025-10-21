@@ -29,7 +29,7 @@ const testDataDir = fs.mkdtempSync(
 );
 config.dataDir = testDataDir;
 
-const { hashPasswordSync } = require('../utils/passwords');
+const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const TEST_ADMIN_PASSWORD = 'AdminRouterTest123!';
 const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
@@ -47,9 +47,38 @@ function seedAdminCredentials(
   fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
-seedAdminCredentials();
+function seedLegacyAdminCredentials(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    password,
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
 
-const adminRouter = require('./admin');
+function seedHybridLegacyCredentials(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    password,
+    passwordHash: 'not-a-pbkdf2-hash',
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
+function loadAdminRouter() {
+  delete require.cache[require.resolve('../state/admin-credentials')];
+  delete require.cache[require.resolve('./admin')];
+  return require('./admin');
+}
 const {
   db,
   createDonor,
@@ -247,6 +276,7 @@ class FetchAgent {
 }
 
 function createTestServer() {
+  const adminRouter = loadAdminRouter();
   const app = express();
   app.use(express.json());
   app.use(
@@ -261,8 +291,9 @@ function createTestServer() {
   return http.createServer(app);
 }
 
-async function startServer(t) {
-  seedAdminCredentials();
+async function startServer(t, { credentialsSeeder = seedAdminCredentials } = {}) {
+  fs.rmSync(credentialsFile, { force: true });
+  credentialsSeeder();
   const server = createTestServer();
   await new Promise((resolve) => server.listen(0, resolve));
   t.after(() => server.close());
@@ -289,6 +320,35 @@ async function loginAgent(agent) {
   assert.ok(loginBody.csrfToken);
   return loginBody.csrfToken;
 }
+
+test('migrates legacy admin credentials and preserves password', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: seedLegacyAdminCredentials,
+  });
+
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.ok(typeof stored.passwordHash === 'string' && stored.passwordHash.length > 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored, 'password'), false);
+  assert.ok(verifyPasswordSync(TEST_ADMIN_PASSWORD, stored.passwordHash));
+});
+
+test('ignores invalid stored hash when migrating legacy credentials', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: seedHybridLegacyCredentials,
+  });
+
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.ok(typeof stored.passwordHash === 'string' && stored.passwordHash.length > 0);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored, 'password'), false);
+  assert.ok(stored.passwordHash.startsWith('pbkdf2$'));
+  assert.ok(verifyPasswordSync(TEST_ADMIN_PASSWORD, stored.passwordHash));
+});
 
 test('GET /api/admin/subscribers annotates Plex status for donors', async (t) => {
   resetDatabase();
