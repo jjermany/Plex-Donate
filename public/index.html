@@ -4464,9 +4464,17 @@
             }
           }
 
+          const paymentText = formatAmount(donor);
           if (donor.lastPaymentAt) {
             const date = new Date(donor.lastPaymentAt);
-            lastPaymentCell.innerHTML = `${date.toLocaleString()}<br /><span class="badge">${formatAmount(donor)}</span>`;
+            const dateText = date.toLocaleString();
+            if (paymentText) {
+              lastPaymentCell.innerHTML = `${dateText}<br /><span class="badge">${paymentText}</span>`;
+            } else {
+              lastPaymentCell.textContent = dateText;
+            }
+          } else if (paymentText) {
+            lastPaymentCell.innerHTML = `<span class="badge">${paymentText}</span>`;
           } else {
             lastPaymentCell.textContent = '—';
           }
@@ -4599,10 +4607,13 @@
 
       function formatAmount(donor) {
         const payment = donor.payments && donor.payments[0];
-        if (!payment || !payment.amount) {
-          return 'No payment recorded';
+        if (payment && payment.amount) {
+          return `${payment.amount} ${payment.currency || ''}`.trim();
         }
-        return `${payment.amount} ${payment.currency || ''}`.trim();
+        if (donor.lastPaymentAt) {
+          return '';
+        }
+        return 'No payment recorded';
       }
 
       function renderEvents() {
