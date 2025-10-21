@@ -29,6 +29,7 @@ const adminRouter = require('./admin');
 const customerRouter = require('./customer');
 const { createDonor, markDonorEmailVerified } = require('../db');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
+const { clearSessionToken } = require('../utils/session-tokens');
 
 const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
 
@@ -217,6 +218,28 @@ function createTestServer() {
   app.use('/api/admin', adminRouter);
   app.use('/api/customer', customerRouter);
 
+  app.use((err, req, res, next) => {
+    if (err && err.code === 'EBADCSRFTOKEN') {
+      if (req.session && typeof req.session.destroy === 'function') {
+        req.session.destroy(() => {});
+      }
+
+      clearSessionToken(req);
+
+      res.clearCookie(SESSION_COOKIE_NAME, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: config.sessionCookieSecure,
+      });
+
+      return res
+        .status(403)
+        .json({ error: 'Invalid CSRF token', sessionToken: null });
+    }
+
+    return next(err);
+  });
+
   return http.createServer(app);
 }
 
@@ -363,6 +386,50 @@ test('customer login regenerates the session and preserves Plex link data', asyn
   assert.equal(finalSessionResponse.status, 200);
   const finalSessionBody = await finalSessionResponse.json();
   assert.equal(finalSessionBody.authenticated, false);
+});
+
+test('invalid CSRF token clears the session cookie and allows a new session', async (t) => {
+  const agent = await startServer(t);
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  assert.equal(sessionResponse.status, 200);
+  const sessionBody = await sessionResponse.json();
+  assert.equal(sessionBody.authenticated, false);
+  assert.ok(sessionBody.csrfToken);
+
+  const initialCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
+  assert.ok(initialCookie);
+
+  const invalidResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: 'invalid-token',
+    },
+  });
+
+  assert.equal(invalidResponse.status, 403);
+  const invalidBody = await invalidResponse.json();
+  assert.equal(invalidBody.error, 'Invalid CSRF token');
+  assert.equal(invalidBody.sessionToken, null);
+
+  assert.equal(agent.getCookieValue(SESSION_COOKIE_NAME), null);
+  assert.ok(
+    Array.isArray(invalidResponse.cookieHeaders) &&
+      invalidResponse.cookieHeaders.some((header) =>
+        header.startsWith(`${SESSION_COOKIE_NAME}=`)
+      )
+  );
+
+  const renewedResponse = await agent.get('/api/admin/session');
+  assert.equal(renewedResponse.status, 200);
+  const renewedBody = await renewedResponse.json();
+  assert.equal(renewedBody.authenticated, false);
+  assert.ok(renewedBody.csrfToken);
+
+  const renewedCookie = agent.getCookieValue(SESSION_COOKIE_NAME);
+  assert.ok(renewedCookie);
+  assert.notEqual(renewedCookie, initialCookie);
 });
 
 test('customer can link an existing subscription from the profile form', async (t) => {

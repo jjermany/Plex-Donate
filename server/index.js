@@ -11,6 +11,7 @@ const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
 const SqliteSessionStore = require('./session-store');
 const { initializeAdminCredentials } = require('./state/admin-credentials');
+const { clearSessionToken } = require('./utils/session-tokens');
 const {
   db,
   listDonorsWithExpiredAccess,
@@ -85,7 +86,25 @@ app.get('*', (req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   if (err.code === 'EBADCSRFTOKEN') {
-    return res.status(403).json({ error: 'Invalid CSRF token' });
+    if (req.session && typeof req.session.destroy === 'function') {
+      req.session.destroy((destroyErr) => {
+        if (destroyErr) {
+          logger.warn('Failed to destroy session after invalid CSRF token', destroyErr);
+        }
+      });
+    }
+
+    clearSessionToken(req);
+
+    res.clearCookie(SESSION_COOKIE_NAME, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: config.sessionCookieSecure,
+    });
+
+    return res
+      .status(403)
+      .json({ error: 'Invalid CSRF token', sessionToken: null });
   }
   logger.error('Unhandled error', err);
   return res.status(500).json({ error: 'Internal server error' });
