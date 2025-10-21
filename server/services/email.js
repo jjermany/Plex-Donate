@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { getSmtpSettings, getAppSettings } = require('../state/settings');
+const settingsState = require('../state/settings');
 
 function formatAccessEndDate(value) {
   if (!value) {
@@ -14,8 +14,115 @@ function formatAccessEndDate(value) {
   return date.toUTCString();
 }
 
+function stripTrailingSlash(value) {
+  return String(value).replace(/\/+$/, '');
+}
+
+function tryBuildDashboardUrl(base) {
+  if (!base) {
+    return '';
+  }
+
+  const trimmed = String(base).trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const dashboard = new URL('/dashboard', parsed);
+    return stripTrailingSlash(dashboard.toString());
+  } catch (err) {
+    if (/^https?:\/\//i.test(trimmed)) {
+      const sanitized = stripTrailingSlash(trimmed);
+      return `${sanitized}/dashboard`;
+    }
+  }
+
+  return '';
+}
+
+function resolveDashboardUrl({ loginUrl, fallbackUrls } = {}) {
+  const normalizedLogin = loginUrl ? String(loginUrl).trim() : '';
+  if (normalizedLogin) {
+    return normalizedLogin;
+  }
+
+  let baseFromSettings = '';
+  try {
+    const appSettings = settingsState.getAppSettings
+      ? settingsState.getAppSettings()
+      : null;
+    baseFromSettings =
+      appSettings && appSettings.publicBaseUrl
+        ? String(appSettings.publicBaseUrl).trim()
+        : '';
+  } catch (err) {
+    baseFromSettings = '';
+  }
+
+  const derivedFromSettings = tryBuildDashboardUrl(baseFromSettings);
+  if (derivedFromSettings) {
+    return derivedFromSettings;
+  }
+
+  const references = Array.isArray(fallbackUrls)
+    ? fallbackUrls
+    : fallbackUrls
+    ? [fallbackUrls]
+    : [];
+
+  for (const reference of references) {
+    if (!reference) {
+      continue;
+    }
+    try {
+      const parsed = new URL(String(reference).trim());
+      const candidate = tryBuildDashboardUrl(parsed.origin);
+      if (candidate) {
+        return candidate;
+      }
+    } catch (err) {
+      const candidate = tryBuildDashboardUrl(reference);
+      if (candidate) {
+        return candidate;
+      }
+    }
+  }
+
+  return '';
+}
+
+function buildDashboardAccessHtml(dashboardUrl) {
+  if (!dashboardUrl) {
+    return '';
+  }
+
+  const safeUrl = escapeHtml(dashboardUrl);
+  return `
+  <p style="margin:24px 0;text-align:center;">
+    <a
+      href="${safeUrl}"
+      style="display:inline-block;background:#111827;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;"
+    >Open Dashboard</a>
+  </p>
+  <p style="margin:0 0 16px;text-align:center;font-size:14px;color:#4b5563;">
+    Or open the dashboard directly:
+    <a href="${safeUrl}" style="color:#6366f1;text-decoration:underline;">${safeUrl}</a>
+  </p>
+  `;
+}
+
+function buildDashboardAccessText(dashboardUrl) {
+  if (!dashboardUrl) {
+    return '';
+  }
+
+  return `Open Dashboard: ${dashboardUrl}`;
+}
+
 function getSmtpConfig(overrideSettings) {
-  const settings = overrideSettings || getSmtpSettings();
+  const settings = overrideSettings || settingsState.getSmtpSettings();
   if (!settings.host) {
     throw new Error('SMTP configuration is missing');
   }
@@ -101,7 +208,13 @@ function normalizeAnnouncementEmailPayload({
   };
 }
 
-function buildAnnouncementEmailHtml({ subject, body, cta, recipientName }) {
+function buildAnnouncementEmailHtml({
+  subject,
+  body,
+  cta,
+  recipientName,
+  dashboardUrl,
+}) {
   const paragraphs = String(body || '')
     .split(/\r?\n+/)
     .map((paragraph) => paragraph.trim())
@@ -128,6 +241,7 @@ function buildAnnouncementEmailHtml({ subject, body, cta, recipientName }) {
   `
     : '';
 
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
   const greetingName = recipientName ? escapeHtml(recipientName) : 'there';
 
   return `
@@ -138,12 +252,19 @@ function buildAnnouncementEmailHtml({ subject, body, cta, recipientName }) {
     <p style="margin:0 0 16px;">Hi ${greetingName},</p>
     ${htmlParagraphs}
     ${ctaHtml}
+    ${dashboardHtml}
     <p style="margin:24px 0 0;">— Plex Donate</p>
   </div>
   `;
 }
 
-function buildAnnouncementEmailText({ subject, body, cta, recipientName }) {
+function buildAnnouncementEmailText({
+  subject,
+  body,
+  cta,
+  recipientName,
+  dashboardUrl,
+}) {
   const lines = [];
   lines.push(`Hi ${recipientName ? recipientName : 'there'},`);
   lines.push('');
@@ -156,6 +277,12 @@ function buildAnnouncementEmailText({ subject, body, cta, recipientName }) {
   if (cta) {
     lines.push('');
     lines.push(`${cta.label}: ${cta.url}`);
+  }
+
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+  if (dashboardTextLine) {
+    lines.push('');
+    lines.push(dashboardTextLine);
   }
 
   lines.push('');
@@ -189,17 +316,21 @@ async function sendAnnouncementEmail(
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
 
+  const dashboardUrl = resolveDashboardUrl();
+
   const html = buildAnnouncementEmailHtml({
     subject: normalized.subject,
     body: normalized.body,
     cta: normalized.cta,
     recipientName: name,
+    dashboardUrl,
   });
   const text = buildAnnouncementEmailText({
     subject: normalized.subject,
     body: normalized.body,
     cta: normalized.cta,
     recipientName: name,
+    dashboardUrl,
   });
 
   await mailer.sendMail({
@@ -219,7 +350,31 @@ async function sendInviteEmail(
   const mailer = createTransport(smtp);
   const subject = 'Your Plex access invite';
 
-  const text = `Hi ${name || 'there'},\n\nThank you for supporting our Plex server!\n\nUse your personal share link to accept the Plex invite: ${inviteUrl}\n\nSubscription ID: ${subscriptionId}\n\nIf you did not request this invite or need help, reply to this email.\n\n— Plex Donate`;
+  const dashboardUrl = resolveDashboardUrl({ fallbackUrls: [inviteUrl] });
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    'Thank you for supporting our Plex server!',
+    '',
+    `Use your personal share link to accept the Plex invite: ${inviteUrl}`,
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push(`Subscription ID: ${subscriptionId}`);
+  textLines.push('');
+  textLines.push('If you did not request this invite or need help, reply to this email.');
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const text = textLines.join('\n');
 
   const html = `
   <p>Hi ${name || 'there'},</p>
@@ -227,6 +382,7 @@ async function sendInviteEmail(
   <p style="text-align:center;margin:24px 0;">
     <a href="${inviteUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Accept Invite</a>
   </p>
+  ${dashboardHtml}
   <p style="font-size:14px;color:#4b5563;">Subscription ID: ${subscriptionId}</p>
   <p>If you need help, just reply to this email.</p>
   <p style="margin-top:24px;">— Plex Donate</p>
@@ -253,11 +409,18 @@ async function sendAccountWelcomeEmail(
 
   const recipientName = name || 'there';
   const subject = 'Verify your Plex dashboard email';
-  const dashboardUrl = loginUrl || verificationUrl;
+  const resolvedDashboardUrl = resolveDashboardUrl({
+    loginUrl,
+    fallbackUrls: [verificationUrl],
+  });
+  const dashboardUrl =
+    resolvedDashboardUrl || loginUrl || verificationUrl || '';
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
   let supportUrl = '';
 
   try {
-    const appSettings = getAppSettings();
+    const appSettings = settingsState.getAppSettings();
     const configuredBase =
       appSettings && appSettings.publicBaseUrl
         ? String(appSettings.publicBaseUrl).trim()
@@ -275,7 +438,7 @@ async function sendAccountWelcomeEmail(
   }
 
   if (!supportUrl) {
-    const fallbackBase = loginUrl || verificationUrl || '';
+    const fallbackBase = dashboardUrl || verificationUrl || loginUrl || '';
     if (fallbackBase && /^https?:\/\//i.test(fallbackBase)) {
       try {
         const parsed = new URL(fallbackBase);
@@ -292,7 +455,25 @@ async function sendAccountWelcomeEmail(
 
   const safeSupportUrl = supportUrl ? escapeHtml(supportUrl) : '';
 
-  const text = `Hi ${recipientName},\n\nThanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:\n\n${verificationUrl}\n\nOnce verified you can manage your dashboard at ${dashboardUrl}. ${supportInstruction}\n\n— Plex Donate`;
+  const lines = [
+    `Hi ${recipientName},`,
+    '',
+    'Thanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:',
+    '',
+    verificationUrl,
+    '',
+    `Once verified you can manage your dashboard at ${dashboardUrl}. ${supportInstruction}`,
+  ];
+
+  if (dashboardTextLine) {
+    lines.push('');
+    lines.push(dashboardTextLine);
+  }
+
+  lines.push('');
+  lines.push('— Plex Donate');
+
+  const text = lines.join('\n');
 
   const html = `
   <p>Hi ${recipientName},</p>
@@ -301,6 +482,7 @@ async function sendAccountWelcomeEmail(
     <a href="${verificationUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
   </p>
   <p>Once verified you can manage your dashboard anytime at <a href="${dashboardUrl}">${dashboardUrl}</a>.</p>
+  ${dashboardHtml}
   <p>${
     supportUrl
       ? `If you did not request this email or need help, visit <a href="${safeSupportUrl}">${safeSupportUrl}</a> to contact support instead of replying.`
@@ -332,7 +514,31 @@ async function sendCancellationEmail(
     ? `Your Plex access will remain active until ${displayDate}.`
     : 'Your Plex access has now ended.';
 
-  const text = `Hi ${name || 'there'},\n\nThank you for supporting our Plex server. ${accessText}\n\nIf you'd like to come back, you can restart your support anytime by visiting the donation portal and starting a new subscription with the same email address.\n\nSubscription ID: ${subscriptionId}\n\nIf you have any questions, just reply to this email.\n\n— Plex Donate`;
+  const dashboardUrl = resolveDashboardUrl();
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    `Thank you for supporting our Plex server. ${accessText}`,
+    '',
+    "If you'd like to come back, you can restart your support anytime by visiting the donation portal and starting a new subscription with the same email address.",
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push(`Subscription ID: ${subscriptionId}`);
+  textLines.push('');
+  textLines.push('If you have any questions, just reply to this email.');
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const text = textLines.join('\n');
 
   const htmlAccessText = displayDate
     ? `Your Plex access will remain active until <strong>${displayDate}</strong>.`
@@ -343,6 +549,7 @@ async function sendCancellationEmail(
   <p>Thank you for supporting our Plex server.</p>
   <p>${htmlAccessText}</p>
   <p>If you'd like to come back, you can restart your support anytime by visiting the donation portal and starting a new subscription with the same email address.</p>
+  ${dashboardHtml}
   <p style="font-size:14px;color:#4b5563;">Subscription ID: ${subscriptionId}</p>
   <p>If you have any questions, just reply to this email.</p>
   <p style="margin-top:24px;">— Plex Donate</p>
@@ -357,7 +564,14 @@ async function sendCancellationEmail(
   });
 }
 
-function formatSupportEmailHtml({ heading, subject, requestId, actorName, body }) {
+function formatSupportEmailHtml({
+  heading,
+  subject,
+  requestId,
+  actorName,
+  body,
+  dashboardUrl,
+}) {
   const safeHeading = escapeHtml(heading);
   const safeSubject = escapeHtml(subject || 'Support request');
   const safeActor = escapeHtml(actorName || 'Supporter');
@@ -368,6 +582,7 @@ function formatSupportEmailHtml({ heading, subject, requestId, actorName, body }
     .map((paragraph) => `<p style="margin:0 0 12px;">${escapeHtml(paragraph)}</p>`)
     .join('');
   const bodyHtml = paragraphs || `<p style="margin:0 0 12px;">${escapeHtml(body || '')}</p>`;
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
   return `
   <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
     <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${safeHeading}</h2>
@@ -375,12 +590,20 @@ function formatSupportEmailHtml({ heading, subject, requestId, actorName, body }
     <p style="margin:0 0 12px;">Request ID: <strong>${escapeHtml(String(requestId || ''))}</strong></p>
     <p style="margin:12px 0 12px;">${safeActor} wrote:</p>
     <div style="background:#f8fafc;border:1px solid #cbd5f5;border-radius:8px;padding:16px;">${bodyHtml}</div>
+    ${dashboardHtml}
     <p style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
   </div>
   `;
 }
 
-function formatSupportEmailText({ heading, subject, requestId, actorName, body }) {
+function formatSupportEmailText({
+  heading,
+  subject,
+  requestId,
+  actorName,
+  body,
+  dashboardUrl,
+}) {
   const lines = [];
   lines.push(heading || 'Support request update');
   lines.push('');
@@ -396,6 +619,13 @@ function formatSupportEmailText({ heading, subject, requestId, actorName, body }
   }
   lines.push('');
   lines.push(body || '');
+
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+  if (dashboardTextLine) {
+    lines.push('');
+    lines.push(dashboardTextLine);
+  }
+
   lines.push('');
   lines.push('— Plex Donate');
   return lines.join('\n');
@@ -424,12 +654,21 @@ async function sendSupportRequestNotification(
     ? `New support request from ${donorName}`
     : `New message from ${donorName}`;
   const subject = `[Support] ${request.subject || 'Request'} (#${request.id})`;
+  const fallbackDashboardUrls = [];
+  if (request && request.dashboardUrl) {
+    fallbackDashboardUrls.push(request.dashboardUrl);
+  }
+  if (message && message.dashboardUrl) {
+    fallbackDashboardUrls.push(message.dashboardUrl);
+  }
+  const dashboardUrl = resolveDashboardUrl({ fallbackUrls: fallbackDashboardUrls });
   const html = formatSupportEmailHtml({
     heading,
     subject: request.subject,
     requestId: request.id,
     actorName: donorName,
     body: message.body,
+    dashboardUrl,
   });
   const text = formatSupportEmailText({
     heading,
@@ -437,6 +676,7 @@ async function sendSupportRequestNotification(
     requestId: request.id,
     actorName: donorName,
     body: message.body,
+    dashboardUrl,
   });
   await mailer.sendMail({
     from: smtp.from,
@@ -459,12 +699,21 @@ async function sendSupportResponseNotification(
   const heading = 'Support reply from the Plex Donate team';
   const subject = `We replied: ${request.subject || 'Support request'} (#${request.id})`;
   const actorName = 'Plex Donate';
+  const fallbackDashboardUrls = [];
+  if (request && request.dashboardUrl) {
+    fallbackDashboardUrls.push(request.dashboardUrl);
+  }
+  if (message && message.dashboardUrl) {
+    fallbackDashboardUrls.push(message.dashboardUrl);
+  }
+  const dashboardUrl = resolveDashboardUrl({ fallbackUrls: fallbackDashboardUrls });
   const html = formatSupportEmailHtml({
     heading,
     subject: request.subject,
     requestId: request.id,
     actorName,
     body: message.body,
+    dashboardUrl,
   });
   const text = formatSupportEmailText({
     heading,
@@ -472,6 +721,7 @@ async function sendSupportResponseNotification(
     requestId: request.id,
     actorName,
     body: message.body,
+    dashboardUrl,
   });
   await mailer.sendMail({
     from: smtp.from,
@@ -500,4 +750,5 @@ module.exports = {
   verifyConnection,
   sendSupportRequestNotification,
   sendSupportResponseNotification,
+  resolveDashboardUrl,
 };
