@@ -75,6 +75,7 @@ async function handleEvent(event) {
       await handleSubscriptionEvent(event);
       break;
     case 'PAYMENT.SALE.COMPLETED':
+    case 'PAYMENT.CAPTURE.COMPLETED':
       await handlePaymentEvent(event);
       break;
     default:
@@ -356,9 +357,38 @@ async function revokeDonorAccess(donor) {
   }
 }
 
+function extractSubscriptionIdFromPayment(resource = {}) {
+  const supplementaryData =
+    resource.supplementary_data || resource.supplementaryData || {};
+  const relatedIds =
+    supplementaryData.related_ids || supplementaryData.relatedIds || {};
+
+  const candidates = [
+    relatedIds.subscription_id,
+    relatedIds.billing_agreement_id,
+    relatedIds.order_id,
+    resource.subscription_id,
+    resource.custom_id,
+    resource.billing_agreement_id,
+    resource.custom,
+  ];
+
+  for (const value of candidates) {
+    if (value === undefined || value === null) {
+      continue;
+    }
+    const normalized = String(value).trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
 async function handlePaymentEvent(event) {
   const resource = event.resource || {};
-  const subscriptionId = resource.billing_agreement_id || resource.custom || null;
+  const subscriptionId = extractSubscriptionIdFromPayment(resource);
   if (!subscriptionId) {
     logger.warn('Payment event missing subscription reference');
     return;
