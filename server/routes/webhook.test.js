@@ -16,7 +16,7 @@ const assert = require('node:assert/strict');
 const express = require('express');
 
 const webhookRouter = require('./webhook');
-const { db, createDonor } = require('../db');
+const { db, createDonor, listDonorsWithDetails } = require('../db');
 const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const emailService = require('../services/email');
@@ -150,6 +150,87 @@ test('cancelling a subscription sends a cancellation email', { concurrency: fals
     assert.match(
       message.html,
       /<strong>Tue, 01 Jan 2030 00:00:00 GMT<\/strong>/
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('capture payments are recorded for admin view', { concurrency: false }, async (t) => {
+  resetDatabase();
+
+  const originalVerifySignature = paypalService.verifyWebhookSignature;
+  paypalService.verifyWebhookSignature = async () => ({ verified: true });
+  t.after(() => {
+    paypalService.verifyWebhookSignature = originalVerifySignature;
+  });
+
+  const originalGetSubscription = paypalService.getSubscription;
+  paypalService.getSubscription = async () => {
+    throw new Error('getSubscription should not be called for capture payments');
+  };
+  t.after(() => {
+    paypalService.getSubscription = originalGetSubscription;
+  });
+
+  const donor = createDonor({
+    email: 'capture@example.com',
+    name: 'Capture Event',
+    subscriptionId: 'I-CAPTURE',
+    status: 'active',
+  });
+
+  const app = express();
+  app.use('/', webhookRouter);
+  const server = await startServer(app);
+
+  try {
+    const captureEvent = {
+      id: 'WH-123',
+      event_type: 'PAYMENT.CAPTURE.COMPLETED',
+      resource: {
+        id: 'CAPTURE-1',
+        status: 'COMPLETED',
+        amount: {
+          value: '15.25',
+          currency_code: 'USD',
+        },
+        create_time: '2024-01-01T00:00:00Z',
+        supplementary_data: {
+          related_ids: {
+            subscription_id: 'I-CAPTURE',
+          },
+        },
+      },
+    };
+
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(captureEvent),
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, { received: true });
+
+    const donors = listDonorsWithDetails();
+    const updatedDonor = donors.find((candidate) => candidate.id === donor.id);
+    assert(updatedDonor, 'expected donor to be present after capture');
+    assert(Array.isArray(updatedDonor.payments), 'expected payments array');
+    assert.equal(updatedDonor.payments.length, 1);
+    const [payment] = updatedDonor.payments;
+    assert.equal(payment.paypalPaymentId, 'CAPTURE-1');
+    assert.equal(payment.amount, 15.25);
+    assert.equal(payment.currency, 'USD');
+
+    const formattedPayment = payment && payment.amount
+      ? `${payment.amount} ${payment.currency || ''}`.trim()
+      : 'No payment recorded';
+    assert.equal(
+      formattedPayment,
+      '15.25 USD',
+      'admin view should display captured payment amount'
     );
   } finally {
     await server.close();
