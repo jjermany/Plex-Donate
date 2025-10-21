@@ -107,6 +107,25 @@ function resolvePublicBaseUrl(req) {
   return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
 }
 
+function resolveEnvironmentTimezone() {
+  const configured =
+    typeof process.env.TZ === 'string' ? process.env.TZ.trim() : '';
+  if (configured) {
+    return configured;
+  }
+
+  try {
+    const resolved = Intl.DateTimeFormat().resolvedOptions();
+    if (resolved && resolved.timeZone) {
+      return resolved.timeZone;
+    }
+  } catch (err) {
+    /* noop */
+  }
+
+  return null;
+}
+
 async function buildDonorListWithPlex() {
   const donors = listDonorsWithDetails();
   const plexContext = await loadPlexContext({ logContext: 'admin dashboard' });
@@ -155,10 +174,12 @@ router.get('/session', (req, res) => {
     res.locals.sessionToken = null;
   }
   const account = getAdminAccount();
+  const timezone = resolveEnvironmentTimezone();
   res.json({
     authenticated,
     csrfToken: res.locals.csrfToken,
     adminUsername: authenticated ? account.username : null,
+    timezone,
   });
 });
 
@@ -206,6 +227,7 @@ router.post(
         success: true,
         csrfToken,
         adminUsername: account.username,
+        timezone: resolveEnvironmentTimezone(),
       });
     });
   })

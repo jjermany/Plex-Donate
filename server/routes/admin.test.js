@@ -321,6 +321,24 @@ async function loginAgent(agent) {
   return loginBody.csrfToken;
 }
 
+test('session response includes environment timezone', async (t) => {
+  const originalTz = process.env.TZ;
+  process.env.TZ = 'Pacific/Honolulu';
+  t.after(() => {
+    if (originalTz === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTz;
+    }
+  });
+
+  const agent = await startServer(t);
+  const response = await agent.get('/api/admin/session');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.timezone, 'Pacific/Honolulu');
+});
+
 test('migrates legacy admin credentials and preserves password', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: seedLegacyAdminCredentials,
