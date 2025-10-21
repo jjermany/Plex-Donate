@@ -1210,6 +1210,13 @@ function getDonorById(id) {
   return mapDonor(statements.getDonorById.get(id));
 }
 
+function listInvitesForDonor(donorId) {
+  if (!donorId) {
+    return [];
+  }
+  return statements.listInvitesForDonor.all(donorId).map(mapInvite);
+}
+
 function getDonorByEmailAddress(email) {
   if (!email) {
     return null;
@@ -2008,6 +2015,7 @@ module.exports = {
   updateDonorStatus,
   getDonorBySubscriptionId,
   getDonorById,
+  listInvitesForDonor,
   getDonorByEmailAddress,
   getDonorAuthByEmail,
   createDonor,

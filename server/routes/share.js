@@ -7,6 +7,7 @@ const {
   getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
   getLatestInviteForDonor,
+  listInvitesForDonor,
   createInvite: createInviteRecord,
   createProspect,
   createOrUpdateShareLink,
@@ -337,6 +338,20 @@ async function createShareResponse(
   let donor = payload.donor || null;
 
   if (donor) {
+    const existingInvites = Array.isArray(donor.invites) ? donor.invites : null;
+    let invites = existingInvites ? existingInvites.slice() : [];
+    if (!existingInvites && donor.id) {
+      invites = listInvitesForDonor(donor.id);
+    }
+    if (payload.invite) {
+      const inviteAlreadyPresent = invites.some(
+        (existingInvite) => existingInvite && existingInvite.id === payload.invite.id
+      );
+      if (!inviteAlreadyPresent) {
+        invites = [payload.invite, ...invites];
+      }
+    }
+    donor = { ...donor, invites };
     if (!plexContext) {
       plexContext = await loadPlexContext({ logContext });
     }
