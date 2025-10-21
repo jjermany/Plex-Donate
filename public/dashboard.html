@@ -1189,6 +1189,7 @@
           threads: [],
           activeThreadId: null,
           donorId: null,
+          replyDrafts: {},
         },
       };
       let inviteCooldownTimer = null;
@@ -1278,6 +1279,24 @@
       if (subscriptionButton) {
         subscriptionButton.disabled = true;
         subscriptionButton.dataset.available = 'false';
+      }
+
+      if (supportReplyMessage) {
+        supportReplyMessage.addEventListener('input', () => {
+          const activeThreadId = state.support.activeThreadId;
+          if (!activeThreadId) {
+            return;
+          }
+          if (!state.support.replyDrafts) {
+            state.support.replyDrafts = {};
+          }
+          const value = supportReplyMessage.value;
+          if (!value) {
+            delete state.support.replyDrafts[activeThreadId];
+          } else {
+            state.support.replyDrafts[activeThreadId] = value;
+          }
+        });
       }
 
       const SESSION_TOKEN_QUERY_PARAM = 'session';
@@ -1902,7 +1921,9 @@
         }
 
         if (supportReplyMessage) {
-          supportReplyMessage.value = '';
+          const drafts = state.support.replyDrafts || {};
+          const draftValue = drafts[thread.request.id] || '';
+          supportReplyMessage.value = draftValue;
         }
         if (supportReplyStatus) {
           setStatusText(supportReplyStatus, '');
@@ -2910,6 +2931,7 @@
           state.support.donorId = donor.id;
           state.support.threads = [];
           state.support.activeThreadId = null;
+          state.support.replyDrafts = {};
           loadSupportThreads({ silent: true });
         }
 
@@ -3415,6 +3437,7 @@
             supportReplySubmit.disabled = true;
           }
           setStatusText(supportReplyStatus, 'Sending reply…', 'info');
+          let replyThreadId = activeThreadId;
           try {
             const response = await sessionFetch(
               `/api/customer/support/${activeThreadId}/replies`,
@@ -3433,10 +3456,15 @@
               throw new Error((payload && payload.error) || 'Failed to send reply.');
             }
             if (payload && payload.thread && payload.thread.request) {
+              replyThreadId = payload.thread.request.id;
               state.support.activeThreadId = payload.thread.request.id;
             }
             setStatusText(supportReplyStatus, 'Reply sent!', 'success');
             await loadSupportThreads({ silent: true });
+            if (replyThreadId && state.support.replyDrafts) {
+              delete state.support.replyDrafts[replyThreadId];
+            }
+            renderSupportThreadDetail();
           } catch (err) {
             setStatusText(
               supportReplyStatus,
