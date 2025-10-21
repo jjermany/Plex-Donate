@@ -3458,7 +3458,6 @@
       }
 
       function render() {
-        renderTimezonePreference();
         renderAdminAccountPanel();
         renderProspectSharePanel();
         renderShareLinks();
@@ -4831,7 +4830,7 @@
       }
     }
 
-      async function checkSession() {
+    async function checkSession() {
       try {
         const data = await api('/api/admin/session');
         csrfToken = data.csrfToken;
@@ -4844,39 +4843,39 @@
         } else if (!state.authenticated && !state.adminUsername) {
           state.adminUsername = 'admin';
         }
-          if (state.authenticated) {
-            await loadDashboardData();
-            startDashboardAutoRefresh();
-          } else {
-            stopDashboardAutoRefresh();
-            state.settings = null;
-            clearSettingsFormDirtyFlags();
-            state.paypalPlan = null;
-            state.paypalProduct = null;
-            state.paypalPlanError = '';
-            state.paypalPlanManageUrl = '';
-            state.paypalPlanLoading = false;
-            state.prospectShare = null;
-            state.support = {
-              threads: [],
-              activeThreadId: null,
-              includeResolved: false,
-              error: '',
-              loaded: false,
-            };
-            if (supportError) {
-              supportError.textContent = '';
-              supportError.hidden = true;
-              delete supportError.dataset.state;
-            }
-            setSupportReplyStatusMessage('');
-            renderSupportPanel();
-            render();
+        if (state.authenticated) {
+          await loadDashboardData();
+          startDashboardAutoRefresh();
+        } else {
+          stopDashboardAutoRefresh();
+          state.settings = null;
+          clearSettingsFormDirtyFlags();
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanError = '';
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanLoading = false;
+          state.prospectShare = null;
+          state.support = {
+            threads: [],
+            activeThreadId: null,
+            includeResolved: false,
+            error: '',
+            loaded: false,
+          };
+          if (supportError) {
+            supportError.textContent = '';
+            supportError.hidden = true;
+            delete supportError.dataset.state;
           }
-        } catch (err) {
-          console.error(err);
+          setSupportReplyStatusMessage('');
+          renderSupportPanel();
+          render();
         }
+      } catch (err) {
+        console.error(err);
       }
+    }
 
       function renderShareLinks() {
         if (!shareLinksPanel || !shareLinksTable) {
