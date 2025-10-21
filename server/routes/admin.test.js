@@ -375,6 +375,11 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
     sharedLibraries: JSON.stringify([{ id: '1', title: 'Movies' }]),
     recipientEmail: pending.email,
   });
+  const sharedOnly = createDonor({
+    email: 'shared-only@example.com',
+    name: 'Shared Only',
+    status: 'active',
+  });
   const needs = createDonor({
     email: 'needs@example.com',
     name: 'Needs Invite',
@@ -394,12 +399,18 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
   });
 
   const originalListUsers = plexService.listUsers;
+  const originalListSharedMembers = plexService.listSharedServerMembers;
   plexService.listUsers = async () => [
     { email: shared.email, status: 'accepted', id: 'user-1' },
     { email: pending.email, status: 'pending', id: 'user-2' },
   ];
+  plexService.listSharedServerMembers = async () => [
+    { emails: [shared.email], ids: ['user-1'], pending: false, status: 'accepted' },
+    { emails: [sharedOnly.email], ids: ['user-3'], pending: false, status: 'accepted' },
+  ];
   t.after(() => {
     plexService.listUsers = originalListUsers;
+    plexService.listSharedServerMembers = originalListSharedMembers;
   });
 
   const response = await agent.get('/api/admin/subscribers');
@@ -421,6 +432,11 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
   assert.ok(needsDonor);
   assert.equal(needsDonor.plexShared, false);
   assert.equal(needsDonor.needsPlexInvite, true);
+
+  const sharedOnlyDonor = body.donors.find((item) => item.email === sharedOnly.email);
+  assert.ok(sharedOnlyDonor);
+  assert.equal(sharedOnlyDonor.plexShared, true);
+  assert.equal(sharedOnlyDonor.needsPlexInvite, false);
 
   const noEmailDonor = body.donors.find((item) => item.name === 'No Email');
   assert.ok(noEmailDonor);
@@ -451,9 +467,12 @@ test('GET /api/admin/subscribers keeps Plex invite disabled for pending donors',
   });
 
   const originalListUsers = plexService.listUsers;
+  const originalListSharedMembers = plexService.listSharedServerMembers;
   plexService.listUsers = async () => [];
+  plexService.listSharedServerMembers = async () => [];
   t.after(() => {
     plexService.listUsers = originalListUsers;
+    plexService.listSharedServerMembers = originalListSharedMembers;
   });
 
   const response = await agent.get('/api/admin/subscribers');
@@ -489,6 +508,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
 
   const originalCreateInvite = plexService.createInvite;
   const originalListUsers = plexService.listUsers;
+  const originalListSharedMembers = plexService.listSharedServerMembers;
   let createInviteRequest = null;
   plexService.createInvite = async (payload) => {
     const plexConfig = settingsStore.getPlexSettings();
@@ -502,9 +522,11 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
     };
   };
   plexService.listUsers = async () => [];
+  plexService.listSharedServerMembers = async () => [];
   t.after(() => {
     plexService.createInvite = originalCreateInvite;
     plexService.listUsers = originalListUsers;
+    plexService.listSharedServerMembers = originalListSharedMembers;
   });
 
   const response = await agent.post(`/api/admin/subscribers/${donor.id}/invite`, {

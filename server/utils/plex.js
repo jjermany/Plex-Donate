@@ -173,12 +173,78 @@ async function loadPlexContext({ logContext } = {}) {
     return { configured: false, users: [], index: [], error: null };
   }
 
+  const contextSuffix = logContext ? ` for ${logContext}` : '';
+
   try {
     const users = await plexService.listUsers();
-    const index = preparePlexUserIndex(users);
+    let sharedMembers = [];
+
+    try {
+      sharedMembers = await plexService.listSharedServerMembers();
+    } catch (err) {
+      logger.warn(
+        `Failed to load Plex shared server members${contextSuffix}`,
+        err && err.message
+      );
+      sharedMembers = [];
+    }
+
+    const sharedUsers = (Array.isArray(sharedMembers) ? sharedMembers : [])
+      .map((member) => {
+        if (!member) {
+          return null;
+        }
+
+        const emails = Array.isArray(member.emails)
+          ? member.emails.map((email) => String(email).trim()).filter(Boolean)
+          : [];
+        const ids = Array.isArray(member.ids)
+          ? member.ids.map((id) => String(id).trim()).filter(Boolean)
+          : [];
+
+        if (!emails.length && !ids.length) {
+          return null;
+        }
+
+        const primaryEmail = emails[0] || null;
+        const primaryId = ids[0] || null;
+        const statusValue = member && member.status ? String(member.status).trim() : '';
+        const status = statusValue || (member && member.pending ? 'pending' : 'accepted');
+
+        const baseUser = {
+          email: primaryEmail,
+          username: primaryEmail,
+          title: primaryEmail,
+          friendlyName: primaryEmail,
+          invitedEmail: primaryEmail,
+          emails,
+          invitations: emails.map((email) => ({ email })),
+          account: primaryEmail || primaryId
+            ? {
+                email: primaryEmail,
+                id: primaryId,
+                uuid: primaryId,
+                machineIdentifier: primaryId,
+              }
+            : {},
+          id: primaryId,
+          uuid: primaryId,
+          userID: primaryId,
+          machineIdentifier: primaryId,
+          accountID: primaryId,
+          status,
+          state: status,
+          friendStatus: status,
+          requestStatus: status,
+        };
+
+        return baseUser;
+      })
+      .filter(Boolean);
+
+    const index = preparePlexUserIndex([...users, ...sharedUsers]);
     return { configured: true, users, index, error: null };
   } catch (err) {
-    const contextSuffix = logContext ? ` for ${logContext}` : '';
     logger.warn(`Failed to load Plex users${contextSuffix}`, err && err.message);
     return {
       configured: true,
