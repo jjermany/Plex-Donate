@@ -2366,6 +2366,9 @@
       const supportIncludeResolved = document.getElementById('support-include-resolved');
       const supportRefreshButton = document.getElementById('support-refresh');
       const supportReplyForm = document.getElementById('support-reply-admin-form');
+      const supportReplySubmit = supportReplyForm
+        ? supportReplyForm.querySelector('button[type="submit"]')
+        : null;
       const supportReplyTextarea = document.getElementById('support-reply-admin');
       const supportReplyStatus = document.getElementById('support-reply-admin-status');
       const supportMarkResolvedButton = document.getElementById('support-mark-resolved');
