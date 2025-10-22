@@ -364,13 +364,13 @@ test(
       assert.equal(setupResponse.status, 200);
       await setupResponse.json();
 
-    const response = await client.get('/customer/session');
-    assert.equal(response.status, 200);
-    const payload = await response.json();
-    assert.equal(payload.authenticated, true);
-    assertDefaultAnnouncement(payload.announcement);
-    assert.ok(payload.donor);
-    assert.equal(payload.donor.status, 'active');
+      const response = await client.get('/customer/session');
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      assert.equal(payload.authenticated, true);
+      assertDefaultAnnouncement(payload.announcement);
+      assert.ok(payload.donor);
+      assert.equal(payload.donor.status, 'active');
       assert.equal(payload.donor.subscriptionId, 'I-SESSIONREFRESH');
       assert.equal(payload.donor.lastPaymentAt, '2024-02-20T00:00:00Z');
     });
@@ -381,6 +381,115 @@ test(
     assert.equal(refreshed.lastPaymentAt, '2024-02-20T00:00:00Z');
   }
 );
+
+
+test('customer can start a trial from the dashboard', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'TrialTime123!';
+  const donor = createDonor({
+    email: 'trial-dashboard@example.com',
+    name: 'Trial Dashboard',
+    status: 'cancelled',
+    plexAccountId: 'plex-trial-dashboard',
+    plexEmail: 'trial-dashboard@example.com',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  let trialPayload = null;
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 200);
+    trialPayload = await trialResponse.json();
+    assertDefaultAnnouncement(trialPayload.announcement);
+    assert.ok(trialPayload.donor);
+    assert.equal(trialPayload.donor.id, donor.id);
+    assert.equal(trialPayload.donor.status, 'trial');
+    assert.equal(typeof trialPayload.donor.accessExpiresAt, 'string');
+    assert.ok(Date.parse(trialPayload.donor.accessExpiresAt) > Date.now());
+  });
+
+  assert.ok(trialPayload);
+  const updated = getDonorById(donor.id);
+  assert.equal(updated.status, 'trial');
+  assert.equal(updated.accessExpiresAt, trialPayload.donor.accessExpiresAt);
+  assert.ok(Date.parse(updated.accessExpiresAt) > Date.now());
+});
+
+test('customer trial start requires a linked Plex account', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'LinkPlex987!';
+  const donor = createDonor({
+    email: 'noplex@example.com',
+    name: 'No Plex Link',
+    status: 'pending',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 409);
+    const payload = await trialResponse.json();
+    assert.match(payload.error, /link your plex account/i);
+  });
+
+  const unchanged = getDonorById(donor.id);
+  assert.equal(unchanged.status, 'pending');
+  assert.equal(unchanged.accessExpiresAt, null);
+});
+
+test('customer trial start is blocked when a trial is already active', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'TrialActive456!';
+  const existingExpiration = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const donor = createDonor({
+    email: 'trialing@example.com',
+    name: 'Already Trialing',
+    status: 'trial',
+    accessExpiresAt: existingExpiration,
+    plexAccountId: 'plex-trialing',
+    plexEmail: 'trialing@example.com',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 409);
+    const payload = await trialResponse.json();
+    assert.match(payload.error, /trial is already in progress/i);
+  });
+
+  const unchanged = getDonorById(donor.id);
+  assert.equal(unchanged.status, 'trial');
+  assert.equal(unchanged.accessExpiresAt, existingExpiration);
+});
 
 
 test('customer support workflow creates thread and notifies admin', async (t) => {

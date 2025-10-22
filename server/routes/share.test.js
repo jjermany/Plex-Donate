@@ -32,6 +32,7 @@ const {
   createDonor,
   createProspect,
   createOrUpdateShareLink,
+  getDonorById,
   getShareLinkByToken,
   getProspectById,
   assignShareLinkToDonor,
@@ -878,6 +879,50 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       );
 
       assert.equal(response.status, 403);
+    } finally {
+      await server.close();
+    }
+  });
+
+  await t.test('share link can start a donor trial', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'share-trial@example.com',
+        name: 'Share Trial',
+        status: 'cancelled',
+        plexAccountId: 'plex-share-trial',
+        plexEmail: 'share-trial@example.com',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'trial-share-token',
+        sessionToken: 'trial-share-session',
+      });
+
+      const response = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/trial`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: { sessionToken: shareLink.sessionToken },
+        }
+      );
+
+      assert.equal(response.status, 200);
+      assert.ok(response.body.donor);
+      assert.equal(response.body.donor.id, donor.id);
+      assert.equal(response.body.donor.status, 'trial');
+      assert.equal(typeof response.body.donor.accessExpiresAt, 'string');
+      assert.ok(Date.parse(response.body.donor.accessExpiresAt) > Date.now());
+
+      const updated = getDonorById(donor.id);
+      assert.equal(updated.status, 'trial');
+      assert.equal(updated.accessExpiresAt, response.body.donor.accessExpiresAt);
     } finally {
       await server.close();
     }

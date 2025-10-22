@@ -186,3 +186,4 @@ if (config.env !== 'test') {
 }
 
 module.exports = app;
+module.exports.processAccessExpirations = processAccessExpirations;
