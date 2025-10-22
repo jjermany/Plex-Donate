@@ -979,12 +979,16 @@
                   aria-live="polite"
                 ></p>
                 <div id="subscription-cta" class="subscription-cta hidden">
+                  <button id="trial-button" class="button-secondary" type="button">
+                    Start 7-day trial
+                  </button>
                   <button id="subscription-button" class="button-primary" type="button">
                     Start PayPal subscription
                   </button>
                   <p id="subscription-note" class="status-text small">
                     Opens PayPal checkout in a new tab.
                   </p>
+                  <p id="trial-status" class="status-text"></p>
                 </div>
               </article>
 
@@ -1413,6 +1417,8 @@
       const subscriptionCta = document.getElementById('subscription-cta');
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
+      const trialButton = document.getElementById('trial-button');
+      const trialStatus = document.getElementById('trial-status');
       const memberStatusMessage = document.getElementById('member-status-message');
       const plexLinkButton = document.getElementById('plex-link-button');
       const plexLinkStatus = document.getElementById('plex-link-status');
@@ -1454,6 +1460,13 @@
       if (subscriptionButton) {
         subscriptionButton.disabled = true;
         subscriptionButton.dataset.available = 'false';
+      }
+      const defaultTrialButtonLabel = trialButton
+        ? trialButton.textContent
+        : 'Start 7-day trial';
+      if (trialButton) {
+        trialButton.disabled = true;
+        trialButton.dataset.available = 'false';
       }
 
       if (supportReplyMessage) {
@@ -2101,6 +2114,40 @@
         return `${minutes}:${seconds.toString().padStart(2, '0')}`;
       }
 
+      function getTrialCountdownLabel(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return '';
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return '';
+        }
+        const totalMinutes = Math.max(0, Math.floor(diff / 60000));
+        const minutesPerDay = 24 * 60;
+        const minutesPerHour = 60;
+        const days = Math.floor(totalMinutes / minutesPerDay);
+        const hours = Math.floor((totalMinutes % minutesPerDay) / minutesPerHour);
+        const minutes = totalMinutes % minutesPerHour;
+        const parts = [];
+        if (days > 0) {
+          parts.push(`${days} day${days === 1 ? '' : 's'}`);
+        }
+        if (hours > 0) {
+          parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+        }
+        if (parts.length < 2 && minutes > 0) {
+          parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+        }
+        if (parts.length === 0) {
+          return 'less than a minute';
+        }
+        if (parts.length === 1) {
+          return parts[0];
+        }
+        return `${parts[0]} and ${parts[1]}`;
+      }
+
       function clearInviteCooldownTimer() {
         if (!inviteCooldownTimer) {
           return;
@@ -2609,6 +2656,9 @@
           : 'pending'
         ).toLowerCase();
         const lastPayment = donor && donor.lastPaymentAt ? formatDate(donor.lastPaymentAt) : '';
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdown = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresOn = formatDateTime(accessExpiresAt);
 
         let tone = 'info';
         let message = '';
@@ -2624,6 +2674,34 @@
               message = `Your subscription is active. Last payment recorded ${lastPayment}. Share a referral invite below when you're ready, and only regenerate your own link if you've lost access.`;
             } else {
               message = 'Your subscription is active. Share referral invites below to welcome someone new, and only regenerate your own link if you have lost access.';
+            }
+            break;
+          case 'trial':
+            tone = 'info';
+            if (trialCountdown) {
+              message = `Your 7-day trial is active. Access expires in ${trialCountdown}.`;
+            } else if (trialExpiresOn) {
+              message = `Your 7-day trial is active. Access expires on ${trialExpiresOn}.`;
+            } else {
+              message = 'Your 7-day trial is active.';
+            }
+            if (showSubscriptionCta) {
+              message += ' Start a PayPal subscription above to keep streaming without interruption.';
+            } else {
+              message += ' Add your PayPal subscription ID below to keep streaming without interruption.';
+            }
+            break;
+          case 'trial_expired':
+            tone = 'error';
+            if (trialExpiresOn) {
+              message = `Your free trial ended on ${trialExpiresOn}.`;
+            } else {
+              message = 'Your free trial has ended.';
+            }
+            if (showSubscriptionCta) {
+              message += ' Start a PayPal subscription above to continue access.';
+            } else {
+              message += ' Add your PayPal subscription ID below to restore access.';
             }
             break;
           case 'pending':
@@ -2824,8 +2902,10 @@
         const normalizedStatus = donor && donor.status
           ? donor.status.toLowerCase()
           : 'pending';
+        const isTrial = normalizedStatus === 'trial';
+        const isTrialExpired = normalizedStatus === 'trial_expired';
         const subscriptionComplete = normalizedStatus === 'active';
-        const subscriptionStarted = Boolean(donor && donor.subscriptionId);
+        const subscriptionStarted = Boolean(donor && donor.subscriptionId) || isTrial;
         const plexLinked = Boolean(donor && donor.plexLinked);
         const plexLinkPending = Boolean(
           data &&
@@ -2833,6 +2913,9 @@
             typeof data.plexLink.pending === 'boolean' &&
             data.plexLink.pending
         );
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdown = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresOn = formatDateTime(accessExpiresAt);
           const inviteReadyState = Boolean(
             data && data.invite && data.invite.inviteUrl
           );
@@ -2898,6 +2981,20 @@
           if (!plexLinked) {
             stepSubscriptionNote.textContent =
               'Finish Plex authentication first—we unlock the PayPal checkout and subscription linking right after.';
+          } else if (isTrial) {
+            if (trialCountdown) {
+              stepSubscriptionNote.textContent =
+                `Free trial active—access expires in ${trialCountdown}. Subscribe before it ends to keep streaming.`;
+            } else if (trialExpiresOn) {
+              stepSubscriptionNote.textContent =
+                `Free trial active until ${trialExpiresOn}. Subscribe before it ends to keep streaming.`;
+            } else {
+              stepSubscriptionNote.textContent =
+                'Free trial active. Start your subscription to keep streaming once it ends.';
+            }
+          } else if (isTrialExpired) {
+            stepSubscriptionNote.textContent =
+              'Your trial has ended—start a PayPal subscription to restore access.';
           } else if (!subscriptionStarted) {
             if (showSubscriptionCta) {
               stepSubscriptionNote.textContent =
@@ -3128,52 +3225,149 @@
           emailVerified,
         });
 
-        if (subscriptionButton && subscriptionCta) {
-          if (!emailVerified) {
-            subscriptionCta.classList.remove('hidden');
-            subscriptionButton.classList.remove('hidden');
-            subscriptionButton.disabled = true;
-            subscriptionButton.dataset.available = 'false';
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdownLabel = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresLabel = formatDateTime(accessExpiresAt);
+
+        if (subscriptionCta) {
+          let subscriptionButtonVisible = false;
+          let subscriptionButtonAvailable = false;
+          let subscriptionNoteMessage = '';
+          let subscriptionNoteTone = 'info';
+
+          if (subscriptionButton) {
             subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            setStatusText(
-              subscriptionNote,
-              'Verify your email to unlock the PayPal checkout.',
-              'info'
+
+            if (!emailVerified) {
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage =
+                'Verify your email to unlock the PayPal checkout.';
+            } else if (showSubscriptionCta) {
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = true;
+              subscriptionNoteMessage = 'Opens PayPal checkout in a new tab.';
+            } else if (subscriptionCheckoutEligible && !plexLinked) {
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage =
+                'Link your Plex account above and we will unlock the PayPal checkout automatically.';
+            } else {
+              subscriptionButtonVisible = false;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage = '';
+              subscriptionNoteTone = '';
+            }
+
+            subscriptionButton.classList.toggle(
+              'hidden',
+              !subscriptionButtonVisible
             );
-            subscriptionNote.classList.add('small');
-          } else if (showSubscriptionCta) {
-            subscriptionCta.classList.remove('hidden');
-            subscriptionButton.classList.remove('hidden');
-            subscriptionButton.disabled = false;
-            subscriptionButton.dataset.available = 'true';
-            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            setStatusText(
-              subscriptionNote,
-              'Opens PayPal checkout in a new tab.',
-              'info'
-            );
-            subscriptionNote.classList.add('small');
-          } else if (subscriptionCheckoutEligible && !plexLinked) {
-            subscriptionCta.classList.remove('hidden');
-            subscriptionButton.classList.add('hidden');
-            subscriptionButton.disabled = true;
-            subscriptionButton.dataset.available = 'false';
-            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            setStatusText(
-              subscriptionNote,
-              'Link your Plex account above and we will unlock the PayPal checkout automatically.',
-              'info'
-            );
-            subscriptionNote.classList.add('small');
-          } else {
-            subscriptionCta.classList.add('hidden');
-            subscriptionButton.classList.remove('hidden');
-            subscriptionButton.disabled = true;
-            subscriptionButton.dataset.available = 'false';
-            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
-            setStatusText(subscriptionNote, '', null);
-            subscriptionNote.classList.add('small');
+            subscriptionButton.disabled = !subscriptionButtonAvailable;
+            subscriptionButton.dataset.available = subscriptionButtonAvailable
+              ? 'true'
+              : 'false';
+
+            if (subscriptionNote) {
+              setStatusText(
+                subscriptionNote,
+                subscriptionNoteMessage,
+                subscriptionNoteTone
+              );
+              if (subscriptionNoteMessage) {
+                subscriptionNote.classList.add('small');
+              } else {
+                subscriptionNote.classList.remove('small');
+              }
+            }
           }
+
+          let trialButtonHidden = true;
+          let trialButtonAvailable = false;
+          let trialStatusMessage = '';
+          let trialStatusTone = '';
+
+          if (trialButton) {
+            trialButton.textContent = defaultTrialButtonLabel;
+          }
+
+          if (trialButton || trialStatus) {
+            if (!emailVerified) {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              trialStatusMessage =
+                'Verify your email to unlock the free trial.';
+              trialStatusTone = 'info';
+            } else if (!plexLinked) {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              trialStatusMessage =
+                'Link your Plex account above to unlock the free trial.';
+              trialStatusTone = 'info';
+            } else if (normalizedStatus === 'active') {
+              trialButtonHidden = true;
+              trialButtonAvailable = false;
+              trialStatusMessage = '';
+            } else if (normalizedStatus === 'trial') {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              if (trialCountdownLabel) {
+                trialStatusMessage = `Trial active! Access expires in ${trialCountdownLabel}.`;
+              } else if (trialExpiresLabel) {
+                trialStatusMessage = `Trial active! Access expires on ${trialExpiresLabel}.`;
+              } else {
+                trialStatusMessage = 'Trial active! Access expires soon.';
+              }
+              trialStatusTone = 'success';
+            } else if (normalizedStatus === 'trial_expired') {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              if (trialExpiresLabel) {
+                trialStatusMessage = `Trial ended on ${trialExpiresLabel}. Start a PayPal subscription to continue.`;
+              } else {
+                trialStatusMessage =
+                  'Trial ended. Start a PayPal subscription to continue.';
+              }
+              trialStatusTone = 'error';
+            } else {
+              trialButtonHidden = false;
+              trialButtonAvailable = true;
+              trialStatusMessage =
+                'Try the server free for 7 days—no payment required.';
+              trialStatusTone = 'info';
+            }
+          }
+
+          if (trialButton) {
+            trialButton.classList.toggle('hidden', trialButtonHidden);
+            trialButton.disabled = !trialButtonAvailable;
+            trialButton.dataset.available = trialButtonAvailable ? 'true' : 'false';
+          }
+
+          if (trialStatus) {
+            setStatusText(trialStatus, trialStatusMessage, trialStatusTone);
+            if (trialStatusMessage) {
+              trialStatus.classList.add('small');
+            } else {
+              trialStatus.classList.remove('small');
+            }
+          }
+
+          const subscriptionButtonVisibleNow = Boolean(
+            subscriptionButton &&
+              !subscriptionButton.classList.contains('hidden')
+          );
+          const trialVisible = Boolean(
+            trialButton && !trialButton.classList.contains('hidden')
+          );
+          const trialMessageVisible = Boolean(
+            trialStatus && trialStatus.textContent.trim().length > 0
+          );
+
+          const shouldShowSubscriptionCta =
+            subscriptionButtonVisibleNow || trialVisible || trialMessageVisible;
+
+          setElementVisibility(subscriptionCta, shouldShowSubscriptionCta);
         }
 
         profileEmail.value = donor.email || '';
@@ -3544,6 +3738,58 @@
             return;
           }
           await openDashboardSubscriptionCheckout();
+        });
+      }
+
+      if (trialButton) {
+        trialButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (trialButton.disabled || trialButton.dataset.available !== 'true') {
+            return;
+          }
+
+          trialButton.disabled = true;
+          trialButton.dataset.available = 'false';
+          trialButton.textContent = 'Starting trial…';
+
+          if (trialStatus) {
+            setStatusText(trialStatus, 'Activating your trial…', 'info');
+            trialStatus.classList.add('small');
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/trial', {
+              method: 'POST',
+            });
+            let payload;
+            try {
+              payload = await response.json();
+            } catch (err) {
+              payload = {};
+            }
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to start a trial.');
+            }
+            if (trialStatus) {
+              setStatusText(
+                trialStatus,
+                'Trial activated! Refreshing your dashboard…',
+                'success'
+              );
+              trialStatus.classList.add('small');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            if (trialStatus) {
+              setStatusText(trialStatus, err.message, 'error');
+              trialStatus.classList.add('small');
+            }
+            trialButton.disabled = false;
+            trialButton.dataset.available = 'true';
+          } finally {
+            trialButton.textContent = defaultTrialButtonLabel;
+          }
         });
       }
 
