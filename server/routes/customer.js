@@ -22,6 +22,7 @@ const {
   addSupportMessageToRequest,
   listSupportRequests,
   getSupportThreadForDonor,
+  startDonorTrial,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
@@ -403,6 +404,7 @@ function buildDashboardResponse({
           status: donor.status,
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
+          accessExpiresAt: donor.accessExpiresAt || null,
           hasPassword: Boolean(donor.hasPassword),
           emailVerified: Boolean(donor.emailVerified),
           emailVerifiedAt: donor.emailVerifiedAt || null,
@@ -1475,6 +1477,60 @@ router.post(
       response.warnings = warnings;
     }
     return res.json(response);
+  })
+);
+
+router.post(
+  '/trial',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    res.locals.sessionToken = ensureSessionToken(req);
+
+    if (!hasPlexLink(donor)) {
+      return res.status(409).json({
+        error: 'Link your Plex account before starting a trial.',
+      });
+    }
+
+    const status = (donor.status || '').toLowerCase();
+    if (status === 'active') {
+      return res.status(409).json({
+        error: 'Your access is already active.',
+      });
+    }
+
+    if (status === 'trial') {
+      return res.status(409).json({
+        error: 'A trial is already in progress.',
+      });
+    }
+
+    const trialDonor = startDonorTrial(donor.id);
+    req.customer.donor = trialDonor;
+
+    logEvent('donor.trial.started', {
+      donorId: trialDonor.id,
+      route: 'customer',
+      accessExpiresAt: trialDonor.accessExpiresAt,
+    });
+
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(trialDonor.id);
+    const pendingPlexLink = getPendingPlexLink(req, trialDonor);
+
+    return res.json(
+      buildDashboardResponse({
+        donor: trialDonor,
+        invite,
+        pendingPlexLink,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      })
+    );
   })
 );
 

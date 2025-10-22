@@ -16,6 +16,7 @@ const {
   db,
   listDonorsWithExpiredAccess,
   setDonorAccessExpirationById,
+  setDonorStatusById,
   logEvent,
 } = require('./db');
 
@@ -130,11 +131,25 @@ async function processAccessExpirations() {
 
     for (const donor of donors) {
       try {
-        await webhookRouter.revokeDonorAccess(donor);
+        let donorForRevocation = donor;
+        let statusForEvent = donor.status;
+
+        if ((donor.status || '').toLowerCase() === 'trial') {
+          const updatedDonor = setDonorStatusById(donor.id, 'trial_expired');
+          if (updatedDonor) {
+            donorForRevocation = updatedDonor;
+            statusForEvent = updatedDonor.status;
+          } else {
+            statusForEvent = 'trial_expired';
+          }
+        }
+
+        await webhookRouter.revokeDonorAccess(donorForRevocation);
         setDonorAccessExpirationById(donor.id, null);
         logEvent('donor.access.expiration.reached', {
           donorId: donor.id,
           subscriptionId: donor.subscriptionId,
+          status: statusForEvent,
           source: 'scheduled-job',
         });
       } catch (err) {
