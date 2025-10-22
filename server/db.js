@@ -577,6 +577,12 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE paypal_subscription_id = @subscriptionId`
   ),
+  updateDonorStatusById: db.prepare(
+    `UPDATE donors
+     SET status = @status,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   updateDonorAccessExpirationBySubscription: db.prepare(
     `UPDATE donors
      SET access_expires_at = @accessExpiresAt,
@@ -592,7 +598,7 @@ const statements = {
   listDonors: db.prepare('SELECT * FROM donors ORDER BY created_at DESC'),
   listDonorsWithExpiredAccess: db.prepare(
     `SELECT * FROM donors
-     WHERE lower(status) IN ('cancelled', 'expired', 'suspended')
+     WHERE lower(status) IN ('cancelled', 'expired', 'suspended', 'trial')
        AND access_expires_at IS NOT NULL
        AND DATETIME(access_expires_at) <= DATETIME('now')
      ORDER BY access_expires_at ASC`
@@ -1612,6 +1618,48 @@ function setDonorAccessExpirationById(donorId, accessExpiresAt = null) {
   return mapDonor(statements.getDonorById.get(donorId));
 }
 
+function setDonorStatusById(donorId, status) {
+  if (!donorId) {
+    throw new Error('donorId is required to update status');
+  }
+
+  statements.updateDonorStatusById.run({
+    id: donorId,
+    status: status || null,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+const startDonorTrialTransaction = db.transaction((donorId, accessExpiresAt) => {
+  statements.updateDonorStatusById.run({
+    id: donorId,
+    status: 'trial',
+  });
+  statements.updateDonorAccessExpirationById.run({
+    id: donorId,
+    accessExpiresAt,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+});
+
+function startDonorTrial(donorId, { durationMs } = {}) {
+  if (!donorId) {
+    throw new Error('donorId is required to start a trial');
+  }
+
+  const DEFAULT_TRIAL_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+  const trialDuration =
+    Number.isFinite(durationMs) && durationMs > 0
+      ? durationMs
+      : DEFAULT_TRIAL_DURATION_MS;
+
+  const expiresAt = normalizeAccessExpiresAt(Date.now() + trialDuration);
+
+  return startDonorTrialTransaction(donorId, expiresAt);
+}
+
 function listDonorsWithExpiredAccess() {
   return statements.listDonorsWithExpiredAccess.all().map(mapDonor);
 }
@@ -2013,6 +2061,7 @@ module.exports = {
   db,
   upsertDonor,
   updateDonorStatus,
+  setDonorStatusById,
   getDonorBySubscriptionId,
   getDonorById,
   listInvitesForDonor,
@@ -2056,6 +2105,7 @@ module.exports = {
   clearDonorPlexIdentity,
   setDonorAccessExpirationBySubscription,
   setDonorAccessExpirationById,
+  startDonorTrial,
   listDonorsWithExpiredAccess,
   getRecentEvents,
   getAllSettings,

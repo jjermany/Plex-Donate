@@ -25,6 +25,7 @@ const {
   setDonorAccessExpirationBySubscription,
   resetDonorEmailVerification,
   createDonorEmailVerificationToken,
+  startDonorTrial,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
@@ -283,6 +284,7 @@ function buildShareResponse({
           status: donor.status,
           subscriptionId: donor.subscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
+          accessExpiresAt: donor.accessExpiresAt || null,
           hasPassword: Boolean(donor.hasPassword),
           plexLinked: hasPlexLink(donor),
           plexAccountId: donor.plexAccountId || null,
@@ -771,6 +773,96 @@ router.post(
     if (warnings.length > 0) {
       response.warnings = warnings;
     }
+    return res.json(response);
+  })
+);
+
+router.post(
+  '/:token/trial',
+  asyncHandler(async (req, res) => {
+    const shareLink = getShareLinkByToken(req.params.token);
+    if (!shareLink) {
+      return res.status(404).json({ error: 'Share link not found' });
+    }
+
+    if (!shareLink.donorId) {
+      return res.status(404).json({ error: 'Share link is no longer valid' });
+    }
+
+    const providedSessionToken = getProvidedSessionToken(req);
+    if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
+      return res.status(401).json({ error: 'Invalid or missing share session token' });
+    }
+
+    const donor = getDonorById(shareLink.donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Share link is no longer valid' });
+    }
+
+    if (!hasPlexLink(donor)) {
+      return res.status(409).json({
+        error: 'Link your Plex account from the dashboard before starting a trial.',
+      });
+    }
+
+    const status = (donor.status || '').toLowerCase();
+    if (status === 'active') {
+      return res.status(409).json({
+        error: 'This subscription already has active access.',
+      });
+    }
+
+    if (status === 'trial') {
+      return res.status(409).json({
+        error: 'A trial is already in progress for this donor.',
+      });
+    }
+
+    const trialDonor = startDonorTrial(donor.id);
+
+    logEvent('donor.trial.started', {
+      donorId: trialDonor.id,
+      shareLinkId: shareLink.id,
+      route: 'share',
+      accessExpiresAt: trialDonor.accessExpiresAt,
+    });
+
+    const {
+      activeInvite,
+      latestInvite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+      shareInvite,
+    } = getInviteState(trialDonor.id);
+
+    const origin = resolvePublicBaseUrl(req);
+    const shareInviteDetails = buildShareInviteDetails(shareInvite, origin);
+    const inviteForResponse = activeInvite || latestInvite || null;
+    const invitePayload = inviteForResponse
+      ? {
+          ...inviteForResponse,
+          inviteUrl:
+            shareInviteDetails?.inviteUrl || inviteForResponse.inviteUrl || '',
+        }
+      : null;
+
+    if (invitePayload && shareInviteDetails) {
+      invitePayload.shareLink = shareInviteDetails;
+    }
+
+    const { response } = await createShareResponse(
+      {
+        shareLink,
+        donor: trialDonor,
+        invite: invitePayload,
+        prospect: null,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+        shareInvite: shareInviteDetails,
+      },
+      { logContext: 'share trial start' }
+    );
+
     return res.json(response);
   })
 );
