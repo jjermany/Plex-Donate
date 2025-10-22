@@ -183,6 +183,83 @@
         box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
         backdrop-filter: blur(18px);
       }
+      .trial-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      .trial-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(139, 92, 246, 0.55));
+        color: #eef2ff;
+        border: 1px solid rgba(165, 180, 252, 0.45);
+        box-shadow: 0 18px 40px -28px rgba(99, 102, 241, 0.9);
+      }
+      .trial-countdown {
+        margin-top: 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px;
+        align-items: stretch;
+        justify-content: space-between;
+      }
+      .trial-countdown-time {
+        flex: 1 1 180px;
+        min-width: 160px;
+        max-width: 220px;
+        display: grid;
+        gap: 12px;
+        justify-items: center;
+        padding: 20px;
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        background: rgba(30, 41, 59, 0.65);
+        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.15);
+      }
+      .trial-countdown-value {
+        font-size: clamp(2.6rem, 6vw, 3.4rem);
+        font-weight: 700;
+        line-height: 1;
+        color: #c7d2fe;
+      }
+      .trial-countdown-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(203, 213, 225, 0.8);
+      }
+      .trial-countdown-details {
+        flex: 2 1 260px;
+        display: grid;
+        gap: 12px;
+      }
+      .trial-countdown-details strong {
+        color: #e0e7ff;
+      }
+      .trial-countdown-highlight {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(79, 70, 229, 0.2);
+        border: 1px solid rgba(165, 180, 252, 0.35);
+        color: rgba(226, 232, 240, 0.92);
+        font-size: 0.85rem;
+        font-weight: 600;
+        width: fit-content;
+      }
       .support-container {
         margin-top: 20px;
         display: grid;
@@ -992,6 +1069,33 @@
                 </div>
               </article>
 
+              <article id="trial-panel" class="surface hidden" hidden>
+                <div class="trial-panel-header">
+                  <div>
+                    <h2 class="section-title">Free trial countdown</h2>
+                    <p class="muted small">
+                      Upgrade before the countdown ends to keep streaming without
+                      interruption.
+                    </p>
+                  </div>
+                  <span class="trial-badge">Trial</span>
+                </div>
+                <div class="trial-countdown">
+                  <div class="trial-countdown-time">
+                    <span id="trial-days-remaining" class="trial-countdown-value">0</span>
+                    <span id="trial-days-label" class="trial-countdown-label"
+                      >days remaining</span
+                    >
+                  </div>
+                  <div class="trial-countdown-details">
+                    <span class="trial-countdown-highlight">
+                      Trial ends on <strong id="trial-end-date">—</strong>
+                    </span>
+                    <p id="trial-countdown-detail" class="muted small"></p>
+                  </div>
+                </div>
+              </article>
+
               <article class="surface">
                 <h2 class="section-title">Update your profile</h2>
                 <p class="muted">
@@ -1419,6 +1523,15 @@
       const subscriptionNote = document.getElementById('subscription-note');
       const trialButton = document.getElementById('trial-button');
       const trialStatus = document.getElementById('trial-status');
+      const trialPanel = document.getElementById('trial-panel');
+      const trialDaysRemainingValue = document.getElementById(
+        'trial-days-remaining'
+      );
+      const trialDaysLabel = document.getElementById('trial-days-label');
+      const trialEndDate = document.getElementById('trial-end-date');
+      const trialCountdownDetail = document.getElementById(
+        'trial-countdown-detail'
+      );
       const memberStatusMessage = document.getElementById('member-status-message');
       const plexLinkButton = document.getElementById('plex-link-button');
       const plexLinkStatus = document.getElementById('plex-link-status');
@@ -2146,6 +2259,19 @@
           return parts[0];
         }
         return `${parts[0]} and ${parts[1]}`;
+      }
+
+      function getTrialDaysRemaining(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return null;
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return 0;
+        }
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
+        return Math.floor(diff / MS_PER_DAY);
       }
 
       function clearInviteCooldownTimer() {
@@ -3228,6 +3354,63 @@
         const accessExpiresAt = donor ? donor.accessExpiresAt : null;
         const trialCountdownLabel = getTrialCountdownLabel(accessExpiresAt);
         const trialExpiresLabel = formatDateTime(accessExpiresAt);
+        const trialDaysRemaining = getTrialDaysRemaining(accessExpiresAt);
+        const trialExpiresDate = parseDate(accessExpiresAt);
+        const trialHasTimeRemaining = Boolean(
+          trialExpiresDate && trialExpiresDate.getTime() > Date.now()
+        );
+
+        if (trialPanel) {
+          const shouldShowTrialPanel =
+            normalizedStatus === 'trial' && trialHasTimeRemaining;
+          setElementVisibility(trialPanel, shouldShowTrialPanel);
+
+          if (shouldShowTrialPanel) {
+            const normalizedDaysRemaining =
+              typeof trialDaysRemaining === 'number'
+                ? Math.max(0, trialDaysRemaining)
+                : 0;
+            if (trialDaysRemainingValue) {
+              trialDaysRemainingValue.textContent = `${normalizedDaysRemaining}`;
+            }
+            if (trialDaysLabel) {
+              trialDaysLabel.textContent =
+                normalizedDaysRemaining === 1
+                  ? 'day remaining'
+                  : 'days remaining';
+            }
+            if (trialEndDate) {
+              trialEndDate.textContent = trialExpiresLabel || '—';
+            }
+            if (trialCountdownDetail) {
+              if (trialCountdownLabel) {
+                if (normalizedDaysRemaining === 0) {
+                  trialCountdownDetail.textContent = `Less than a day remaining (${trialCountdownLabel}).`;
+                } else {
+                  trialCountdownDetail.textContent = `Approximately ${trialCountdownLabel} left in your trial.`;
+                }
+              } else if (trialHasTimeRemaining) {
+                trialCountdownDetail.textContent =
+                  'Less than a day left in your trial.';
+              } else {
+                trialCountdownDetail.textContent = '';
+              }
+            }
+          } else {
+            if (trialCountdownDetail) {
+              trialCountdownDetail.textContent = '';
+            }
+            if (trialDaysRemainingValue) {
+              trialDaysRemainingValue.textContent = '0';
+            }
+            if (trialDaysLabel) {
+              trialDaysLabel.textContent = 'days remaining';
+            }
+            if (trialEndDate) {
+              trialEndDate.textContent = '—';
+            }
+          }
+        }
 
         if (subscriptionCta) {
           let subscriptionButtonVisible = false;
