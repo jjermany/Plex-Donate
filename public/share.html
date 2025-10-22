@@ -445,6 +445,15 @@
                 access.
               </li>
             </ul>
+            <div id="trial-cta" class="cta hidden">
+              <h3>Preview the library</h3>
+              <p class="muted small" id="trial-message">
+                Link Plex and kick off a 7-day trial before you subscribe. We'll hold your spot while
+                you explore the library.
+              </p>
+              <button id="trial-button" class="cta-button">Start 7-day trial</button>
+              <p id="trial-status" class="status-text small"></p>
+            </div>
             <div class="cta">
               <h3>After you join</h3>
               <p class="muted">
@@ -598,7 +607,14 @@
         isProspect: false,
         inviteLimitReached: false,
         nextInviteAvailableAt: null,
+        normalizedStatus: 'pending',
+        accessExpiresAt: null,
+        plexLinked: false,
+        hasSevereIssue: false,
+        trialRequestPending: false,
       };
+      const DEFAULT_TRIAL_MESSAGE =
+        "Link Plex and kick off a 7-day trial before you subscribe. We'll hold your spot while you explore the library.";
       let inviteCooldownTimer = null;
       let inviteCooldownTimerType = null;
 
@@ -611,6 +627,10 @@
       const accountNameInput = document.getElementById('account-name');
       const accountPasswordInput = document.getElementById('account-password');
       const accountConfirmInput = document.getElementById('account-confirm');
+      const trialCta = document.getElementById('trial-cta');
+      const trialMessage = document.getElementById('trial-message');
+      const trialStatus = document.getElementById('trial-status');
+      const trialButton = document.getElementById('trial-button');
       const accountSubscriptionRow = document.getElementById(
         'account-subscription-row'
       );
@@ -682,6 +702,40 @@
         }
       }
 
+      function getTrialCountdownLabel(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return '';
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return '';
+        }
+        const totalMinutes = Math.max(0, Math.floor(diff / 60000));
+        const minutesPerDay = 24 * 60;
+        const minutesPerHour = 60;
+        const days = Math.floor(totalMinutes / minutesPerDay);
+        const hours = Math.floor((totalMinutes % minutesPerDay) / minutesPerHour);
+        const minutes = totalMinutes % minutesPerHour;
+        const parts = [];
+        if (days > 0) {
+          parts.push(`${days} day${days === 1 ? '' : 's'}`);
+        }
+        if (hours > 0) {
+          parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+        }
+        if (parts.length < 2 && minutes > 0) {
+          parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+        }
+        if (parts.length === 0) {
+          return 'less than a minute';
+        }
+        if (parts.length === 1) {
+          return parts[0];
+        }
+        return `${parts[0]} and ${parts[1]}`;
+      }
+
       function isShareInviteExpired(invite) {
         if (!invite || !invite.expiresAt) {
           return false;
@@ -747,6 +801,127 @@
           }, delay);
           inviteCooldownTimerType = 'timeout';
         }
+      }
+
+      function setTrialStatus(message, tone = 'info') {
+        if (!trialStatus) {
+          return;
+        }
+        const baseClass = 'status-text small';
+        const normalizedMessage = typeof message === 'string' ? message.trim() : '';
+        if (!normalizedMessage) {
+          trialStatus.textContent = '';
+          trialStatus.className = baseClass;
+          return;
+        }
+        trialStatus.textContent = normalizedMessage;
+        let toneClass = 'info';
+        if (tone === 'error') {
+          toneClass = 'error';
+        } else if (tone === 'success') {
+          toneClass = 'success';
+        }
+        trialStatus.className = `${baseClass} ${toneClass}`;
+      }
+
+      function updateTrialCta({
+        donor = null,
+        normalizedStatus = 'pending',
+        plexLinked = false,
+        trialCountdownLabel = '',
+        trialExpiresLabel = '',
+        hasSevereIssue = false,
+      } = {}) {
+        if (!trialCta) {
+          return;
+        }
+
+        if (!donor || normalizedStatus === 'active') {
+          trialCta.classList.add('hidden');
+          if (trialMessage) {
+            trialMessage.textContent = DEFAULT_TRIAL_MESSAGE;
+          }
+          if (trialButton) {
+            trialButton.disabled = true;
+            trialButton.textContent = 'Start 7-day trial';
+          }
+          setTrialStatus('');
+          return;
+        }
+
+        trialCta.classList.remove('hidden');
+
+        let message = DEFAULT_TRIAL_MESSAGE;
+        let buttonLabel = 'Start 7-day trial';
+        let disableButton = false;
+        let statusMessage = '';
+        let statusTone = 'info';
+
+        if (!plexLinked) {
+          message = 'Link your Plex account above to unlock the 7-day trial.';
+          disableButton = true;
+        }
+
+        if (hasSevereIssue) {
+          message = 'This subscription needs attention before a trial can be started.';
+          statusMessage = 'Resolve your subscription status from the dashboard to continue.';
+          statusTone = 'error';
+          disableButton = true;
+        }
+
+        if (normalizedStatus === 'trial') {
+          message = 'Your 7-day trial is active.';
+          buttonLabel = 'Trial in progress';
+          disableButton = true;
+          if (trialCountdownLabel) {
+            statusMessage = `Access expires in ${trialCountdownLabel}.`;
+          } else if (trialExpiresLabel) {
+            statusMessage = `Access expires on ${trialExpiresLabel}.`;
+          } else {
+            statusMessage = 'Access expires soon.';
+          }
+        } else if (normalizedStatus === 'trial_expired') {
+          message = 'Your free trial has ended. Start a PayPal subscription to keep streaming.';
+          disableButton = true;
+          statusMessage = trialExpiresLabel
+            ? `Trial ended on ${trialExpiresLabel}.`
+            : 'Trial access has ended.';
+          statusTone = 'error';
+        }
+
+        if (state.trialRequestPending) {
+          buttonLabel = 'Starting trial…';
+          disableButton = true;
+          statusMessage = 'Starting your trial…';
+          statusTone = 'info';
+        }
+
+        if (trialMessage) {
+          trialMessage.textContent = message;
+        }
+        if (trialButton) {
+          trialButton.disabled = disableButton;
+          trialButton.textContent = buttonLabel;
+        }
+        setTrialStatus(statusMessage, statusTone);
+      }
+
+      function applyTrialCtaFromState() {
+        if (!trialCta) {
+          return;
+        }
+        const donor = state.data && state.data.donor ? state.data.donor : null;
+        const normalizedStatus = state.normalizedStatus || 'pending';
+        const plexLinked = Boolean(state.plexLinked);
+        const accessExpiresAt = state.accessExpiresAt;
+        updateTrialCta({
+          donor,
+          normalizedStatus,
+          plexLinked,
+          trialCountdownLabel: getTrialCountdownLabel(accessExpiresAt),
+          trialExpiresLabel: formatDateTime(accessExpiresAt),
+          hasSevereIssue: Boolean(state.hasSevereIssue),
+        });
       }
 
       function renderInvite(
@@ -873,6 +1048,7 @@
       }
 
       function render(data) {
+        state.trialRequestPending = false;
         state.data = data;
         state.sessionToken =
           data && data.shareLink && data.shareLink.sessionToken
@@ -896,6 +1072,11 @@
           : 'pending'
         ).toLowerCase();
         const isActive = normalizedStatus === 'active';
+        const accessExpiresAt = donor && donor.accessExpiresAt
+          ? donor.accessExpiresAt
+          : null;
+        const trialCountdownLabel = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresLabel = formatDateTime(accessExpiresAt);
         const accountReady = Boolean(donor && donor.hasPassword);
         const shareState = data.shareState || {};
         const plexLinked = Boolean(donor && donor.plexLinked);
@@ -915,6 +1096,9 @@
         state.plexShared = plexShared;
         state.plexPending = plexPending;
         state.needsPlexInvite = needsPlexInvite;
+        state.normalizedStatus = normalizedStatus;
+        state.accessExpiresAt = accessExpiresAt;
+        state.plexLinked = plexLinked;
         const limitReached = Boolean(data.inviteLimitReached);
         state.inviteLimitReached = limitReached;
         const nextInviteAvailableAt = data.nextInviteAvailableAt || null;
@@ -948,6 +1132,8 @@
 
         const severeStatuses = new Set(['cancelled', 'suspended', 'expired']);
         const hasSevereIssue = !isProspect && severeStatuses.has(normalizedStatus);
+        state.hasSevereIssue = hasSevereIssue;
+        applyTrialCtaFromState();
         const inviteLocked = isProspect || !plexLinked || !isActive || limitReached;
 
         if (generateButton) {
@@ -987,6 +1173,22 @@
           } else if (hasSevereIssue) {
             actionStatus.textContent =
               'This subscription needs attention before another referral invite can be generated. Contact the server admin if you need help.';
+            actionStatus.className = 'status-text error';
+          } else if (normalizedStatus === 'trial') {
+            if (trialCountdownLabel) {
+              actionStatus.textContent = `Your 7-day trial is active. Access expires in ${trialCountdownLabel}. Subscribe to unlock referral invites.`;
+            } else if (trialExpiresLabel) {
+              actionStatus.textContent = `Your 7-day trial is active. Access expires on ${trialExpiresLabel}. Subscribe to unlock referral invites.`;
+            } else {
+              actionStatus.textContent = 'Your 7-day trial is active. Subscribe to unlock referral invites.';
+            }
+            actionStatus.className = 'status-text info';
+          } else if (normalizedStatus === 'trial_expired') {
+            if (trialExpiresLabel) {
+              actionStatus.textContent = `Your 7-day trial ended on ${trialExpiresLabel}. Start a subscription to generate referral invites.`;
+            } else {
+              actionStatus.textContent = 'Your 7-day trial has ended. Start a subscription to generate referral invites.';
+            }
             actionStatus.className = 'status-text error';
           } else {
             actionStatus.textContent =
@@ -1204,6 +1406,56 @@
             accountSubmit.disabled = false;
             accountPasswordInput.value = '';
             accountConfirmInput.value = '';
+          }
+        });
+      }
+
+      if (trialButton) {
+        trialButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (
+            trialButton.disabled ||
+            state.trialRequestPending ||
+            !state.token
+          ) {
+            return;
+          }
+          if (!state.sessionToken) {
+            setTrialStatus(
+              'Refresh this page to start your trial—your session has expired.',
+              'error'
+            );
+            return;
+          }
+
+          state.trialRequestPending = true;
+          applyTrialCtaFromState();
+
+          const headers = { 'Content-Type': 'application/json' };
+          headers['X-Share-Session'] = state.sessionToken;
+          headers['Authorization'] = `Bearer ${state.sessionToken}`;
+
+          try {
+            const response = await fetch(
+              `/api/share/${encodeURIComponent(state.token)}/trial`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ sessionToken: state.sessionToken }),
+              }
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+              if (payload && payload.payload) {
+                render(payload.payload);
+              }
+              throw new Error(payload.error || 'Failed to start trial');
+            }
+            render(payload);
+          } catch (err) {
+            state.trialRequestPending = false;
+            applyTrialCtaFromState();
+            setTrialStatus(err.message, 'error');
           }
         });
       }
