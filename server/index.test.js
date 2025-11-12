@@ -14,6 +14,8 @@ process.env.DATABASE_FILE = path.join(tempDataDir, 'database.sqlite');
 const config = require('./config');
 config.dataDir = tempDataDir;
 
+const { createDonor, getDonorById } = require('./db');
+const paypalService = require('./services/paypal');
 const app = require('./index');
 
 test('dashboard routes serve the customer dashboard HTML', async (t) => {
@@ -35,4 +37,42 @@ test('dashboard routes serve the customer dashboard HTML', async (t) => {
     const body = await response.text();
     assert.match(body, /<title>Plex Donate Dashboard<\/title>/);
   }
+});
+
+test('scheduled subscription refresh updates donor payment timestamp', async (t) => {
+  const isoDate = new Date().toISOString();
+  const originalGetSubscription = paypalService.getSubscription;
+  let subscriptionCalls = 0;
+
+  paypalService.getSubscription = async (subscriptionId) => {
+    subscriptionCalls += 1;
+    assert.equal(subscriptionId, 'I-REFRESH123');
+    return {
+      status: 'ACTIVE',
+      billing_info: {
+        last_payment: { time: isoDate },
+      },
+    };
+  };
+
+  t.after(() => {
+    paypalService.getSubscription = originalGetSubscription;
+  });
+
+  const donor = createDonor({
+    email: 'refresh-job@example.com',
+    name: 'Refresh Job',
+    subscriptionId: 'I-REFRESH123',
+    status: 'pending',
+  });
+
+  assert.equal(donor.lastPaymentAt, null);
+
+  await app.processSubscriptionRefreshes();
+
+  const updatedDonor = getDonorById(donor.id);
+
+  assert.equal(subscriptionCalls, 1);
+  assert.equal(updatedDonor.lastPaymentAt, isoDate);
+  assert.equal((updatedDonor.status || '').toLowerCase(), 'active');
 });

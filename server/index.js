@@ -9,12 +9,14 @@ const webhookRouter = require('./routes/webhook');
 const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
+const { refreshDonorSubscription } = require('./utils/donor-subscriptions');
 const SqliteSessionStore = require('./session-store');
 const { initializeAdminCredentials } = require('./state/admin-credentials');
 const { clearSessionToken } = require('./utils/session-tokens');
 const {
   db,
   listDonorsWithExpiredAccess,
+  listDonorsWithSubscriptionId,
   setDonorAccessExpirationById,
   setDonorStatusById,
   logEvent,
@@ -25,6 +27,7 @@ const app = express();
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const SESSION_TTL_MS = 1000 * 60 * 15;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
+const SUBSCRIPTION_REFRESH_INTERVAL_MS = 1000 * 60 * 5;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 
@@ -112,6 +115,25 @@ app.use((err, req, res, next) => {
 });
 
 let isProcessingAccessExpirations = false;
+let isProcessingSubscriptionRefreshes = false;
+const activeSubscriptionRefreshes = new Set();
+
+function getSubscriptionRefreshKey(donor) {
+  if (!donor) {
+    return '';
+  }
+
+  const subscriptionId = (donor.subscriptionId || '').toString().trim();
+  if (subscriptionId) {
+    return `subscription:${subscriptionId}`;
+  }
+
+  if (donor.id) {
+    return `donor:${donor.id}`;
+  }
+
+  return '';
+}
 
 async function processAccessExpirations() {
   if (isProcessingAccessExpirations) {
@@ -177,8 +199,72 @@ function scheduleAccessExpirationJob() {
   setInterval(run, ACCESS_REVOCATION_CHECK_INTERVAL_MS);
 }
 
+async function processSubscriptionRefreshes() {
+  if (isProcessingSubscriptionRefreshes) {
+    return;
+  }
+
+  isProcessingSubscriptionRefreshes = true;
+  try {
+    const donors = listDonorsWithSubscriptionId();
+    if (!Array.isArray(donors) || donors.length === 0) {
+      return;
+    }
+
+    for (const donor of donors) {
+      const refreshKey = getSubscriptionRefreshKey(donor);
+      if (!refreshKey) {
+        continue;
+      }
+
+      if (activeSubscriptionRefreshes.has(refreshKey)) {
+        continue;
+      }
+
+      activeSubscriptionRefreshes.add(refreshKey);
+      try {
+        await refreshDonorSubscription(donor, {
+          onError: (refreshErr) =>
+            logger.warn(
+              'Failed to refresh PayPal subscription from scheduled job',
+              {
+                donorId: donor.id,
+                subscriptionId: donor.subscriptionId,
+                error: refreshErr && refreshErr.message,
+              }
+            ),
+        });
+      } catch (err) {
+        logger.warn('Failed to process scheduled donor subscription refresh', {
+          donorId: donor.id,
+          subscriptionId: donor.subscriptionId,
+          error: err && err.message,
+        });
+      } finally {
+        activeSubscriptionRefreshes.delete(refreshKey);
+      }
+    }
+  } catch (err) {
+    logger.error('Subscription refresh sweep failed', err);
+  } finally {
+    isProcessingSubscriptionRefreshes = false;
+  }
+}
+
+function scheduleSubscriptionRefreshJob() {
+  const run = () => {
+    processSubscriptionRefreshes().catch((err) => {
+      logger.error('Unhandled error while refreshing donor subscriptions', err);
+    });
+  };
+
+  run();
+  setInterval(run, SUBSCRIPTION_REFRESH_INTERVAL_MS);
+}
+
 if (config.env !== 'test') {
   scheduleAccessExpirationJob();
+  scheduleSubscriptionRefreshJob();
 
   app.listen(config.port, () => {
     logger.info(`Plex Donate server listening on port ${config.port}`);
@@ -187,3 +273,4 @@ if (config.env !== 'test') {
 
 module.exports = app;
 module.exports.processAccessExpirations = processAccessExpirations;
+module.exports.processSubscriptionRefreshes = processSubscriptionRefreshes;
