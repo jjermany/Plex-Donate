@@ -595,6 +595,13 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  listDonorsWithSubscriptionId: db.prepare(
+    `SELECT *
+       FROM donors
+      WHERE paypal_subscription_id IS NOT NULL
+        AND TRIM(paypal_subscription_id) <> ''
+      ORDER BY updated_at ASC`
+  ),
   listDonors: db.prepare('SELECT * FROM donors ORDER BY created_at DESC'),
   listDonorsWithExpiredAccess: db.prepare(
     `SELECT * FROM donors
@@ -1266,6 +1273,10 @@ function listDonorsWithDetails() {
       mapInviteLink(statements.getInviteLinkByDonorId.get(donor.id))
     ),
   }));
+}
+
+function listDonorsWithSubscriptionId() {
+  return statements.listDonorsWithSubscriptionId.all().map(mapDonor);
 }
 
 function listShareLinks() {
@@ -2082,6 +2093,7 @@ module.exports = {
   clearDonorEmailVerificationTokens,
   deleteEmailVerificationTokenById,
   listDonorsWithDetails,
+  listDonorsWithSubscriptionId,
   listShareLinks,
   createInvite,
   markInviteEmailSent,
