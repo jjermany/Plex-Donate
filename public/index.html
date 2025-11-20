@@ -555,6 +555,14 @@
         width: min(260px, calc(100vw - 48px));
         z-index: 20;
         backdrop-filter: blur(12px);
+        max-height: 400px;
+        overflow-y: auto;
+      }
+
+      /* Open menu upward when near bottom of viewport */
+      .action-menu.open-upward .action-menu-panel {
+        top: auto;
+        bottom: calc(100% + 8px);
       }
 
       .action-menu.open .action-menu-panel {
@@ -716,6 +724,323 @@
         /* Remove horizontal scroll on mobile for these sections */
         #dashboard-view-donors .panel > div[style*="overflow-x"] {
           overflow-x: visible !important;
+        }
+      }
+
+      /* Donors master-detail layout */
+      .donors-panel-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+
+      .donors-controls {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .donors-search-input {
+        padding: 8px 14px;
+        border: 1px solid var(--input-border);
+        border-radius: 10px;
+        background: var(--input-background);
+        font-size: 0.95rem;
+        min-width: 200px;
+        color: var(--text-primary);
+      }
+
+      .donors-search-input:focus {
+        outline: 2px solid var(--button-primary-bg);
+        outline-offset: 2px;
+      }
+
+      .donors-filter-tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--table-border);
+      }
+
+      .donors-filter-tab {
+        appearance: none;
+        border: 1px solid var(--table-border);
+        border-radius: 20px;
+        padding: 8px 16px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .donors-filter-tab:hover {
+        background: var(--table-hover);
+        border-color: var(--button-primary-bg);
+      }
+
+      .donors-filter-tab.active {
+        background: var(--button-primary-bg);
+        color: var(--button-primary-color);
+        border-color: var(--button-primary-bg);
+      }
+
+      .filter-count {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.25);
+        font-size: 0.8rem;
+      }
+
+      .donors-filter-tab:not(.active) .filter-count {
+        background: var(--badge-bg);
+        color: var(--badge-color);
+      }
+
+      .donors-layout {
+        display: grid;
+        gap: 24px;
+        grid-template-columns: 350px 1fr;
+        min-height: 500px;
+      }
+
+      .donors-list {
+        display: grid;
+        gap: 10px;
+        max-height: 700px;
+        overflow-y: auto;
+        padding-right: 8px;
+        align-content: flex-start;
+      }
+
+      .donors-list::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .donors-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .donors-list::-webkit-scrollbar-thumb {
+        background: var(--table-border);
+        border-radius: 4px;
+      }
+
+      .donors-list::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted-soft);
+      }
+
+      .donor-card {
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.65);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: grid;
+        gap: 8px;
+      }
+
+      :root[data-theme='dark'] .donor-card {
+        background: rgba(15, 23, 42, 0.75);
+      }
+
+      .donor-card:hover,
+      .donor-card:focus,
+      .donor-card.selected {
+        border-color: rgba(99, 102, 241, 0.6);
+        box-shadow: 0 8px 16px -8px rgba(79, 70, 229, 0.4);
+        outline: none;
+      }
+
+      .donor-card.selected {
+        background: rgba(99, 102, 241, 0.08);
+      }
+
+      .donor-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .donor-card-info {
+        display: grid;
+        gap: 4px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .donor-card-name {
+        font-size: 0.95rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .donor-card-email {
+        font-size: 0.8rem;
+        color: var(--text-muted-soft);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .donor-card-status {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        flex-shrink: 0;
+      }
+
+      .donor-card-meta {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+      }
+
+      .donor-detail {
+        border: 1px solid var(--table-border);
+        border-radius: 16px;
+        padding: 24px;
+        background: rgba(255, 255, 255, 0.7);
+        display: grid;
+        gap: 24px;
+        max-height: 700px;
+        overflow-y: auto;
+      }
+
+      :root[data-theme='dark'] .donor-detail {
+        background: rgba(15, 23, 42, 0.85);
+      }
+
+      .donor-detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding-bottom: 16px;
+        border-bottom: 1px solid var(--table-border);
+      }
+
+      .donor-detail-header h3 {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+
+      .donor-detail-content {
+        display: grid;
+        gap: 20px;
+      }
+
+      .donor-detail-section h4 {
+        margin: 0 0 12px;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+
+      .donor-detail-field {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+
+      .field-label {
+        font-weight: 600;
+        min-width: 140px;
+      }
+
+      .donor-detail-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .donor-detail-actions button {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .donors-empty-state {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 400px;
+        font-size: 1.1rem;
+        color: var(--text-muted);
+        border: 2px dashed var(--table-border);
+        border-radius: 16px;
+        background: rgba(148, 163, 184, 0.05);
+      }
+
+      /* Mobile responsiveness for donors layout */
+      @media (max-width: 1024px) {
+        .donors-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .donors-list {
+          max-height: none;
+        }
+
+        .donor-detail {
+          max-height: none;
+        }
+
+        .donor-card {
+          cursor: pointer;
+        }
+
+        /* On mobile, detail view overlays the list */
+        .donors-layout.detail-active .donors-list {
+          display: none;
+        }
+
+        .donors-layout.detail-active .donors-empty-state {
+          display: none;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .donors-panel-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .donors-controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .donors-search-input {
+          min-width: 100%;
+        }
+
+        .donors-filter-tabs {
+          overflow-x: auto;
+          flex-wrap: nowrap;
+          padding-bottom: 12px;
+        }
+
+        .donor-detail {
+          padding: 16px;
+        }
+
+        .field-label {
+          min-width: 100px;
+          font-size: 0.85rem;
         }
       }
 
@@ -1960,27 +2285,94 @@
             </section>
             <div class="grid">
               <section class="panel">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                <div class="donors-panel-header">
                   <div>
                     <h2 style="margin:0 0 4px;">Active users</h2>
                     <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
                   </div>
-                  <button id="refresh-button" type="button" class="secondary">Refresh</button>
+                  <div class="donors-controls">
+                    <input
+                      type="search"
+                      id="donors-search"
+                      placeholder="Search donors..."
+                      class="donors-search-input"
+                    />
+                    <button id="refresh-button" type="button" class="secondary">Refresh</button>
+                  </div>
                 </div>
                 <p id="plex-status-note" class="muted-text" hidden></p>
-                <div style="overflow-x:auto;">
-                  <table id="subscribers-table">
-                    <thead>
-                      <tr>
-                        <th>User</th>
-                        <th>Status</th>
-                        <th>Last payment</th>
-                        <th>Invite</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
+
+                <!-- Filter tabs -->
+                <div class="donors-filter-tabs">
+                  <button type="button" class="donors-filter-tab active" data-filter="all">
+                    All <span class="filter-count" data-count-for="all">0</span>
+                  </button>
+                  <button type="button" class="donors-filter-tab" data-filter="active">
+                    Active <span class="filter-count" data-count-for="active">0</span>
+                  </button>
+                  <button type="button" class="donors-filter-tab" data-filter="pending">
+                    Pending <span class="filter-count" data-count-for="pending">0</span>
+                  </button>
+                  <button type="button" class="donors-filter-tab" data-filter="cancelled">
+                    Cancelled <span class="filter-count" data-count-for="cancelled">0</span>
+                  </button>
+                  <button type="button" class="donors-filter-tab" data-filter="suspended">
+                    Suspended <span class="filter-count" data-count-for="suspended">0</span>
+                  </button>
+                </div>
+
+                <!-- Master-detail layout -->
+                <div class="donors-layout">
+                  <div class="donors-list" id="donors-list"></div>
+                  <div class="donor-detail" id="donor-detail" hidden>
+                    <div class="donor-detail-header">
+                      <h3 id="donor-detail-name"></h3>
+                      <span class="status-pill" id="donor-detail-status"></span>
+                    </div>
+                    <div class="donor-detail-content">
+                      <div class="donor-detail-section">
+                        <h4>Contact Information</h4>
+                        <div class="donor-detail-field">
+                          <span class="field-label">Email:</span>
+                          <span id="donor-detail-email"></span>
+                        </div>
+                        <div class="donor-detail-field">
+                          <span class="field-label">Subscription ID:</span>
+                          <span id="donor-detail-sub-id"></span>
+                        </div>
+                      </div>
+
+                      <div class="donor-detail-section">
+                        <h4>Payment Information</h4>
+                        <div class="donor-detail-field">
+                          <span class="field-label">Last Payment:</span>
+                          <span id="donor-detail-last-payment"></span>
+                        </div>
+                        <div class="donor-detail-field">
+                          <span class="field-label">Amount:</span>
+                          <span id="donor-detail-amount"></span>
+                        </div>
+                      </div>
+
+                      <div class="donor-detail-section">
+                        <h4>Plex Invite Status</h4>
+                        <div id="donor-detail-invite"></div>
+                      </div>
+
+                      <div class="donor-detail-section" id="donor-detail-error-section" hidden>
+                        <h4>Status Notes</h4>
+                        <div id="donor-detail-error" class="status-note"></div>
+                      </div>
+
+                      <div class="donor-detail-section">
+                        <h4>Actions</h4>
+                        <div class="donor-detail-actions" id="donor-detail-actions"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="donors-empty-state" id="donors-empty-state">
+                    Select a donor to view details
+                  </div>
                 </div>
               </section>
 
@@ -2311,6 +2703,21 @@
         </div>
       </div>
     </div>
+
+    <template id="donor-card">
+      <div class="donor-card" role="button" tabindex="0">
+        <div class="donor-card-header">
+          <div class="donor-card-info">
+            <strong class="donor-card-name"></strong>
+            <span class="donor-card-email"></span>
+          </div>
+          <span class="status-pill donor-card-status"></span>
+        </div>
+        <div class="donor-card-meta">
+          <span class="donor-card-payment"></span>
+        </div>
+      </div>
+    </template>
 
     <template id="subscriber-row">
       <tr>
@@ -2814,6 +3221,22 @@
         if (toggle) {
           toggle.setAttribute('aria-expanded', 'true');
         }
+
+        // Detect if menu should open upward to avoid viewport overflow
+        window.requestAnimationFrame(() => {
+          const toggleRect = toggle ? toggle.getBoundingClientRect() : menu.getBoundingClientRect();
+          const panelHeight = panel ? panel.offsetHeight : 300; // Estimate if not yet rendered
+          const spaceBelow = window.innerHeight - toggleRect.bottom;
+          const spaceAbove = toggleRect.top;
+
+          // Open upward if not enough space below and more space above
+          if (spaceBelow < panelHeight + 20 && spaceAbove > spaceBelow) {
+            menu.classList.add('open-upward');
+          } else {
+            menu.classList.remove('open-upward');
+          }
+        });
+
         openSubscriberActionMenu = menu;
         window.requestAnimationFrame(() => {
           const firstItem = menu.querySelector(
