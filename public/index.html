@@ -2830,6 +2830,32 @@
       const adminAccountDescription = document.getElementById('admin-account-description');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
       const plexStatusNote = document.getElementById('plex-status-note');
+
+      // Master-detail donors layout elements
+      const donorsList = document.getElementById('donors-list');
+      const donorDetail = document.getElementById('donor-detail');
+      const donorsEmptyState = document.getElementById('donors-empty-state');
+      const donorsSearchInput = document.getElementById('donors-search');
+      const donorsFilterTabs = document.querySelectorAll('.donors-filter-tab');
+      const donorsLayout = document.querySelector('.donors-layout');
+
+      // Donor detail elements
+      const donorDetailName = document.getElementById('donor-detail-name');
+      const donorDetailStatus = document.getElementById('donor-detail-status');
+      const donorDetailEmail = document.getElementById('donor-detail-email');
+      const donorDetailSubId = document.getElementById('donor-detail-sub-id');
+      const donorDetailLastPayment = document.getElementById('donor-detail-last-payment');
+      const donorDetailAmount = document.getElementById('donor-detail-amount');
+      const donorDetailInvite = document.getElementById('donor-detail-invite');
+      const donorDetailError = document.getElementById('donor-detail-error');
+      const donorDetailErrorSection = document.getElementById('donor-detail-error-section');
+      const donorDetailActions = document.getElementById('donor-detail-actions');
+
+      // Donor state
+      let selectedDonorId = null;
+      let currentFilter = 'all';
+      let searchQuery = '';
+
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
       const eventsList = document.getElementById('events-list');
@@ -4989,8 +5015,373 @@
         }
       }
 
+      // Master-detail donors view functions
+      function getFilteredDonors() {
+        const donors = Array.isArray(state.donors) ? state.donors : [];
+
+        return donors.filter(donor => {
+          // Apply status filter
+          const status = (donor.status || 'pending').toLowerCase();
+          if (currentFilter !== 'all' && status !== currentFilter) {
+            return false;
+          }
+
+          // Apply search query
+          if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            const name = (donor.name || '').toLowerCase();
+            const email = (donor.email || '').toLowerCase();
+            const subId = (donor.subscriptionId || '').toLowerCase();
+            return name.includes(query) || email.includes(query) || subId.includes(query);
+          }
+
+          return true;
+        });
+      }
+
+      function updateFilterCounts() {
+        const donors = Array.isArray(state.donors) ? state.donors : [];
+        const counts = {
+          all: donors.length,
+          active: 0,
+          pending: 0,
+          cancelled: 0,
+          suspended: 0
+        };
+
+        donors.forEach(donor => {
+          const status = (donor.status || 'pending').toLowerCase();
+          if (counts.hasOwnProperty(status)) {
+            counts[status]++;
+          }
+        });
+
+        Object.keys(counts).forEach(filter => {
+          const countElement = document.querySelector(`[data-count-for="${filter}"]`);
+          if (countElement) {
+            countElement.textContent = counts[filter];
+          }
+        });
+      }
+
+      function renderDonorsList() {
+        if (!donorsList) return;
+
+        const filteredDonors = getFilteredDonors();
+        donorsList.innerHTML = '';
+
+        if (filteredDonors.length === 0) {
+          const emptyMessage = document.createElement('div');
+          emptyMessage.className = 'donors-empty-state';
+          emptyMessage.textContent = searchQuery ? 'No donors match your search' : 'No donors found';
+          donorsList.appendChild(emptyMessage);
+          return;
+        }
+
+        const template = document.getElementById('donor-card');
+        filteredDonors.forEach(donor => {
+          const clone = template.content.cloneNode(true);
+          const card = clone.querySelector('.donor-card');
+          card.dataset.donorId = donor.id;
+
+          const nameEl = clone.querySelector('.donor-card-name');
+          const emailEl = clone.querySelector('.donor-card-email');
+          const statusEl = clone.querySelector('.donor-card-status');
+          const paymentEl = clone.querySelector('.donor-card-payment');
+
+          nameEl.textContent = donor.name || donor.email || 'Unknown';
+          emailEl.textContent = donor.email || '—';
+
+          const status = (donor.status || 'pending').toLowerCase();
+          statusEl.dataset.status = status;
+          statusEl.textContent = status.replace(/_/g, ' ');
+
+          const paymentText = formatAmount(donor);
+          const dateText = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '';
+          paymentEl.textContent = dateText || paymentText;
+
+          if (selectedDonorId && String(donor.id) === String(selectedDonorId)) {
+            card.classList.add('selected');
+          }
+
+          card.addEventListener('click', () => selectDonor(donor.id));
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              selectDonor(donor.id);
+            }
+          });
+
+          donorsList.appendChild(clone);
+        });
+      }
+
+      function selectDonor(donorId) {
+        selectedDonorId = donorId;
+        const donors = Array.isArray(state.donors) ? state.donors : [];
+        const donor = donors.find(d => String(d.id) === String(donorId));
+
+        if (!donor) {
+          selectedDonorId = null;
+          renderDonorsList();
+          showDonorsEmptyState();
+          return;
+        }
+
+        // Update selected state in list
+        document.querySelectorAll('.donor-card').forEach(card => {
+          if (String(card.dataset.donorId) === String(donorId)) {
+            card.classList.add('selected');
+          } else {
+            card.classList.remove('selected');
+          }
+        });
+
+        renderDonorDetail(donor);
+
+        // Handle mobile view
+        if (donorsLayout && window.innerWidth <= 1024) {
+          donorsLayout.classList.add('detail-active');
+        }
+      }
+
+      function renderDonorDetail(donor) {
+        if (!donorDetail) return;
+
+        donorDetail.hidden = false;
+        if (donorsEmptyState) {
+          donorsEmptyState.hidden = true;
+        }
+
+        // Header
+        if (donorDetailName) {
+          donorDetailName.textContent = donor.name || donor.email || 'Unknown';
+        }
+        if (donorDetailStatus) {
+          const status = (donor.status || 'pending').toLowerCase();
+          donorDetailStatus.dataset.status = status;
+          donorDetailStatus.textContent = status.replace(/_/g, ' ');
+        }
+
+        // Contact info
+        if (donorDetailEmail) {
+          donorDetailEmail.textContent = donor.email || '—';
+        }
+        if (donorDetailSubId) {
+          donorDetailSubId.textContent = donor.subscriptionId || '—';
+        }
+
+        // Payment info
+        if (donorDetailLastPayment) {
+          donorDetailLastPayment.textContent = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '—';
+        }
+        if (donorDetailAmount) {
+          donorDetailAmount.textContent = formatAmount(donor);
+        }
+
+        // Invite status
+        if (donorDetailInvite) {
+          const invites = Array.isArray(donor.invites) ? donor.invites : [];
+          const inviteParts = [];
+
+          if (donor.plexShareState === 'shared') {
+            inviteParts.push('<span class="badge badge-visited">Plex shared</span>');
+          } else if (donor.plexShareState === 'pending') {
+            inviteParts.push('<span class="badge badge-note">Plex invite pending</span>');
+          } else if (donor.needsPlexInvite) {
+            inviteParts.push('<span class="badge badge-revoked">Needs Plex invite</span>');
+          }
+
+          if (invites.length > 0) {
+            const invite = invites[0];
+            if (invite.inviteUrl) {
+              inviteParts.push(`<a href="${invite.inviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+            }
+            if (invite.recipientEmail) {
+              inviteParts.push(`<span class="badge badge-note">For ${escapeHtml(invite.recipientEmail)}</span>`);
+            }
+            if (invite.emailSentAt) {
+              const date = new Date(invite.emailSentAt);
+              inviteParts.push(`<span class="badge">Emailed ${date.toLocaleDateString()}</span>`);
+            }
+            if (invite.revokedAt) {
+              const date = new Date(invite.revokedAt);
+              inviteParts.push(`<span class="badge badge-revoked">Revoked ${date.toLocaleDateString()}</span>`);
+            }
+          }
+
+          const shareUrl = buildShareUrl(donor.shareLink);
+          if (shareUrl) {
+            inviteParts.push(`<a href="${shareUrl}" target="_blank" rel="noopener">Share page</a>`);
+            if (donor.shareLink.lastUsedAt) {
+              const usedDate = new Date(donor.shareLink.lastUsedAt);
+              inviteParts.push(`<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`);
+            }
+          }
+
+          donorDetailInvite.innerHTML = inviteParts.length > 0 ? inviteParts.join('<br />') : '—';
+        }
+
+        // Error/status notes
+        const refreshError = typeof donor.paypalRefreshError === 'string' ? donor.paypalRefreshError.trim() : '';
+        if (refreshError && donorDetailError && donorDetailErrorSection) {
+          donorDetailError.textContent = refreshError;
+          donorDetailErrorSection.hidden = false;
+        } else if (donorDetailErrorSection) {
+          donorDetailErrorSection.hidden = true;
+        }
+
+        // Actions
+        renderDonorActions(donor);
+      }
+
+      function renderDonorActions(donor) {
+        if (!donorDetailActions) return;
+
+        donorDetailActions.innerHTML = '';
+        const plexState = state.plex;
+        const status = (donor.status || 'pending').toLowerCase();
+        const invites = Array.isArray(donor.invites) ? donor.invites : [];
+        const activeInvite = invites.find(invite => !invite.revokedAt);
+        const shareUrl = buildShareUrl(donor.shareLink);
+
+        // Send Plex invite button
+        const canInvite = Boolean(donor.needsPlexInvite);
+        const inviteBtn = document.createElement('button');
+        inviteBtn.className = 'secondary';
+        inviteBtn.textContent = 'Send Plex invite';
+        inviteBtn.disabled = !canInvite;
+        inviteBtn.dataset.action = 'invite';
+        inviteBtn.dataset.donorId = donor.id;
+        if (!plexState || plexState.configured === false) {
+          inviteBtn.title = 'Configure Plex settings to send invites.';
+        } else if (!donor.email) {
+          inviteBtn.title = 'Add an email address to send a Plex invite.';
+        } else if (donor.plexShared) {
+          inviteBtn.title = 'User already has Plex access.';
+        } else if (donor.plexPending) {
+          inviteBtn.title = 'A Plex invite has already been sent and is pending acceptance.';
+        } else if (status === 'pending') {
+          inviteBtn.title = 'Pending subscribers must activate their subscription before a Plex invite can be sent.';
+        } else if (canInvite) {
+          inviteBtn.title = 'Send a Plex invite to this user.';
+        }
+        donorDetailActions.appendChild(inviteBtn);
+
+        // Copy invite page link
+        const shareBtn = document.createElement('button');
+        shareBtn.className = 'secondary';
+        shareBtn.textContent = 'Copy invite page link';
+        shareBtn.disabled = !shareUrl;
+        shareBtn.dataset.action = 'share';
+        shareBtn.dataset.donorId = donor.id;
+        shareBtn.title = shareUrl ? 'Copy the existing invite page link' : 'Generate an invite page link first';
+        donorDetailActions.appendChild(shareBtn);
+
+        // Re-verify PayPal
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'secondary';
+        refreshBtn.textContent = 'Re-verify PayPal';
+        refreshBtn.dataset.action = 'refresh';
+        refreshBtn.dataset.donorId = donor.id;
+        refreshBtn.title = 'Re-verify PayPal subscription status';
+        donorDetailActions.appendChild(refreshBtn);
+
+        // Generate new invite link
+        const shareGenBtn = document.createElement('button');
+        shareGenBtn.className = 'secondary';
+        shareGenBtn.textContent = 'Generate invite page link';
+        shareGenBtn.dataset.action = 'share-generate';
+        shareGenBtn.dataset.donorId = donor.id;
+        shareGenBtn.title = 'Generate a new invite page link';
+        donorDetailActions.appendChild(shareGenBtn);
+
+        // Resend email
+        const canResend = Boolean(activeInvite && activeInvite.inviteUrl);
+        const resendBtn = document.createElement('button');
+        resendBtn.className = 'secondary';
+        resendBtn.textContent = 'Resend email';
+        resendBtn.disabled = !canResend;
+        resendBtn.dataset.action = 'resend';
+        resendBtn.dataset.donorId = donor.id;
+        resendBtn.title = canResend ? 'Resend the most recent invite email' : 'No active invite available to resend';
+        donorDetailActions.appendChild(resendBtn);
+
+        // Revoke invite
+        const canRevoke = Boolean(activeInvite);
+        const revokeBtn = document.createElement('button');
+        revokeBtn.className = 'danger secondary';
+        revokeBtn.textContent = 'Revoke invite';
+        revokeBtn.disabled = !canRevoke;
+        revokeBtn.dataset.action = 'revoke';
+        revokeBtn.dataset.donorId = donor.id;
+        revokeBtn.title = canRevoke ? 'Revoke the most recent active invite' : 'No active invite available to revoke';
+        donorDetailActions.appendChild(revokeBtn);
+
+        // Remove user
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'danger secondary';
+        removeBtn.textContent = 'Remove user';
+        removeBtn.dataset.action = 'remove';
+        removeBtn.dataset.donorId = donor.id;
+        removeBtn.title = 'Remove this user and all related records';
+        donorDetailActions.appendChild(removeBtn);
+      }
+
+      function showDonorsEmptyState() {
+        if (donorDetail) {
+          donorDetail.hidden = true;
+        }
+        if (donorsEmptyState) {
+          donorsEmptyState.hidden = false;
+        }
+        if (donorsLayout) {
+          donorsLayout.classList.remove('detail-active');
+        }
+      }
+
       function renderSubscribers() {
         closeSubscriberActionMenu();
+
+        // Use new master-detail layout if elements exist
+        if (donorsList) {
+          if (plexStatusNote) {
+            plexStatusNote.textContent = '';
+            plexStatusNote.hidden = true;
+            delete plexStatusNote.dataset.state;
+            const plexState = state.plex;
+            if (plexState) {
+              if (!plexState.configured) {
+                plexStatusNote.textContent = 'Configure Plex settings to send invites from this dashboard.';
+                plexStatusNote.hidden = false;
+              } else if (plexState.error) {
+                plexStatusNote.textContent = `Unable to refresh Plex members: ${plexState.error}`;
+                plexStatusNote.dataset.state = 'error';
+                plexStatusNote.hidden = false;
+              }
+            }
+          }
+
+          updateFilterCounts();
+          renderDonorsList();
+
+          // Re-render selected donor if exists
+          if (selectedDonorId) {
+            const donors = Array.isArray(state.donors) ? state.donors : [];
+            const donor = donors.find(d => String(d.id) === String(selectedDonorId));
+            if (donor) {
+              renderDonorDetail(donor);
+            } else {
+              showDonorsEmptyState();
+              selectedDonorId = null;
+            }
+          } else {
+            showDonorsEmptyState();
+          }
+          return;
+        }
+
+        // Fallback to old table rendering if master-detail elements don't exist
         if (!subscribersTable) {
           return;
         }
@@ -6425,6 +6816,208 @@
           closeSubscriberActionMenu(null, { focusToggle: true });
         }
       });
+
+      // Master-detail donors view event listeners
+      if (donorsFilterTabs) {
+        donorsFilterTabs.forEach(tab => {
+          tab.addEventListener('click', () => {
+            currentFilter = tab.dataset.filter;
+            donorsFilterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            renderDonorsList();
+          });
+        });
+      }
+
+      if (donorsSearchInput) {
+        donorsSearchInput.addEventListener('input', (e) => {
+          searchQuery = e.target.value;
+          renderDonorsList();
+        });
+      }
+
+      // Donor detail action buttons
+      if (donorDetailActions) {
+        donorDetailActions.addEventListener('click', async (event) => {
+          const button = event.target.closest('button[data-action]');
+          if (!button) return;
+
+          const action = button.dataset.action;
+          const donorId = button.dataset.donorId;
+          if (!donorId) return;
+
+          button.disabled = true;
+          let requiresReload = true;
+
+          try {
+            if (action === 'invite') {
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/invite`, {
+                method: 'POST',
+              });
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex(item => String(item.id) === String(response.donor.id));
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                } else {
+                  donors.push(response.donor);
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage = (response && response.message) || 'Plex invite created successfully.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'share' || action === 'share-generate') {
+              const regenerate = action === 'share-generate' ? true : event.shiftKey;
+              const options = { method: 'POST' };
+              if (regenerate) {
+                options.body = { regenerate: true };
+              }
+              const response = await api(`/api/admin/subscribers/${donorId}/share-link`, options);
+              const shareLink = response.shareLink || {};
+              const configuredBase = getPublicBaseUrl();
+              const origin = configuredBase || window.location.origin.replace(/\/$/, '');
+              const shareUrl = shareLink.url || (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
+              if (!shareUrl) {
+                throw new Error('Unable to determine invite page URL');
+              }
+              let copied = false;
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                try {
+                  await navigator.clipboard.writeText(shareUrl);
+                  copied = true;
+                } catch (err) {
+                  console.warn('Clipboard copy failed', err);
+                }
+              }
+              if (copied) {
+                alert(
+                  action === 'share-generate'
+                    ? 'New invite page link generated and copied to clipboard.'
+                    : regenerate
+                      ? 'Invite page link regenerated and copied to clipboard.'
+                      : 'Invite page link copied to clipboard.'
+                );
+              } else {
+                const promptMessage =
+                  action === 'share-generate'
+                    ? 'New invite page link generated. Share this link with the user:'
+                    : 'Share this invite page link with the user:';
+                window.prompt(promptMessage, shareUrl);
+              }
+            } else if (action === 'refresh') {
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
+                method: 'POST',
+              });
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex(item => String(item.id) === String(response.donor.id));
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage = (response && response.message) || 'PayPal subscription refreshed.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'resend') {
+              const response = await api(`/api/admin/subscribers/${donorId}/resend`, {
+                method: 'POST',
+              });
+              const successMessage = (response && response.message) || 'Email resent successfully.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'revoke') {
+              const confirmation = confirm('Revoke this invite? The recipient will lose access to the Plex invite URL.');
+              if (!confirmation) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/revoke`, {
+                method: 'POST',
+              });
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex(item => String(item.id) === String(response.donor.id));
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage = (response && response.message) || 'Invite revoked successfully.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'remove') {
+              const confirmation = confirm('Remove this user and all related records? This cannot be undone.');
+              if (!confirmation) {
+                button.disabled = false;
+                return;
+              }
+              await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
+              const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+              state.donors = donors.filter(item => String(item.id) !== String(donorId));
+              selectedDonorId = null;
+              showDashboardToast('User removed successfully.', 'success');
+              renderSubscribers();
+              return;
+            }
+
+            if (requiresReload) {
+              await refreshSubscribers();
+            }
+            renderSubscribers();
+          } catch (err) {
+            alert(err.message || 'An error occurred');
+            button.disabled = false;
+          } finally {
+            if (!requiresReload) {
+              button.disabled = false;
+            }
+          }
+        });
+      }
+
+      // Add back button for mobile detail view
+      if (donorDetail && donorsLayout) {
+        const backButton = document.createElement('button');
+        backButton.className = 'secondary';
+        backButton.textContent = '← Back to list';
+        backButton.style.display = 'none';
+        backButton.style.marginBottom = '16px';
+        backButton.id = 'donor-detail-back';
+
+        const detailHeader = donorDetail.querySelector('.donor-detail-header');
+        if (detailHeader) {
+          donorDetail.insertBefore(backButton, detailHeader);
+        }
+
+        backButton.addEventListener('click', () => {
+          donorsLayout.classList.remove('detail-active');
+          selectedDonorId = null;
+          renderDonorsList();
+          showDonorsEmptyState();
+        });
+
+        // Show/hide back button based on screen size
+        const updateBackButtonVisibility = () => {
+          if (window.innerWidth <= 1024) {
+            backButton.style.display = 'block';
+          } else {
+            backButton.style.display = 'none';
+          }
+        };
+
+        window.addEventListener('resize', updateBackButtonVisibility);
+        updateBackButtonVisibility();
+      }
 
       registerServiceWorker();
       checkSession();
