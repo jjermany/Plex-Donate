@@ -257,6 +257,11 @@
         position: relative;
       }
 
+      /* Hide login wrapper when dashboard is visible */
+      .login-page-wrapper:has(#login-panel.hidden) {
+        display: none;
+      }
+
       .login-theme-toggle {
         position: absolute;
         top: 24px;
