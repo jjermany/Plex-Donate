@@ -14,6 +14,7 @@ data/*.db-*
 
 # Secrets
 data/.secrets
+data/admin-credentials.json
 
 # Logs
 logs/
