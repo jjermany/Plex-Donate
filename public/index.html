@@ -620,6 +620,105 @@
         }
       }
 
+      /* Mobile-friendly card layout for donors and share links tables */
+      @media (max-width: 768px) {
+        #subscribers-table thead,
+        #share-links-table thead {
+          display: none;
+        }
+
+        #subscribers-table tbody tr,
+        #share-links-table tbody tr {
+          display: block;
+          margin-bottom: 16px;
+          padding: 16px;
+          background: var(--panel-background);
+          border: 1px solid var(--panel-border-color);
+          border-radius: 12px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        #subscribers-table tbody tr:hover,
+        #share-links-table tbody tr:hover {
+          background: var(--panel-background);
+        }
+
+        #subscribers-table td,
+        #share-links-table td {
+          display: block;
+          padding: 8px 0;
+          border: none;
+          text-align: left;
+        }
+
+        #subscribers-table td::before,
+        #share-links-table td::before {
+          content: attr(data-label);
+          display: block;
+          font-weight: 600;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--text-muted);
+          margin-bottom: 4px;
+        }
+
+        /* Donors table labels */
+        #subscribers-table .col-subscriber::before {
+          content: "User";
+        }
+
+        #subscribers-table .col-status::before {
+          content: "Status";
+        }
+
+        #subscribers-table .col-last-payment::before {
+          content: "Last Payment";
+        }
+
+        #subscribers-table .col-invite::before {
+          content: "Invite";
+        }
+
+        #subscribers-table .col-actions::before {
+          content: "Actions";
+        }
+
+        #subscribers-table .col-actions {
+          margin-top: 8px;
+        }
+
+        #subscribers-table .action-menu {
+          max-width: none;
+        }
+
+        /* Share links table labels */
+        #share-links-table .col-link::before {
+          content: "Link";
+        }
+
+        #share-links-table .col-owner::before {
+          content: "Owner";
+        }
+
+        #share-links-table .col-created::before {
+          content: "Created";
+        }
+
+        #share-links-table .col-last-used::before {
+          content: "Last Used";
+        }
+
+        #share-links-table td:last-child::before {
+          content: "Actions";
+        }
+
+        /* Remove horizontal scroll on mobile for these sections */
+        #dashboard-view-donors .panel > div[style*="overflow-x"] {
+          overflow-x: visible !important;
+        }
+      }
+
       #status-message {
         margin-top: 12px;
         color: var(--status-message-color);
