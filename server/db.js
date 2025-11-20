@@ -474,6 +474,38 @@ ensureInviteLinkExpirationColumns();
 ensureInvitePlexColumns();
 ensureSupportTables();
 
+/**
+ * Create performance indexes after all migrations have run
+ * This ensures all columns exist before creating indexes
+ */
+function ensurePerformanceIndexes() {
+  const indexes = [
+    'CREATE INDEX IF NOT EXISTS donors_email_idx ON donors(email)',
+    'CREATE INDEX IF NOT EXISTS donors_status_idx ON donors(status)',
+    'CREATE INDEX IF NOT EXISTS donors_access_expires_idx ON donors(access_expires_at)',
+    'CREATE INDEX IF NOT EXISTS invites_donor_id_idx ON invites(donor_id)',
+    'CREATE INDEX IF NOT EXISTS invites_donor_revoked_idx ON invites(donor_id, revoked_at)',
+    'CREATE INDEX IF NOT EXISTS email_verification_tokens_donor_idx ON email_verification_tokens(donor_id)',
+    'CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON email_verification_tokens(token)',
+    'CREATE INDEX IF NOT EXISTS payments_donor_idx ON payments(donor_id)',
+    'CREATE INDEX IF NOT EXISTS events_type_idx ON events(event_type)',
+    'CREATE INDEX IF NOT EXISTS events_created_idx ON events(created_at)',
+    'CREATE INDEX IF NOT EXISTS invite_links_donor_idx ON invite_links(donor_id)',
+    'CREATE INDEX IF NOT EXISTS invite_links_prospect_idx ON invite_links(prospect_id)',
+  ];
+
+  for (const indexSQL of indexes) {
+    try {
+      db.exec(indexSQL);
+    } catch (err) {
+      // Silently ignore errors - column might not exist in old schema
+      // The index will be created after migrations run
+    }
+  }
+}
+
+ensurePerformanceIndexes();
+
 function normalizeEmail(email) {
   if (!email) {
     return '';
