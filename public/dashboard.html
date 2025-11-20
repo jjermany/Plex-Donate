@@ -660,6 +660,73 @@
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
+
+      /* Mobile-friendly responsive design */
+      @media (max-width: 768px) {
+        /* Stack buttons vertically on mobile */
+        .header-actions {
+          flex-direction: column;
+          align-items: stretch;
+          width: 100%;
+        }
+
+        .header-actions button,
+        .cta-actions button {
+          width: 100%;
+        }
+
+        /* Stack dashboard legend buttons for better mobile fit */
+        .dashboard-legend {
+          position: static;
+        }
+
+        .dashboard-legend-button {
+          padding: 8px 14px;
+          font-size: 0.88rem;
+        }
+
+        /* Adjust trial countdown for mobile */
+        .trial-countdown {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 16px;
+        }
+
+        .trial-countdown-time,
+        .trial-countdown-details {
+          flex: 1 1 auto;
+          min-width: auto;
+          max-width: 100%;
+        }
+
+        /* Reduce padding on smaller screens */
+        .surface {
+          padding: 20px;
+        }
+
+        /* Handle profile-summary stacking */
+        .profile-summary {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        /* Ensure support message form is mobile-friendly */
+        .support-message-form {
+          padding: 16px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        /* Extra small mobile devices */
+        .dashboard-legend-button {
+          padding: 8px 12px;
+          font-size: 0.85rem;
+        }
+
+        .surface {
+          padding: 16px;
+        }
+      }
       .profile-summary {
         display: flex;
         justify-content: space-between;
