@@ -732,25 +732,25 @@
         display: flex;
         align-items: flex-start;
         justify-content: space-between;
-        gap: 16px;
+        gap: 12px;
         flex-wrap: wrap;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
       }
 
       .donors-controls {
         display: flex;
-        gap: 12px;
+        gap: 8px;
         align-items: center;
         flex-wrap: wrap;
       }
 
       .donors-search-input {
-        padding: 8px 14px;
+        padding: 6px 10px;
         border: 1px solid var(--input-border);
-        border-radius: 10px;
+        border-radius: 8px;
         background: var(--input-background);
-        font-size: 0.95rem;
-        min-width: 200px;
+        font-size: 0.85rem;
+        min-width: 160px;
         color: var(--text-primary);
       }
 
@@ -761,20 +761,20 @@
 
       .donors-filter-tabs {
         display: flex;
-        gap: 8px;
+        gap: 6px;
         flex-wrap: wrap;
-        margin-bottom: 20px;
-        padding-bottom: 16px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
         border-bottom: 1px solid var(--table-border);
       }
 
       .donors-filter-tab {
         appearance: none;
         border: 1px solid var(--table-border);
-        border-radius: 20px;
-        padding: 8px 16px;
+        border-radius: 16px;
+        padding: 5px 12px;
         font-weight: 600;
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         color: var(--text-muted);
         background: transparent;
         cursor: pointer;
@@ -794,11 +794,11 @@
 
       .filter-count {
         display: inline-block;
-        margin-left: 6px;
-        padding: 2px 8px;
-        border-radius: 12px;
+        margin-left: 4px;
+        padding: 1px 6px;
+        border-radius: 10px;
         background: rgba(255, 255, 255, 0.25);
-        font-size: 0.8rem;
+        font-size: 0.75rem;
       }
 
       .donors-filter-tab:not(.active) .filter-count {
@@ -808,22 +808,22 @@
 
       .donors-layout {
         display: grid;
-        gap: 24px;
-        grid-template-columns: 350px 1fr;
-        min-height: 500px;
+        gap: 16px;
+        grid-template-columns: 220px 1fr;
+        min-height: 400px;
       }
 
       .donors-list {
         display: grid;
-        gap: 10px;
-        max-height: 700px;
+        gap: 6px;
+        max-height: 600px;
         overflow-y: auto;
-        padding-right: 8px;
+        padding-right: 6px;
         align-content: flex-start;
       }
 
       .donors-list::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
 
       .donors-list::-webkit-scrollbar-track {
@@ -832,7 +832,7 @@
 
       .donors-list::-webkit-scrollbar-thumb {
         background: var(--table-border);
-        border-radius: 4px;
+        border-radius: 3px;
       }
 
       .donors-list::-webkit-scrollbar-thumb:hover {
@@ -841,13 +841,13 @@
 
       .donor-card {
         border: 1px solid var(--table-border);
-        border-radius: 12px;
-        padding: 14px 16px;
+        border-radius: 8px;
+        padding: 8px 10px;
         background: rgba(255, 255, 255, 0.65);
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         display: grid;
-        gap: 8px;
+        gap: 4px;
       }
 
       :root[data-theme='dark'] .donor-card {
@@ -858,7 +858,7 @@
       .donor-card:focus,
       .donor-card.selected {
         border-color: rgba(99, 102, 241, 0.6);
-        box-shadow: 0 8px 16px -8px rgba(79, 70, 229, 0.4);
+        box-shadow: 0 4px 8px -4px rgba(79, 70, 229, 0.3);
         outline: none;
       }
 
@@ -870,18 +870,18 @@
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 12px;
+        gap: 6px;
       }
 
       .donor-card-info {
         display: grid;
-        gap: 4px;
+        gap: 2px;
         flex: 1;
         min-width: 0;
       }
 
       .donor-card-name {
-        font-size: 0.95rem;
+        font-size: 0.8rem;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
@@ -889,7 +889,7 @@
       }
 
       .donor-card-email {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         color: var(--text-muted-soft);
         white-space: nowrap;
         overflow: hidden;
@@ -897,24 +897,27 @@
       }
 
       .donor-card-status {
-        font-size: 0.75rem;
-        padding: 4px 8px;
+        font-size: 0.65rem;
+        padding: 2px 6px;
         flex-shrink: 0;
       }
 
       .donor-card-meta {
-        font-size: 0.85rem;
+        font-size: 0.7rem;
         color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .donor-detail {
         border: 1px solid var(--table-border);
-        border-radius: 16px;
-        padding: 24px;
+        border-radius: 12px;
+        padding: 16px;
         background: rgba(255, 255, 255, 0.7);
         display: grid;
-        gap: 24px;
-        max-height: 700px;
+        gap: 16px;
+        max-height: 600px;
         overflow-y: auto;
       }
 
@@ -926,25 +929,26 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         flex-wrap: wrap;
-        padding-bottom: 16px;
+        padding-bottom: 12px;
         border-bottom: 1px solid var(--table-border);
       }
 
       .donor-detail-header h3 {
         margin: 0;
-        font-size: 1.4rem;
+        font-size: 1.1rem;
+        word-break: break-word;
       }
 
       .donor-detail-content {
         display: grid;
-        gap: 20px;
+        gap: 14px;
       }
 
       .donor-detail-section h4 {
-        margin: 0 0 12px;
-        font-size: 0.9rem;
+        margin: 0 0 8px;
+        font-size: 0.8rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--text-muted);
@@ -952,36 +956,46 @@
 
       .donor-detail-field {
         display: flex;
-        gap: 12px;
-        margin-bottom: 8px;
-        font-size: 0.95rem;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+        flex-wrap: wrap;
       }
 
       .field-label {
         font-weight: 600;
-        min-width: 140px;
+        min-width: 100px;
+        flex-shrink: 0;
+      }
+
+      .donor-detail-field > span:last-child {
+        word-break: break-word;
+        flex: 1;
+        min-width: 0;
       }
 
       .donor-detail-actions {
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 6px;
       }
 
       .donor-detail-actions button {
         width: 100%;
         justify-content: flex-start;
+        font-size: 0.85rem;
+        padding: 8px 12px;
       }
 
       .donors-empty-state {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 400px;
-        font-size: 1.1rem;
+        min-height: 300px;
+        font-size: 0.95rem;
         color: var(--text-muted);
         border: 2px dashed var(--table-border);
-        border-radius: 16px;
+        border-radius: 12px;
         background: rgba(148, 163, 184, 0.05);
       }
 
@@ -1019,28 +1033,139 @@
           align-items: stretch;
         }
 
+        .donors-panel-header h2 {
+          font-size: 1.1rem;
+          word-break: break-word;
+        }
+
+        .donors-panel-header .muted-text {
+          font-size: 0.82rem;
+          line-height: 1.3;
+        }
+
         .donors-controls {
           flex-direction: column;
           align-items: stretch;
+          width: 100%;
+        }
+
+        .donors-controls button {
+          width: 100%;
         }
 
         .donors-search-input {
           min-width: 100%;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .donors-filter-tabs {
           overflow-x: auto;
           flex-wrap: nowrap;
-          padding-bottom: 12px;
+          padding-bottom: 10px;
+          -webkit-overflow-scrolling: touch;
+          margin-left: -16px;
+          margin-right: -16px;
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+
+        .donors-filter-tab {
+          flex-shrink: 0;
         }
 
         .donor-detail {
-          padding: 16px;
+          padding: 12px;
+          overflow-x: hidden;
+        }
+
+        .donor-detail-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .donor-detail-header h3 {
+          font-size: 1rem;
+          word-break: break-word;
+          max-width: 100%;
+        }
+
+        .donor-detail-header .status-pill {
+          align-self: flex-start;
         }
 
         .field-label {
-          min-width: 100px;
+          min-width: 70px;
+          font-size: 0.78rem;
+        }
+
+        .donor-detail-field {
+          font-size: 0.8rem;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .donor-detail-field > span:last-child {
+          word-break: break-all;
+        }
+
+        .donor-detail-invite,
+        .donor-detail-invite a,
+        .donor-detail-invite .badge {
+          word-break: break-all;
+          max-width: 100%;
+        }
+
+        .donor-card {
+          padding: 10px;
+        }
+
+        .donor-card-name {
           font-size: 0.85rem;
+        }
+
+        .donor-card-email {
+          font-size: 0.75rem;
+        }
+
+        /* Prevent panel overflow */
+        .panel {
+          overflow-x: hidden;
+        }
+      }
+
+      @media (max-width: 400px) {
+        /* Extra small screens like Galaxy Fold outer display */
+        .donors-filter-tab {
+          padding: 4px 10px;
+          font-size: 0.75rem;
+        }
+
+        .filter-count {
+          font-size: 0.7rem;
+          padding: 1px 5px;
+        }
+
+        .donor-detail {
+          padding: 10px;
+        }
+
+        .donor-detail-header h3 {
+          font-size: 0.95rem;
+        }
+
+        .field-label {
+          min-width: 60px;
+          font-size: 0.75rem;
+        }
+
+        .donor-detail-field {
+          font-size: 0.75rem;
+        }
+
+        .donor-detail-actions button {
+          font-size: 0.8rem;
+          padding: 7px 10px;
         }
       }
 
