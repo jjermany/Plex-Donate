@@ -155,6 +155,16 @@
         padding: 32px 24px 64px;
       }
 
+      /* Hide header and container padding when showing login */
+      body:has(#login-panel:not(.hidden)) .container {
+        padding: 0;
+        max-width: 100%;
+      }
+
+      body:has(#login-panel:not(.hidden)) header {
+        display: none;
+      }
+
       header {
         display: flex;
         align-items: center;
@@ -237,39 +247,78 @@
         border: 0;
       }
 
-      .login-panel {
+      /* Login page specific styles */
+      .login-page-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        padding: 24px;
         position: relative;
-        overflow: hidden;
       }
 
-      .login-panel::before {
-        content: '';
+      .login-theme-toggle {
         position: absolute;
-        inset: 0;
-        background: radial-gradient(
-            circle at top right,
-            rgba(99, 102, 241, 0.25),
-            transparent 55%
-          ),
-          radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.2), transparent 60%);
-        pointer-events: none;
-        opacity: 0.85;
+        top: 24px;
+        right: 24px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        box-shadow: var(--panel-shadow);
       }
 
-      .login-panel > * {
-        position: relative;
-        z-index: 1;
+      .login-theme-toggle svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .login-panel {
+        max-width: 460px;
+        width: 100%;
+        margin: auto;
+      }
+
+      .login-brand {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+
+      .login-brand-icon {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 16px;
+        background: linear-gradient(135deg, var(--button-primary-bg), #8b5cf6);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.4);
+      }
+
+      .login-brand-icon svg {
+        width: 32px;
+        height: 32px;
+        color: white;
       }
 
       .login-panel h2 {
-        margin-top: 0;
-        margin-bottom: 8px;
+        margin: 0 0 8px;
+        font-size: 1.75rem;
+        text-align: center;
       }
 
       .login-description {
-        margin-top: 0;
-        margin-bottom: 20px;
+        margin: 0 0 28px;
         color: var(--text-muted);
+        text-align: center;
+        font-size: 0.95rem;
+        line-height: 1.5;
       }
 
       .login-form {
@@ -283,90 +332,78 @@
         display: flex;
         align-items: center;
         gap: 12px;
-        border-radius: 16px;
-        border: 1px solid rgba(148, 163, 184, 0.35);
-        background: linear-gradient(135deg, rgba(99, 102, 241, 0.22), rgba(56, 189, 248, 0.18));
-        padding: 6px 18px;
-        backdrop-filter: blur(16px);
-        box-shadow: 0 22px 40px -26px rgba(79, 70, 229, 0.65);
-        transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-      }
-
-      :root[data-theme='dark'] .input-shell {
-        border-color: rgba(129, 140, 248, 0.45);
-        background: linear-gradient(135deg, rgba(79, 70, 229, 0.38), rgba(14, 165, 233, 0.22));
-        box-shadow: 0 22px 44px -28px rgba(15, 23, 42, 0.85);
+        border-radius: 12px;
+        border: 2px solid var(--input-border);
+        background: var(--input-background);
+        padding: 0 16px;
+        transition: all 0.2s ease;
       }
 
       .input-shell:focus-within {
-        border-color: rgba(79, 70, 229, 0.85);
-        box-shadow: 0 26px 48px -24px rgba(79, 70, 229, 0.75);
-        transform: translateY(-1px);
+        border-color: var(--button-primary-bg);
+        background: var(--panel-background);
+        box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
       }
 
       .input-shell .input-icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 38px;
-        height: 38px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.22);
-        color: var(--text-muted);
-        font-size: 1rem;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        color: var(--text-muted-soft);
+        flex-shrink: 0;
       }
 
-      :root[data-theme='dark'] .input-shell .input-icon {
-        background: rgba(15, 23, 42, 0.6);
-        color: #cbd5f5;
-        box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.35);
+      .input-shell .input-icon svg {
+        width: 20px;
+        height: 20px;
       }
 
       .input-shell input {
         flex: 1;
         border: none;
         background: transparent;
-        color: inherit;
-        padding: 10px 0;
-        font-size: 1.05rem;
-        font-weight: 500;
+        color: var(--text-primary);
+        padding: 14px 0;
+        font-size: 1rem;
         outline: none;
       }
 
       .input-shell input::placeholder {
         color: var(--text-muted-soft);
-        font-weight: 400;
       }
 
       .input-shell button {
         margin-left: auto;
         padding: 6px 12px;
-        font-size: 0.85rem;
-        border-radius: 10px;
-        background: rgba(15, 23, 42, 0.08);
+        font-size: 0.875rem;
+        border-radius: 6px;
+        background: transparent;
         color: var(--text-muted);
-        transition: background 0.2s ease, color 0.2s ease;
-      }
-
-      :root[data-theme='dark'] .input-shell button {
-        background: rgba(148, 163, 184, 0.18);
-        color: #e2e8f0;
+        transition: all 0.2s ease;
+        box-shadow: none;
+        transform: none;
       }
 
       .input-shell button:hover:not(:disabled) {
-        background: rgba(79, 70, 229, 0.18);
-        color: var(--button-primary-color);
+        background: rgba(99, 102, 241, 0.1);
+        color: var(--button-primary-bg);
+        box-shadow: none;
+        transform: none;
       }
 
       .login-actions {
         display: flex;
         flex-direction: column;
         gap: 8px;
+        margin-top: 8px;
       }
 
       .login-actions button {
         width: 100%;
+        padding: 14px 24px;
+        font-size: 1rem;
+        border-radius: 10px;
+        font-weight: 600;
       }
 
       .form-status-text {
@@ -1477,46 +1514,67 @@
       </header>
       <div id="dashboard-toast" class="dashboard-toast" hidden aria-live="polite"></div>
 
-      <section id="login-panel" class="panel login-panel">
-        <h2>Admin sign in</h2>
-        <p class="login-description" id="login-help">
-          Use the admin username and password configured for Plex Donate. The default username is
-          <code>admin</code>. On first run a temporary password is written to your server logs.
-        </p>
-        <form id="login-form" class="login-form" autocomplete="on">
-          <label class="visually-hidden" for="username">Username</label>
-          <div class="input-shell">
-            <span class="input-icon" aria-hidden="true">👤</span>
-            <input
-              id="username"
-              name="username"
-              type="text"
-              autocomplete="username"
-              placeholder="Admin username"
-              required
-            />
+      <div class="login-page-wrapper">
+        <button id="login-theme-toggle" type="button" class="login-theme-toggle secondary" aria-label="Toggle theme" title="Toggle theme">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+          </svg>
+        </button>
+        <section id="login-panel" class="panel login-panel">
+          <div class="login-brand">
+            <div class="login-brand-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2>Admin Sign In</h2>
+            <p class="login-description" id="login-help">
+              Sign in to manage your Plex Donate server
+            </p>
           </div>
-          <label class="visually-hidden" for="password">Password</label>
-          <div class="input-shell">
-            <span class="input-icon" aria-hidden="true">🔒</span>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              placeholder="Password"
-              required
-            />
-            <button type="button" class="secondary" id="toggle-password-visibility" aria-pressed="false">
-              Show
-            </button>
-          </div>
-          <div class="login-actions">
-            <button id="login-submit" type="submit">Sign in</button>
-          </div>
-        </form>
-        <p id="status-message" class="form-status-text"></p>
-      </section>
+          <form id="login-form" class="login-form" autocomplete="on">
+            <label class="visually-hidden" for="username">Username</label>
+            <div class="input-shell">
+              <span class="input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </span>
+              <input
+                id="username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                placeholder="Username"
+                required
+              />
+            </div>
+            <label class="visually-hidden" for="password">Password</label>
+            <div class="input-shell">
+              <span class="input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </span>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="Password"
+                required
+              />
+              <button type="button" class="secondary" id="toggle-password-visibility" aria-pressed="false">
+                Show
+              </button>
+            </div>
+            <div class="login-actions">
+              <button id="login-submit" type="submit">Sign in</button>
+            </div>
+          </form>
+          <p id="status-message" class="form-status-text"></p>
+        </section>
+      </div>
 
       <div id="dashboard" class="hidden">
         <nav class="dashboard-legend" aria-label="Dashboard sections" data-dashboard-legend>
@@ -2838,6 +2896,15 @@
 
       if (themeToggleButton) {
         themeToggleButton.addEventListener('click', () => {
+          const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          applyTheme(nextTheme);
+        });
+      }
+
+      // Login page theme toggle
+      const loginThemeToggle = document.getElementById('login-theme-toggle');
+      if (loginThemeToggle) {
+        loginThemeToggle.addEventListener('click', () => {
           const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
           applyTheme(nextTheme);
         });
