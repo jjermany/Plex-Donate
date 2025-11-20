@@ -11,3 +11,10 @@ yarn-error.log*
 # SQLite
 data/*.db
 data/*.db-*
+
+# Secrets
+data/.secrets
+
+# Logs
+logs/
+*.log

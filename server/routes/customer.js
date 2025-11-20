@@ -1,5 +1,6 @@
 const express = require('express');
 const { nanoid } = require('nanoid');
+const { authLimiter, emailVerificationLimiter } = require('../middleware/rate-limit');
 const {
   getDonorById,
   getLatestActiveInviteForDonor,
@@ -536,6 +537,7 @@ router.get(
 
 router.post(
   '/login',
+  authLimiter,
   asyncHandler(async (req, res) => {
     const { email, password } = req.body || {};
     const normalizedEmail = normalizeEmail(email);

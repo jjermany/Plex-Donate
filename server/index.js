@@ -13,6 +13,7 @@ const { refreshDonorSubscription } = require('./utils/donor-subscriptions');
 const SqliteSessionStore = require('./session-store');
 const { initializeAdminCredentials } = require('./state/admin-credentials');
 const { clearSessionToken } = require('./utils/session-tokens');
+const { apiLimiter } = require('./middleware/rate-limit');
 const {
   db,
   listDonorsWithExpiredAccess,
@@ -64,9 +65,38 @@ app.use(
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
+/**
+ * Health check endpoint with database connectivity check
+ */
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  try {
+    // Test database connectivity
+    const result = db.prepare('SELECT 1 as test').get();
+    if (result && result.test === 1) {
+      res.json({
+        status: 'ok',
+        database: 'connected',
+        time: new Date().toISOString(),
+      });
+    } else {
+      res.status(503).json({
+        status: 'degraded',
+        database: 'error',
+        time: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    logger.error('Health check failed', err);
+    res.status(503).json({
+      status: 'error',
+      database: 'disconnected',
+      time: new Date().toISOString(),
+    });
+  }
 });
+
+// Apply rate limiting to API routes (excluding health check)
+app.use('/api', apiLimiter);
 
 app.use('/api/paypal/webhook', webhookRouter);
 app.use('/api/admin', adminRouter);
@@ -117,6 +147,11 @@ app.use((err, req, res, next) => {
 let isProcessingAccessExpirations = false;
 let isProcessingSubscriptionRefreshes = false;
 const activeSubscriptionRefreshes = new Set();
+
+// Store server and interval references for graceful shutdown
+let server = null;
+let accessExpirationInterval = null;
+let subscriptionRefreshInterval = null;
 
 function getSubscriptionRefreshKey(donor) {
   if (!donor) {
@@ -196,7 +231,7 @@ function scheduleAccessExpirationJob() {
   };
 
   run();
-  setInterval(run, ACCESS_REVOCATION_CHECK_INTERVAL_MS);
+  accessExpirationInterval = setInterval(run, ACCESS_REVOCATION_CHECK_INTERVAL_MS);
 }
 
 async function processSubscriptionRefreshes() {
@@ -259,15 +294,100 @@ function scheduleSubscriptionRefreshJob() {
   };
 
   run();
-  setInterval(run, SUBSCRIPTION_REFRESH_INTERVAL_MS);
+  subscriptionRefreshInterval = setInterval(run, SUBSCRIPTION_REFRESH_INTERVAL_MS);
+}
+
+/**
+ * Graceful shutdown handler
+ * Cleans up resources and closes connections properly
+ */
+async function gracefulShutdown(signal) {
+  logger.info(`${signal} received. Starting graceful shutdown...`);
+
+  // Stop accepting new connections
+  if (server) {
+    server.close(() => {
+      logger.info('HTTP server closed');
+    });
+  }
+
+  // Clear scheduled jobs
+  if (accessExpirationInterval) {
+    clearInterval(accessExpirationInterval);
+    logger.info('Access expiration job stopped');
+  }
+
+  if (subscriptionRefreshInterval) {
+    clearInterval(subscriptionRefreshInterval);
+    logger.info('Subscription refresh job stopped');
+  }
+
+  // Wait for ongoing operations to complete (with timeout)
+  const shutdownTimeout = setTimeout(() => {
+    logger.warn('Shutdown timeout reached, forcing exit');
+    process.exit(1);
+  }, 30000); // 30 second timeout
+
+  try {
+    // Wait for ongoing processing to complete
+    let waitCount = 0;
+    const maxWaits = 60; // 30 seconds max (500ms * 60)
+
+    while (
+      (isProcessingAccessExpirations ||
+        isProcessingSubscriptionRefreshes ||
+        activeSubscriptionRefreshes.size > 0) &&
+      waitCount < maxWaits
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      waitCount++;
+    }
+
+    if (waitCount >= maxWaits) {
+      logger.warn('Some operations did not complete in time');
+    } else {
+      logger.info('All operations completed successfully');
+    }
+
+    // Close database connection
+    if (db && typeof db.close === 'function') {
+      db.close();
+      logger.info('Database connection closed');
+    }
+
+    clearTimeout(shutdownTimeout);
+    logger.info('Graceful shutdown complete');
+    process.exit(0);
+  } catch (err) {
+    logger.error('Error during graceful shutdown', err);
+    clearTimeout(shutdownTimeout);
+    process.exit(1);
+  }
 }
 
 if (config.env !== 'test') {
   scheduleAccessExpirationJob();
   scheduleSubscriptionRefreshJob();
 
-  app.listen(config.port, () => {
+  server = app.listen(config.port, () => {
     logger.info(`Plex Donate server listening on port ${config.port}`);
+    logger.info(`Environment: ${config.env}`);
+    logger.info(`Admin username: ${config.adminUsername}`);
+  });
+
+  // Register graceful shutdown handlers
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (err) => {
+    logger.error('Uncaught exception', err);
+    gracefulShutdown('uncaughtException');
+  });
+
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled promise rejection', { reason, promise });
   });
 }
 

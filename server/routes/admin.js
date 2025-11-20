@@ -1,5 +1,6 @@
 const express = require('express');
 const csurf = require('csurf');
+const { authLimiter } = require('../middleware/rate-limit');
 const { nanoid } = require('nanoid');
 const {
   listDonorsWithDetails,
@@ -185,6 +186,7 @@ router.get('/session', (req, res) => {
 
 router.post(
   '/login',
+  authLimiter,
   asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
     const normalizedUsername = typeof username === 'string' ? username.trim() : '';

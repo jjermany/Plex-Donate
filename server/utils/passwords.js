@@ -146,15 +146,81 @@ function verifyPasswordSync(password, storedHash) {
   }
 }
 
+/**
+ * Validates password strength with comprehensive requirements
+ * @param {string} password - The password to validate
+ * @returns {boolean} True if password meets strength requirements
+ */
 function isPasswordStrong(password) {
   if (typeof password !== 'string') {
     return false;
   }
   const trimmed = password.trim();
+
+  // Minimum length check
   if (trimmed.length < MIN_PASSWORD_LENGTH) {
     return false;
   }
+
+  // Complexity requirements
+  const hasUpperCase = /[A-Z]/.test(trimmed);
+  const hasLowerCase = /[a-z]/.test(trimmed);
+  const hasNumber = /[0-9]/.test(trimmed);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(trimmed);
+
+  // Require at least 3 of the 4 character types
+  const typesPresent = [hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar].filter(Boolean).length;
+
+  if (typesPresent < 3) {
+    return false;
+  }
+
   return true;
+}
+
+/**
+ * Gets detailed password strength feedback
+ * @param {string} password - The password to validate
+ * @returns {Object} Object with isStrong boolean and array of missing requirements
+ */
+function getPasswordStrengthFeedback(password) {
+  const feedback = {
+    isStrong: true,
+    missingRequirements: [],
+  };
+
+  if (typeof password !== 'string') {
+    feedback.isStrong = false;
+    feedback.missingRequirements.push('Password must be a string');
+    return feedback;
+  }
+
+  const trimmed = password.trim();
+
+  if (trimmed.length < MIN_PASSWORD_LENGTH) {
+    feedback.isStrong = false;
+    feedback.missingRequirements.push(`At least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+
+  const hasUpperCase = /[A-Z]/.test(trimmed);
+  const hasLowerCase = /[a-z]/.test(trimmed);
+  const hasNumber = /[0-9]/.test(trimmed);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>/?]/.test(trimmed);
+
+  const missing = [];
+  if (!hasUpperCase) missing.push('uppercase letter');
+  if (!hasLowerCase) missing.push('lowercase letter');
+  if (!hasNumber) missing.push('number');
+  if (!hasSpecialChar) missing.push('special character');
+
+  const typesPresent = [hasUpperCase, hasLowerCase, hasNumber, hasSpecialChar].filter(Boolean).length;
+
+  if (typesPresent < 3) {
+    feedback.isStrong = false;
+    feedback.missingRequirements.push(`At least 3 of: ${missing.join(', ')}`);
+  }
+
+  return feedback;
 }
 
 module.exports = {
@@ -163,6 +229,7 @@ module.exports = {
   verifyPassword,
   verifyPasswordSync,
   isPasswordStrong,
+  getPasswordStrengthFeedback,
   MIN_PASSWORD_LENGTH,
   isSerializedHash,
 };

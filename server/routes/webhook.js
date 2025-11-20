@@ -1,4 +1,5 @@
 const express = require('express');
+const { webhookLimiter } = require('../middleware/rate-limit');
 const paypalService = require('../services/paypal');
 const {
   upsertDonor,
@@ -28,6 +29,7 @@ function asyncHandler(handler) {
 
 router.post(
   '/',
+  webhookLimiter,
   express.raw({ type: 'application/json' }),
   asyncHandler(async (req, res) => {
     const rawBody = req.body.toString('utf8');
