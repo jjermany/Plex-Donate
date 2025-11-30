@@ -808,17 +808,25 @@
 
       .donors-layout {
         display: grid;
-        gap: 16px;
-        grid-template-columns: 220px 1fr;
+        gap: 20px;
+        grid-template-columns: 280px 1fr;
         min-height: 400px;
+      }
+
+      /* Responsive sidebar width */
+      @media (min-width: 1400px) {
+        .donors-layout {
+          grid-template-columns: 320px 1fr;
+          gap: 24px;
+        }
       }
 
       .donors-list {
         display: grid;
-        gap: 6px;
-        max-height: 600px;
+        gap: 8px;
+        max-height: calc(100vh - 320px);
         overflow-y: auto;
-        padding-right: 6px;
+        padding-right: 8px;
         align-content: flex-start;
       }
 
@@ -841,29 +849,79 @@
 
       .donor-card {
         border: 1px solid var(--table-border);
+        border-left: 4px solid var(--table-border);
         border-radius: 8px;
-        padding: 8px 10px;
+        padding: 12px 14px;
         background: rgba(255, 255, 255, 0.65);
         cursor: pointer;
         transition: all 0.15s ease;
         display: grid;
-        gap: 4px;
+        gap: 6px;
+        position: relative;
       }
 
       :root[data-theme='dark'] .donor-card {
         background: rgba(15, 23, 42, 0.75);
       }
 
+      /* Status-based color-coded left borders */
+      .donor-card[data-status="active"] {
+        border-left-color: #10b981;
+        background: rgba(16, 185, 129, 0.03);
+      }
+
+      .donor-card[data-status="trial"] {
+        border-left-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.03);
+      }
+
+      .donor-card[data-status="pending"] {
+        border-left-color: #f59e0b;
+        background: rgba(245, 158, 11, 0.03);
+      }
+
+      .donor-card[data-status="suspended"] {
+        border-left-color: #f97316;
+        background: rgba(249, 115, 22, 0.03);
+      }
+
+      .donor-card[data-status="cancelled"] {
+        border-left-color: #ef4444;
+        background: rgba(239, 68, 68, 0.03);
+      }
+
+      :root[data-theme='dark'] .donor-card[data-status="active"] {
+        background: rgba(16, 185, 129, 0.08);
+      }
+
+      :root[data-theme='dark'] .donor-card[data-status="trial"] {
+        background: rgba(59, 130, 246, 0.08);
+      }
+
+      :root[data-theme='dark'] .donor-card[data-status="pending"] {
+        background: rgba(245, 158, 11, 0.08);
+      }
+
+      :root[data-theme='dark'] .donor-card[data-status="suspended"] {
+        background: rgba(249, 115, 22, 0.08);
+      }
+
+      :root[data-theme='dark'] .donor-card[data-status="cancelled"] {
+        background: rgba(239, 68, 68, 0.08);
+      }
+
       .donor-card:hover,
       .donor-card:focus,
       .donor-card.selected {
         border-color: rgba(99, 102, 241, 0.6);
-        box-shadow: 0 4px 8px -4px rgba(79, 70, 229, 0.3);
+        box-shadow: 0 6px 12px -4px rgba(79, 70, 229, 0.25);
         outline: none;
+        transform: translateY(-1px);
       }
 
       .donor-card.selected {
-        background: rgba(99, 102, 241, 0.08);
+        background: rgba(99, 102, 241, 0.1);
+        border-left-color: rgba(99, 102, 241, 0.8);
       }
 
       .donor-card-header {
@@ -875,49 +933,116 @@
 
       .donor-card-info {
         display: grid;
-        gap: 2px;
+        gap: 3px;
         flex: 1;
         min-width: 0;
       }
 
       .donor-card-name {
-        font-size: 0.8rem;
+        font-size: 0.9rem;
         font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        line-height: 1.3;
       }
 
       .donor-card-email {
-        font-size: 0.7rem;
+        font-size: 0.8rem;
         color: var(--text-muted-soft);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        line-height: 1.3;
       }
 
       .donor-card-status {
-        font-size: 0.65rem;
-        padding: 2px 6px;
+        font-size: 0.75rem;
+        padding: 3px 8px;
         flex-shrink: 0;
+        line-height: 1.2;
       }
 
       .donor-card-meta {
-        font-size: 0.7rem;
+        font-size: 0.75rem;
         color: var(--text-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        line-height: 1.4;
+      }
+
+      .donor-card-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .donor-card-icon {
+        font-size: 0.85rem;
+        opacity: 0.8;
+      }
+
+      /* Hover preview tooltip */
+      .donor-card-tooltip {
+        position: absolute;
+        left: calc(100% + 12px);
+        top: 0;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid var(--table-border);
+        border-radius: 8px;
+        padding: 12px;
+        box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
+        z-index: 100;
+        min-width: 220px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        backdrop-filter: blur(10px);
+      }
+
+      :root[data-theme='dark'] .donor-card-tooltip {
+        background: rgba(15, 23, 42, 0.98);
+      }
+
+      .donor-card:hover .donor-card-tooltip {
+        opacity: 1;
+        transition-delay: 0.5s;
+      }
+
+      .donor-card-tooltip-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin-bottom: 6px;
+        font-size: 0.8rem;
+      }
+
+      .donor-card-tooltip-label {
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+
+      .donor-card-tooltip-value {
+        text-align: right;
+      }
+
+      /* Keyboard navigation focus styles */
+      .donor-card:focus-visible {
+        outline: 2px solid rgba(99, 102, 241, 0.8);
+        outline-offset: 2px;
+        border-color: rgba(99, 102, 241, 0.6);
       }
 
       .donor-detail {
         border: 1px solid var(--table-border);
         border-radius: 12px;
-        padding: 16px;
+        padding: 20px;
         background: rgba(255, 255, 255, 0.7);
         display: grid;
-        gap: 16px;
-        max-height: 600px;
+        gap: 20px;
+        max-height: calc(100vh - 320px);
         overflow-y: auto;
       }
 
@@ -931,35 +1056,109 @@
         align-items: center;
         gap: 12px;
         flex-wrap: wrap;
-        padding-bottom: 12px;
-        border-bottom: 1px solid var(--table-border);
+        padding-bottom: 16px;
+        border-bottom: 2px solid var(--table-border);
       }
 
       .donor-detail-header h3 {
         margin: 0;
-        font-size: 1.1rem;
+        font-size: 1.4rem;
+        font-weight: 700;
         word-break: break-word;
+        line-height: 1.3;
+      }
+
+      .donor-detail-header-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1;
+      }
+
+      .donor-detail-header-email {
+        font-size: 0.9rem;
+        color: var(--text-muted);
       }
 
       .donor-detail-content {
         display: grid;
-        gap: 14px;
+        gap: 16px;
       }
 
-      .donor-detail-section h4 {
-        margin: 0 0 8px;
-        font-size: 0.8rem;
+      /* Card-based info sections */
+      .donor-detail-cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+      }
+
+      .donor-info-card {
+        border: 1px solid var(--table-border);
+        border-radius: 10px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.5);
+        display: grid;
+        gap: 10px;
+      }
+
+      :root[data-theme='dark'] .donor-info-card {
+        background: rgba(15, 23, 42, 0.5);
+      }
+
+      .donor-info-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+
+      .donor-info-card-icon {
+        font-size: 1.2rem;
+      }
+
+      .donor-info-card-title {
+        font-size: 0.85rem;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
         color: var(--text-muted);
       }
 
+      .donor-info-card-content {
+        display: grid;
+        gap: 8px;
+      }
+
+      .donor-info-card-value {
+        font-size: 1.1rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+
+      .donor-info-card-label {
+        font-size: 0.8rem;
+        color: var(--text-muted-soft);
+      }
+
+      .donor-detail-section h4 {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       .donor-detail-field {
         display: flex;
         gap: 8px;
-        margin-bottom: 6px;
-        font-size: 0.85rem;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
         flex-wrap: wrap;
+        line-height: 1.4;
       }
 
       .field-label {
@@ -976,15 +1175,96 @@
 
       .donor-detail-actions {
         display: flex;
-        flex-direction: column;
-        gap: 6px;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 16px;
+        border: 1px solid var(--table-border);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      :root[data-theme='dark'] .donor-detail-actions {
+        background: rgba(15, 23, 42, 0.5);
       }
 
       .donor-detail-actions button {
-        width: 100%;
-        justify-content: flex-start;
+        flex: 1 1 auto;
+        min-width: 140px;
+        justify-content: center;
         font-size: 0.85rem;
-        padding: 8px 12px;
+        padding: 10px 14px;
+      }
+
+      /* Payment history visualization */
+      .payment-history {
+        border: 1px solid var(--table-border);
+        border-radius: 10px;
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      :root[data-theme='dark'] .payment-history {
+        background: rgba(15, 23, 42, 0.5);
+      }
+
+      .payment-history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .payment-history-title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-muted);
+      }
+
+      .payment-history-bars {
+        display: flex;
+        gap: 8px;
+        align-items: flex-end;
+        height: 80px;
+      }
+
+      .payment-bar {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .payment-bar-fill {
+        width: 100%;
+        background: linear-gradient(to top, #10b981, #34d399);
+        border-radius: 4px 4px 0 0;
+        min-height: 4px;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .payment-bar-fill.failed {
+        background: linear-gradient(to top, #ef4444, #f87171);
+      }
+
+      .payment-bar-fill:hover {
+        opacity: 0.8;
+        transform: scaleY(1.05);
+      }
+
+      .payment-bar-label {
+        font-size: 0.7rem;
+        color: var(--text-muted-soft);
+        text-align: center;
+      }
+
+      .payment-bar-amount {
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: var(--text-muted);
       }
 
       .donors-empty-state {
@@ -1075,7 +1355,7 @@
         }
 
         .donor-detail {
-          padding: 12px;
+          padding: 14px;
           overflow-x: hidden;
         }
 
@@ -1085,7 +1365,7 @@
         }
 
         .donor-detail-header h3 {
-          font-size: 1rem;
+          font-size: 1.2rem;
           word-break: break-word;
           max-width: 100%;
         }
@@ -1094,13 +1374,21 @@
           align-self: flex-start;
         }
 
+        .donor-detail-cards {
+          grid-template-columns: 1fr;
+        }
+
+        .donor-info-card {
+          padding: 12px;
+        }
+
         .field-label {
           min-width: 70px;
-          font-size: 0.78rem;
+          font-size: 0.8rem;
         }
 
         .donor-detail-field {
-          font-size: 0.8rem;
+          font-size: 0.85rem;
           flex-direction: column;
           gap: 2px;
         }
@@ -1116,16 +1404,32 @@
           max-width: 100%;
         }
 
+        .donor-detail-actions {
+          padding: 12px;
+        }
+
+        .donor-detail-actions button {
+          min-width: 100%;
+        }
+
         .donor-card {
-          padding: 10px;
+          padding: 12px;
         }
 
         .donor-card-name {
-          font-size: 0.85rem;
+          font-size: 0.88rem;
         }
 
         .donor-card-email {
-          font-size: 0.75rem;
+          font-size: 0.78rem;
+        }
+
+        .payment-history {
+          padding: 12px;
+        }
+
+        .payment-history-bars {
+          height: 60px;
         }
 
         /* Prevent panel overflow */
@@ -1147,11 +1451,15 @@
         }
 
         .donor-detail {
-          padding: 10px;
+          padding: 12px;
         }
 
         .donor-detail-header h3 {
-          font-size: 0.95rem;
+          font-size: 1.1rem;
+        }
+
+        .donor-info-card {
+          padding: 10px;
         }
 
         .field-label {
@@ -1160,12 +1468,24 @@
         }
 
         .donor-detail-field {
-          font-size: 0.75rem;
+          font-size: 0.78rem;
+        }
+
+        .donor-detail-actions {
+          padding: 10px;
         }
 
         .donor-detail-actions button {
           font-size: 0.8rem;
-          padding: 7px 10px;
+          padding: 8px 10px;
+        }
+
+        .payment-history-bars {
+          height: 50px;
+        }
+
+        .donor-card {
+          padding: 10px;
         }
       }
 
@@ -2451,47 +2771,81 @@
                   <div class="donors-list" id="donors-list"></div>
                   <div class="donor-detail" id="donor-detail" hidden>
                     <div class="donor-detail-header">
-                      <h3 id="donor-detail-name"></h3>
+                      <div class="donor-detail-header-info">
+                        <h3 id="donor-detail-name"></h3>
+                        <span class="donor-detail-header-email" id="donor-detail-email-header"></span>
+                      </div>
                       <span class="status-pill" id="donor-detail-status"></span>
                     </div>
                     <div class="donor-detail-content">
+                      <!-- Quick Actions at top -->
                       <div class="donor-detail-section">
-                        <h4>Contact Information</h4>
-                        <div class="donor-detail-field">
-                          <span class="field-label">Email:</span>
-                          <span id="donor-detail-email"></span>
+                        <h4>⚡ Quick Actions</h4>
+                        <div class="donor-detail-actions" id="donor-detail-actions"></div>
+                      </div>
+
+                      <!-- Card-based info grid -->
+                      <div class="donor-detail-cards" id="donor-info-cards">
+                        <!-- Payment card -->
+                        <div class="donor-info-card">
+                          <div class="donor-info-card-header">
+                            <span class="donor-info-card-icon">💳</span>
+                            <span class="donor-info-card-title">Payment</span>
+                          </div>
+                          <div class="donor-info-card-content">
+                            <div class="donor-info-card-value" id="donor-detail-amount"></div>
+                            <div class="donor-info-card-label" id="donor-detail-last-payment"></div>
+                          </div>
                         </div>
-                        <div class="donor-detail-field">
-                          <span class="field-label">Subscription ID:</span>
-                          <span id="donor-detail-sub-id"></span>
+
+                        <!-- Plex card -->
+                        <div class="donor-info-card">
+                          <div class="donor-info-card-header">
+                            <span class="donor-info-card-icon">🎬</span>
+                            <span class="donor-info-card-title">Plex Status</span>
+                          </div>
+                          <div class="donor-info-card-content" id="donor-detail-plex-status">
+                            <!-- Populated by JavaScript -->
+                          </div>
+                        </div>
+
+                        <!-- Contact card -->
+                        <div class="donor-info-card">
+                          <div class="donor-info-card-header">
+                            <span class="donor-info-card-icon">📧</span>
+                            <span class="donor-info-card-title">Contact</span>
+                          </div>
+                          <div class="donor-info-card-content">
+                            <div class="donor-info-card-value" id="donor-detail-email" style="font-size: 0.85rem; word-break: break-all;"></div>
+                            <div class="donor-info-card-label">
+                              <span style="font-weight: 600;">ID:</span>
+                              <span id="donor-detail-sub-id"></span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <div class="donor-detail-section">
-                        <h4>Payment Information</h4>
-                        <div class="donor-detail-field">
-                          <span class="field-label">Last Payment:</span>
-                          <span id="donor-detail-last-payment"></span>
+                      <!-- Payment History Visualization -->
+                      <div class="payment-history" id="payment-history" hidden>
+                        <div class="payment-history-header">
+                          <span class="payment-history-title">📊 Payment History</span>
+                          <span class="donor-info-card-label" id="payment-history-summary"></span>
                         </div>
-                        <div class="donor-detail-field">
-                          <span class="field-label">Amount:</span>
-                          <span id="donor-detail-amount"></span>
+                        <div class="payment-history-bars" id="payment-history-bars">
+                          <!-- Populated by JavaScript -->
                         </div>
                       </div>
 
+                      <!-- Invite Details -->
                       <div class="donor-detail-section">
-                        <h4>Plex Invite Status</h4>
+                        <h4>🔗 Invite Details</h4>
                         <div id="donor-detail-invite"></div>
                       </div>
 
+                      <!-- Error/Status Notes -->
                       <div class="donor-detail-section" id="donor-detail-error-section" hidden>
-                        <h4>Status Notes</h4>
+                        <h4>⚠️ Status Notes</h4>
                         <div id="donor-detail-error" class="status-note"></div>
-                      </div>
-
-                      <div class="donor-detail-section">
-                        <h4>Actions</h4>
-                        <div class="donor-detail-actions" id="donor-detail-actions"></div>
                       </div>
                     </div>
                   </div>
@@ -2839,7 +3193,8 @@
           <span class="status-pill donor-card-status"></span>
         </div>
         <div class="donor-card-meta">
-          <span class="donor-card-payment"></span>
+          <span class="donor-card-meta-item donor-card-payment"></span>
+          <span class="donor-card-meta-item donor-card-plex-status"></span>
         </div>
       </div>
     </template>
@@ -5213,20 +5568,81 @@
           const emailEl = clone.querySelector('.donor-card-email');
           const statusEl = clone.querySelector('.donor-card-status');
           const paymentEl = clone.querySelector('.donor-card-payment');
+          const plexStatusEl = clone.querySelector('.donor-card-plex-status');
 
           nameEl.textContent = donor.name || donor.email || 'Unknown';
           emailEl.textContent = donor.email || '—';
 
           const status = (donor.status || 'pending').toLowerCase();
+          // Set data-status on card for color-coded borders
+          card.dataset.status = status;
           statusEl.dataset.status = status;
           statusEl.textContent = status.replace(/_/g, ' ');
 
+          // Enhanced payment display - show both amount and date
           const paymentText = formatAmount(donor);
           const dateText = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '';
-          paymentEl.textContent = dateText || paymentText;
+          const paymentParts = [];
+          if (paymentText) {
+            paymentParts.push(`<span class="donor-card-icon">💰</span>${paymentText}`);
+          }
+          if (dateText) {
+            paymentParts.push(`<span class="donor-card-icon">📅</span>${dateText}`);
+          }
+          paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : '—';
+
+          // Add Plex status indicator
+          if (plexStatusEl) {
+            let plexIcon = '';
+            if (donor.plexShareState === 'shared') {
+              plexIcon = '<span class="donor-card-icon">🎬</span>Shared';
+            } else if (donor.plexShareState === 'pending') {
+              plexIcon = '<span class="donor-card-icon">⏳</span>Pending';
+            } else if (donor.needsPlexInvite) {
+              plexIcon = '<span class="donor-card-icon">📨</span>Invite';
+            }
+            plexStatusEl.innerHTML = plexIcon;
+          }
 
           if (selectedDonorId && String(donor.id) === String(selectedDonorId)) {
             card.classList.add('selected');
+          }
+
+          // Add hover tooltip
+          const tooltip = document.createElement('div');
+          tooltip.className = 'donor-card-tooltip';
+
+          const tooltipRows = [];
+          if (donor.subscriptionId) {
+            tooltipRows.push(`
+              <div class="donor-card-tooltip-row">
+                <span class="donor-card-tooltip-label">Sub ID:</span>
+                <span class="donor-card-tooltip-value">${donor.subscriptionId.substring(0, 12)}...</span>
+              </div>
+            `);
+          }
+          if (paymentText) {
+            tooltipRows.push(`
+              <div class="donor-card-tooltip-row">
+                <span class="donor-card-tooltip-label">Amount:</span>
+                <span class="donor-card-tooltip-value">${paymentText}</span>
+              </div>
+            `);
+          }
+          if (donor.plexShareState) {
+            const plexLabel = donor.plexShareState === 'shared' ? '✓ Shared' :
+                             donor.plexShareState === 'pending' ? '⏳ Pending' : '—';
+            tooltipRows.push(`
+              <div class="donor-card-tooltip-row">
+                <span class="donor-card-tooltip-label">Plex:</span>
+                <span class="donor-card-tooltip-value">${plexLabel}</span>
+              </div>
+            `);
+          }
+
+          tooltip.innerHTML = tooltipRows.join('');
+          if (tooltipRows.length > 0) {
+            card.appendChild(tooltip);
           }
 
           card.addEventListener('click', () => selectDonor(donor.id));
@@ -5234,6 +5650,23 @@
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
               selectDonor(donor.id);
+            }
+            // Arrow key navigation
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              const cards = Array.from(document.querySelectorAll('.donor-card'));
+              const currentIndex = cards.indexOf(card);
+              let nextIndex = currentIndex;
+
+              if (e.key === 'ArrowDown' && currentIndex < cards.length - 1) {
+                nextIndex = currentIndex + 1;
+              } else if (e.key === 'ArrowUp' && currentIndex > 0) {
+                nextIndex = currentIndex - 1;
+              }
+
+              if (nextIndex !== currentIndex) {
+                cards[nextIndex].focus();
+              }
             }
           });
 
@@ -5282,13 +5715,46 @@
         if (donorDetailName) {
           donorDetailName.textContent = donor.name || donor.email || 'Unknown';
         }
+        const emailHeaderEl = document.getElementById('donor-detail-email-header');
+        if (emailHeaderEl) {
+          emailHeaderEl.textContent = donor.email || '';
+        }
         if (donorDetailStatus) {
           const status = (donor.status || 'pending').toLowerCase();
           donorDetailStatus.dataset.status = status;
           donorDetailStatus.textContent = status.replace(/_/g, ' ');
         }
 
-        // Contact info
+        // Payment card
+        if (donorDetailAmount) {
+          donorDetailAmount.textContent = formatAmount(donor);
+        }
+        if (donorDetailLastPayment) {
+          donorDetailLastPayment.textContent = donor.lastPaymentAt
+            ? `Last payment: ${formatDateTime(donor.lastPaymentAt)}`
+            : 'No recent payments';
+        }
+
+        // Plex status card
+        const plexStatusEl = document.getElementById('donor-detail-plex-status');
+        if (plexStatusEl) {
+          const plexParts = [];
+          if (donor.plexShareState === 'shared') {
+            plexParts.push('<div class="donor-info-card-value" style="color: #10b981;">✓ Shared</div>');
+            plexParts.push('<div class="donor-info-card-label">Access granted</div>');
+          } else if (donor.plexShareState === 'pending') {
+            plexParts.push('<div class="donor-info-card-value" style="color: #f59e0b;">⏳ Pending</div>');
+            plexParts.push('<div class="donor-info-card-label">Waiting for acceptance</div>');
+          } else if (donor.needsPlexInvite) {
+            plexParts.push('<div class="donor-info-card-value" style="color: #ef4444;">📨 Not invited</div>');
+            plexParts.push('<div class="donor-info-card-label">Send Plex invite</div>');
+          } else {
+            plexParts.push('<div class="donor-info-card-value">—</div>');
+          }
+          plexStatusEl.innerHTML = plexParts.join('');
+        }
+
+        // Contact card
         if (donorDetailEmail) {
           donorDetailEmail.textContent = donor.email || '—';
         }
@@ -5296,15 +5762,10 @@
           donorDetailSubId.textContent = donor.subscriptionId || '—';
         }
 
-        // Payment info
-        if (donorDetailLastPayment) {
-          donorDetailLastPayment.textContent = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '—';
-        }
-        if (donorDetailAmount) {
-          donorDetailAmount.textContent = formatAmount(donor);
-        }
+        // Payment history visualization
+        renderPaymentHistory(donor);
 
-        // Invite status
+        // Invite details
         if (donorDetailInvite) {
           const invites = Array.isArray(donor.invites) ? donor.invites : [];
           const inviteParts = [];
@@ -5356,8 +5817,64 @@
           donorDetailErrorSection.hidden = true;
         }
 
-        // Actions
+        // Actions (moved to top in HTML)
         renderDonorActions(donor);
+      }
+
+      function renderPaymentHistory(donor) {
+        const paymentHistory = document.getElementById('payment-history');
+        const paymentHistoryBars = document.getElementById('payment-history-bars');
+        const paymentHistorySummary = document.getElementById('payment-history-summary');
+
+        if (!paymentHistory || !paymentHistoryBars) return;
+
+        const payments = Array.isArray(donor.payments) ? donor.payments : [];
+
+        if (payments.length === 0) {
+          paymentHistory.hidden = true;
+          return;
+        }
+
+        paymentHistory.hidden = false;
+
+        // Show last 6 payments
+        const recentPayments = payments.slice(0, 6).reverse();
+        const maxAmount = Math.max(...recentPayments.map(p => p.amount || 0), 1);
+
+        paymentHistoryBars.innerHTML = '';
+
+        recentPayments.forEach(payment => {
+          const date = payment.createdAt ? new Date(payment.createdAt) : null;
+          const amount = payment.amount || 0;
+          const height = (amount / maxAmount) * 100;
+
+          const barEl = document.createElement('div');
+          barEl.className = 'payment-bar';
+          barEl.title = `${date ? date.toLocaleDateString() : 'Unknown'}: $${amount.toFixed(2)}`;
+
+          const fillEl = document.createElement('div');
+          fillEl.className = 'payment-bar-fill';
+          fillEl.style.height = `${height}%`;
+
+          const labelEl = document.createElement('div');
+          labelEl.className = 'payment-bar-label';
+          labelEl.textContent = date ? date.toLocaleDateString('en-US', { month: 'short' }) : '?';
+
+          const amountEl = document.createElement('div');
+          amountEl.className = 'payment-bar-amount';
+          amountEl.textContent = `$${amount.toFixed(0)}`;
+
+          barEl.appendChild(fillEl);
+          barEl.appendChild(labelEl);
+          barEl.appendChild(amountEl);
+          paymentHistoryBars.appendChild(barEl);
+        });
+
+        if (paymentHistorySummary) {
+          const totalPayments = payments.length;
+          const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+          paymentHistorySummary.textContent = `${totalPayments} payment${totalPayments !== 1 ? 's' : ''} • $${totalAmount.toFixed(2)} total`;
+        }
       }
 
       function renderDonorActions(donor) {
