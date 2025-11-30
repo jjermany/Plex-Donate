@@ -1727,6 +1727,11 @@
         .grid {
           grid-template-columns: 2fr 1fr;
         }
+
+        /* Make donors panel full width */
+        .grid > .panel:has(.donors-layout) {
+          grid-column: 1 / -1;
+        }
       }
 
       @media (max-width: 720px) {
@@ -2780,7 +2785,7 @@
                     <div class="donor-detail-content">
                       <!-- Quick Actions at top -->
                       <div class="donor-detail-section">
-                        <h4>⚡ Quick Actions</h4>
+                        <h4>Quick Actions</h4>
                         <div class="donor-detail-actions" id="donor-detail-actions"></div>
                       </div>
 
@@ -2789,7 +2794,7 @@
                         <!-- Payment card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">💳</span>
+                            <span class="donor-info-card-icon">$</span>
                             <span class="donor-info-card-title">Payment</span>
                           </div>
                           <div class="donor-info-card-content">
@@ -2801,7 +2806,7 @@
                         <!-- Plex card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">🎬</span>
+                            <span class="donor-info-card-icon">▶</span>
                             <span class="donor-info-card-title">Plex Status</span>
                           </div>
                           <div class="donor-info-card-content" id="donor-detail-plex-status">
@@ -2812,7 +2817,7 @@
                         <!-- Contact card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">📧</span>
+                            <span class="donor-info-card-icon">@</span>
                             <span class="donor-info-card-title">Contact</span>
                           </div>
                           <div class="donor-info-card-content">
@@ -2828,7 +2833,7 @@
                       <!-- Payment History Visualization -->
                       <div class="payment-history" id="payment-history" hidden>
                         <div class="payment-history-header">
-                          <span class="payment-history-title">📊 Payment History</span>
+                          <span class="payment-history-title">Payment History</span>
                           <span class="donor-info-card-label" id="payment-history-summary"></span>
                         </div>
                         <div class="payment-history-bars" id="payment-history-bars">
@@ -2838,13 +2843,13 @@
 
                       <!-- Invite Details -->
                       <div class="donor-detail-section">
-                        <h4>🔗 Invite Details</h4>
+                        <h4>Invite Details</h4>
                         <div id="donor-detail-invite"></div>
                       </div>
 
                       <!-- Error/Status Notes -->
                       <div class="donor-detail-section" id="donor-detail-error-section" hidden>
-                        <h4>⚠️ Status Notes</h4>
+                        <h4>Status Notes</h4>
                         <div id="donor-detail-error" class="status-note"></div>
                       </div>
                     </div>
@@ -5584,10 +5589,10 @@
           const dateText = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '';
           const paymentParts = [];
           if (paymentText) {
-            paymentParts.push(`<span class="donor-card-icon">💰</span>${paymentText}`);
+            paymentParts.push(`<span class="donor-card-icon">$</span>${paymentText}`);
           }
           if (dateText) {
-            paymentParts.push(`<span class="donor-card-icon">📅</span>${dateText}`);
+            paymentParts.push(`<span class="donor-card-icon">•</span>${dateText}`);
           }
           paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : '—';
 
@@ -5595,11 +5600,11 @@
           if (plexStatusEl) {
             let plexIcon = '';
             if (donor.plexShareState === 'shared') {
-              plexIcon = '<span class="donor-card-icon">🎬</span>Shared';
+              plexIcon = '<span class="donor-card-icon">▶</span>Shared';
             } else if (donor.plexShareState === 'pending') {
-              plexIcon = '<span class="donor-card-icon">⏳</span>Pending';
+              plexIcon = '<span class="donor-card-icon">○</span>Pending';
             } else if (donor.needsPlexInvite) {
-              plexIcon = '<span class="donor-card-icon">📨</span>Invite';
+              plexIcon = '<span class="donor-card-icon">✉</span>Invite';
             }
             plexStatusEl.innerHTML = plexIcon;
           }
