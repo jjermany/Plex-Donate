@@ -1508,6 +1508,12 @@ router.post(
       });
     }
 
+    if (status === 'trial_expired') {
+      return res.status(409).json({
+        error: 'Trial has already been used for this account.',
+      });
+    }
+
     const trialDonor = startDonorTrial(donor.id);
     req.customer.donor = trialDonor;
 
