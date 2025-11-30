@@ -491,6 +491,39 @@ test('customer trial start is blocked when a trial is already active', async (t)
   assert.equal(unchanged.accessExpiresAt, existingExpiration);
 });
 
+test('customer trial start is blocked when trial has already been used', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'TrialExpired789!';
+  const donor = createDonor({
+    email: 'trial-expired@example.com',
+    name: 'Trial Expired',
+    status: 'trial_expired',
+    plexAccountId: 'plex-trial-expired',
+    plexEmail: 'trial-expired@example.com',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 409);
+    const payload = await trialResponse.json();
+    assert.match(payload.error, /trial has already been used/i);
+  });
+
+  const unchanged = getDonorById(donor.id);
+  assert.equal(unchanged.status, 'trial_expired');
+  assert.equal(unchanged.accessExpiresAt, null);
+});
+
 
 test('customer support workflow creates thread and notifies admin', async (t) => {
   resetDatabase();

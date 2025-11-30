@@ -236,3 +236,102 @@ test('capture payments are recorded for admin view', { concurrency: false }, asy
     await server.close();
   }
 });
+
+test('trial donor converts to active on payment without disrupting Plex access', { concurrency: false }, async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const plexService = require('../services/plex');
+  const originalIsConfigured = plexService.isConfigured;
+  const originalListUsers = plexService.listUsers;
+  const originalCreateInvite = plexService.createInvite;
+
+  // Mock Plex to show trial user already has access
+  plexService.isConfigured = () => true;
+  plexService.listUsers = async () => [
+    {
+      id: '12345',
+      email: 'trial-user@example.com',
+      username: 'TrialUser',
+    },
+  ];
+  plexService.createInvite = async () => {
+    throw new Error('createInvite should not be called for existing Plex users');
+  };
+
+  t.after(() => {
+    plexService.isConfigured = originalIsConfigured;
+    plexService.listUsers = originalListUsers;
+    plexService.createInvite = originalCreateInvite;
+  });
+
+  const originalVerifySignature = paypalService.verifyWebhookSignature;
+  paypalService.verifyWebhookSignature = async () => ({ verified: true });
+  t.after(() => {
+    paypalService.verifyWebhookSignature = originalVerifySignature;
+  });
+
+  const trialExpiration = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const donor = createDonor({
+    email: 'trial-user@example.com',
+    name: 'Trial User',
+    subscriptionId: 'I-TRIAL-TO-ACTIVE',
+    status: 'trial',
+    accessExpiresAt: trialExpiration,
+    plexAccountId: '12345',
+    plexEmail: 'trial-user@example.com',
+  });
+
+  const app = express();
+  app.use('/', webhookRouter);
+  const server = await startServer(app);
+
+  try {
+    const paymentEvent = {
+      id: 'WH-TRIAL-PAYMENT',
+      event_type: 'PAYMENT.CAPTURE.COMPLETED',
+      resource: {
+        id: 'PAYMENT-123',
+        status: 'COMPLETED',
+        amount: {
+          value: '10.00',
+          currency_code: 'USD',
+        },
+        create_time: '2024-01-15T00:00:00Z',
+        supplementary_data: {
+          related_ids: {
+            subscription_id: 'I-TRIAL-TO-ACTIVE',
+          },
+        },
+      },
+    };
+
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(paymentEvent),
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, { received: true });
+
+    const donors = listDonorsWithDetails();
+    const updatedDonor = donors.find((d) => d.id === donor.id);
+
+    // Verify status changed from trial to active
+    assert.equal(updatedDonor.status, 'active', 'donor should be active after payment');
+
+    // Verify access expiration was cleared (no longer expiring)
+    assert.equal(updatedDonor.accessExpiresAt, null, 'active donors should not have expiration');
+
+    // Verify payment was recorded
+    assert.equal(updatedDonor.payments.length, 1);
+    assert.equal(updatedDonor.payments[0].amount, 10.00);
+
+    // Verify lastPaymentAt was updated
+    assert.equal(updatedDonor.lastPaymentAt, '2024-01-15T00:00:00Z');
+  } finally {
+    await server.close();
+  }
+});
