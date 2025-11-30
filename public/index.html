@@ -22,6 +22,8 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
 
     <title>Plex Donate Admin</title>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <script>
       (() => {
         try {
@@ -980,8 +982,12 @@
       }
 
       .donor-card-icon {
-        font-size: 0.85rem;
+        width: 14px;
+        height: 14px;
         opacity: 0.8;
+        display: inline-block;
+        vertical-align: middle;
+        margin-right: 4px;
       }
 
       /* Hover preview tooltip */
@@ -1113,7 +1119,9 @@
       }
 
       .donor-info-card-icon {
-        font-size: 1.2rem;
+        width: 18px;
+        height: 18px;
+        stroke-width: 2;
       }
 
       .donor-info-card-title {
@@ -1726,6 +1734,11 @@
       @media (min-width: 960px) {
         .grid {
           grid-template-columns: 2fr 1fr;
+        }
+
+        /* Make donors panel full width */
+        .grid > .panel:has(.donors-layout) {
+          grid-column: 1 / -1;
         }
       }
 
@@ -2780,7 +2793,7 @@
                     <div class="donor-detail-content">
                       <!-- Quick Actions at top -->
                       <div class="donor-detail-section">
-                        <h4>⚡ Quick Actions</h4>
+                        <h4><i data-lucide="zap" style="width: 16px; height: 16px;"></i> Quick Actions</h4>
                         <div class="donor-detail-actions" id="donor-detail-actions"></div>
                       </div>
 
@@ -2789,7 +2802,7 @@
                         <!-- Payment card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">💳</span>
+                            <i data-lucide="dollar-sign" class="donor-info-card-icon"></i>
                             <span class="donor-info-card-title">Payment</span>
                           </div>
                           <div class="donor-info-card-content">
@@ -2801,7 +2814,7 @@
                         <!-- Plex card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">🎬</span>
+                            <i data-lucide="play-circle" class="donor-info-card-icon"></i>
                             <span class="donor-info-card-title">Plex Status</span>
                           </div>
                           <div class="donor-info-card-content" id="donor-detail-plex-status">
@@ -2812,7 +2825,7 @@
                         <!-- Contact card -->
                         <div class="donor-info-card">
                           <div class="donor-info-card-header">
-                            <span class="donor-info-card-icon">📧</span>
+                            <i data-lucide="at-sign" class="donor-info-card-icon"></i>
                             <span class="donor-info-card-title">Contact</span>
                           </div>
                           <div class="donor-info-card-content">
@@ -2828,7 +2841,7 @@
                       <!-- Payment History Visualization -->
                       <div class="payment-history" id="payment-history" hidden>
                         <div class="payment-history-header">
-                          <span class="payment-history-title">📊 Payment History</span>
+                          <span class="payment-history-title"><i data-lucide="bar-chart-3" style="width: 14px; height: 14px;"></i> Payment History</span>
                           <span class="donor-info-card-label" id="payment-history-summary"></span>
                         </div>
                         <div class="payment-history-bars" id="payment-history-bars">
@@ -2838,13 +2851,13 @@
 
                       <!-- Invite Details -->
                       <div class="donor-detail-section">
-                        <h4>🔗 Invite Details</h4>
+                        <h4><i data-lucide="link" style="width: 16px; height: 16px;"></i> Invite Details</h4>
                         <div id="donor-detail-invite"></div>
                       </div>
 
                       <!-- Error/Status Notes -->
                       <div class="donor-detail-section" id="donor-detail-error-section" hidden>
-                        <h4>⚠️ Status Notes</h4>
+                        <h4><i data-lucide="alert-circle" style="width: 16px; height: 16px;"></i> Status Notes</h4>
                         <div id="donor-detail-error" class="status-note"></div>
                       </div>
                     </div>
@@ -5584,10 +5597,10 @@
           const dateText = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '';
           const paymentParts = [];
           if (paymentText) {
-            paymentParts.push(`<span class="donor-card-icon">💰</span>${paymentText}`);
+            paymentParts.push(`<i data-lucide="dollar-sign" class="donor-card-icon"></i>${paymentText}`);
           }
           if (dateText) {
-            paymentParts.push(`<span class="donor-card-icon">📅</span>${dateText}`);
+            paymentParts.push(`<i data-lucide="calendar" class="donor-card-icon"></i>${dateText}`);
           }
           paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : '—';
 
@@ -5595,11 +5608,11 @@
           if (plexStatusEl) {
             let plexIcon = '';
             if (donor.plexShareState === 'shared') {
-              plexIcon = '<span class="donor-card-icon">🎬</span>Shared';
+              plexIcon = '<i data-lucide="play-circle" class="donor-card-icon"></i>Shared';
             } else if (donor.plexShareState === 'pending') {
-              plexIcon = '<span class="donor-card-icon">⏳</span>Pending';
+              plexIcon = '<i data-lucide="clock" class="donor-card-icon"></i>Pending';
             } else if (donor.needsPlexInvite) {
-              plexIcon = '<span class="donor-card-icon">📨</span>Invite';
+              plexIcon = '<i data-lucide="mail" class="donor-card-icon"></i>Invite';
             }
             plexStatusEl.innerHTML = plexIcon;
           }
@@ -5672,6 +5685,11 @@
 
           donorsList.appendChild(clone);
         });
+
+        // Initialize Lucide icons after rendering
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
       }
 
       function selectDonor(donorId) {
@@ -5740,13 +5758,13 @@
         if (plexStatusEl) {
           const plexParts = [];
           if (donor.plexShareState === 'shared') {
-            plexParts.push('<div class="donor-info-card-value" style="color: #10b981;">✓ Shared</div>');
+            plexParts.push('<div class="donor-info-card-value" style="color: #10b981;"><i data-lucide="check-circle" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Shared</div>');
             plexParts.push('<div class="donor-info-card-label">Access granted</div>');
           } else if (donor.plexShareState === 'pending') {
-            plexParts.push('<div class="donor-info-card-value" style="color: #f59e0b;">⏳ Pending</div>');
+            plexParts.push('<div class="donor-info-card-value" style="color: #f59e0b;"><i data-lucide="clock" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Pending</div>');
             plexParts.push('<div class="donor-info-card-label">Waiting for acceptance</div>');
           } else if (donor.needsPlexInvite) {
-            plexParts.push('<div class="donor-info-card-value" style="color: #ef4444;">📨 Not invited</div>');
+            plexParts.push('<div class="donor-info-card-value" style="color: #ef4444;"><i data-lucide="mail-x" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Not invited</div>');
             plexParts.push('<div class="donor-info-card-label">Send Plex invite</div>');
           } else {
             plexParts.push('<div class="donor-info-card-value">—</div>');
@@ -5819,6 +5837,11 @@
 
         // Actions (moved to top in HTML)
         renderDonorActions(donor);
+
+        // Initialize Lucide icons after rendering
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
       }
 
       function renderPaymentHistory(donor) {
@@ -7663,6 +7686,11 @@
 
       registerServiceWorker();
       checkSession();
+
+      // Initialize Lucide icons on page load
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
     </script>
   </body>
 </html>
