@@ -2807,8 +2807,6 @@ async function revokeUser({ plexAccountId, email }) {
   // Note: buildSharedServerUrl uses resolveServerId which falls back to machineIdentifier if no legacy ID
   const sharedServerUrl = await buildSharedServerUrl(plex);
 
-  console.log('DEBUG: Fetching shares from:', sharedServerUrl);
-
   let response;
   try {
     response = await fetch(sharedServerUrl, {
@@ -2836,29 +2834,10 @@ async function revokeUser({ plexAccountId, email }) {
 
   // Parse the response (could be XML or JSON)
   const payload = await response.text();
-  console.log('DEBUG: Response payload (first 500 chars):', payload.substring(0, 500));
-
   const shares = parseSharedServerMembersPayload(payload);
-  console.log('DEBUG: Parsed shares:', JSON.stringify({
-    sharesCount: shares.length,
-    shares: shares.map((s) => ({
-      id: s.id,
-      email: s.email,
-      emails: s.emails,
-      ids: s.ids,
-      allKeys: Object.keys(s),
-    })),
-  }, null, 2));
 
   const normalizedEmail = email ? normalize(email) : '';
   const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
-
-  console.log('DEBUG: Looking for:', JSON.stringify({
-    email,
-    normalizedEmail,
-    plexAccountId,
-    normalizedAccountId,
-  }, null, 2));
 
   // Find the share matching our user
   let targetShare = null;
@@ -2869,8 +2848,6 @@ async function revokeUser({ plexAccountId, email }) {
       for (const shareEmail of share.emails) {
         if (normalize(shareEmail) === normalizedEmail) {
           targetShare = share;
-          console.log('DEBUG: Matched by email:', shareEmail);
-          console.log('DEBUG: Matched share object:', JSON.stringify(share, null, 2));
           break;
         }
       }
@@ -2881,7 +2858,6 @@ async function revokeUser({ plexAccountId, email }) {
       for (const shareId of share.ids) {
         if (normalize(shareId) === normalizedAccountId) {
           targetShare = share;
-          console.log('DEBUG: Matched by ID:', shareId);
           break;
         }
       }
@@ -2903,8 +2879,6 @@ async function revokeUser({ plexAccountId, email }) {
 
   // Delete the share using the legacy endpoint (same as cancelInvite)
   const deleteUrl = await buildSharedServerUrl(plex, shareId);
-
-  console.log('DEBUG: Deleting share at:', deleteUrl);
 
   let deleteResponse;
   try {
