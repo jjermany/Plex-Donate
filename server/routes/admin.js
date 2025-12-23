@@ -7,6 +7,7 @@ const {
   getDonorById,
   markInviteEmailSent,
   getLatestActiveInviteForDonor,
+  getLatestInviteForDonor,
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
   createOrUpdateShareLink,
@@ -27,6 +28,7 @@ const {
   markSupportRequestResolved,
   deleteSupportRequestById,
   addSupportMessageToRequest,
+  listInvitesForDonor,
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
@@ -43,6 +45,8 @@ const {
 const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
 const {
   normalizeValue,
+  collectDonorEmailCandidates,
+  collectDonorIdCandidates,
   annotateDonorWithPlex,
   loadPlexContext,
 } = require('../utils/plex');
@@ -133,6 +137,64 @@ async function buildDonorListWithPlex() {
   const plexContext = await loadPlexContext({ logContext: 'admin dashboard' });
   const annotatedDonors = donors.map((donor) => annotateDonorWithPlex(donor, plexContext));
   return { donors: annotatedDonors, plexContext };
+}
+
+function buildPlexRevocationContext(donor) {
+  const invites = listInvitesForDonor(donor.id);
+  const activeInvite = invites.find((invite) => invite && !invite.revokedAt) || null;
+  const latestInvite = getLatestInviteForDonor(donor.id);
+  const inviteForPlex = activeInvite || latestInvite || null;
+  const donorForCandidates = { ...donor, invites };
+  const emailCandidates = collectDonorEmailCandidates(donorForCandidates);
+  const idCandidates = collectDonorIdCandidates(donorForCandidates);
+
+  return {
+    invites,
+    activeInvite,
+    inviteForPlex,
+    plexAccountId: idCandidates.length > 0 ? idCandidates[0] : null,
+    plexEmail: emailCandidates.length > 0 ? emailCandidates[0] : null,
+  };
+}
+
+async function revokePlexAccessForDonor(donor, context) {
+  const revocationContext = context || buildPlexRevocationContext(donor);
+
+  if (!plexService.isConfigured()) {
+    return { success: false, skipped: true, reason: 'plex_not_configured' };
+  }
+
+  const { plexAccountId, plexEmail, inviteForPlex } = revocationContext;
+  if (!plexAccountId && !plexEmail) {
+    return { success: false, skipped: true, reason: 'missing_identifier' };
+  }
+
+  try {
+    const result = await plexService.revokeUser({
+      plexAccountId: plexAccountId || undefined,
+      email: plexEmail || undefined,
+    });
+
+    const success = Boolean(result && result.success);
+    if (success && inviteForPlex) {
+      markPlexRevoked(inviteForPlex.id);
+    }
+
+    if (success) {
+      logEvent('plex.access.revoked', {
+        donorId: donor.id,
+        email: plexEmail || donor.email,
+        plexAccountId: plexAccountId || donor.plexAccountId,
+        inviteId: inviteForPlex ? inviteForPlex.id : null,
+        reason: 'admin_manual_revoke',
+      });
+    }
+
+    return { ...result, success };
+  } catch (err) {
+    logger.warn('Failed to revoke Plex access', err.message);
+    return { success: false, reason: err.message };
+  }
 }
 
 router.use(express.json());
@@ -1071,12 +1133,16 @@ router.post(
       return res.status(404).json({ error: 'Subscriber not found' });
     }
 
-    const invite = getLatestActiveInviteForDonor(donor.id);
-    if (!invite) {
-      return res.status(400).json({ error: 'No invite to revoke' });
+    const revocationContext = buildPlexRevocationContext(donor);
+    const invite = revocationContext.activeInvite;
+
+    if (!invite && !plexService.isConfigured()) {
+      return res.status(400).json({
+        error: 'No active invite to revoke and Plex integration is not configured.',
+      });
     }
 
-    if (invite.plexInviteId) {
+    if (invite && invite.plexInviteId) {
       try {
         await plexService.cancelInvite(invite.plexInviteId);
       } catch (err) {
@@ -1084,22 +1150,92 @@ router.post(
       }
     }
 
-    revokeInviteRecord(invite.id);
-
-    if (plexService.isConfigured()) {
-      try {
-        const result = await plexService.revokeUserByEmail(donor.email);
-        if (result.success) {
-          markPlexRevoked(invite.id);
-        }
-      } catch (err) {
-        logger.warn('Failed to revoke Plex access', err.message);
-      }
+    if (invite) {
+      revokeInviteRecord(invite.id);
+      logEvent('invite.revoked', { donorId: donor.id, inviteId: invite.id });
     }
 
-    logEvent('invite.revoked', { donorId: donor.id, inviteId: invite.id });
+    const plexResult = await revokePlexAccessForDonor(donor, revocationContext);
 
-    res.json({ success: true, csrfToken: res.locals.csrfToken });
+    if (!invite && !plexResult.success) {
+      let message;
+      if (plexResult.reason === 'missing_identifier') {
+        message = 'Unable to determine which Plex account to revoke.';
+      } else if (plexResult.reason === 'plex_not_configured') {
+        message = 'Configure Plex settings before revoking access.';
+      } else {
+        message = plexResult.reason || 'Unable to revoke access for this subscriber.';
+      }
+
+      return res.status(400).json({ error: message });
+    }
+
+    const { donors, plexContext } = await buildDonorListWithPlex();
+    const updatedDonor = donors.find((item) => item.id === donor.id) || null;
+
+    const messageParts = [];
+    if (invite) {
+      messageParts.push('Invite revoked');
+    }
+    if (plexResult && plexResult.success) {
+      messageParts.push('Plex access revoked');
+    }
+
+    res.json({
+      success: Boolean(invite || (plexResult && plexResult.success)),
+      message: messageParts.length > 0 ? `${messageParts.join(' and ')}.` : undefined,
+      donor: updatedDonor,
+      plex: {
+        configured: plexContext.configured,
+        error: plexContext.error,
+      },
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/subscribers/:id/revoke-plex',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+
+    const revocationContext = buildPlexRevocationContext(donor);
+    const plexResult = await revokePlexAccessForDonor(donor, revocationContext);
+
+    if (!plexResult || !plexResult.success) {
+      let message;
+      if (plexResult && plexResult.reason === 'missing_identifier') {
+        message = 'Unable to determine which Plex account to revoke.';
+      } else if (plexResult && plexResult.reason === 'plex_not_configured') {
+        message = 'Configure Plex settings before revoking access.';
+      } else {
+        message =
+          (plexResult && plexResult.reason) ||
+          'Unable to revoke Plex access for this subscriber.';
+      }
+
+      const status = plexResult && plexResult.skipped ? 400 : 502;
+      return res.status(status).json({ error: message });
+    }
+
+    const { donors, plexContext } = await buildDonorListWithPlex();
+    const updatedDonor = donors.find((item) => item.id === donor.id) || null;
+
+    res.json({
+      success: true,
+      message: 'Plex access revoked.',
+      donor: updatedDonor,
+      plex: {
+        configured: plexContext.configured,
+        error: plexContext.error,
+      },
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 

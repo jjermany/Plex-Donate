@@ -579,6 +579,160 @@ function parseSharedServerMembersPayload(payload) {
   return parseSharedServerMembersFromXml(text);
 }
 
+function parseAttributes(attributeText) {
+  const attributes = {};
+  const attributePattern = /([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"/g;
+  let attributeMatch;
+
+  while ((attributeMatch = attributePattern.exec(attributeText))) {
+    const key = attributeMatch[1];
+    const value = attributeMatch[2];
+    attributes[key] = value;
+  }
+
+  return attributes;
+}
+
+function parseSharedServersFromXml(text) {
+  const results = [];
+
+  const extractUser = (content) => {
+    const userPattern = /<User\b([^>]*)>/i;
+    const match = userPattern.exec(content);
+    if (!match) {
+      return null;
+    }
+
+    const attrs = parseAttributes(match[1] || '');
+    const user = {};
+
+    if (attrs.id || attrs.uuid || attrs.accountId || attrs.account_id) {
+      user.id =
+        attrs.id ||
+        attrs.uuid ||
+        attrs.accountId ||
+        attrs.account_id;
+    }
+
+    if (attrs.email || attrs.username) {
+      user.email = attrs.email || attrs.username;
+    }
+
+    if (attrs.title || attrs.name) {
+      user.title = attrs.title || attrs.name;
+    }
+
+    return user;
+  };
+
+  const normalizeShare = (attrs, content = '') => {
+    if (!attrs || typeof attrs !== 'object') {
+      return null;
+    }
+
+    const share = { ...attrs };
+
+    share.id =
+      share.id ||
+      share.uuid ||
+      share.sharedServerId ||
+      share.shared_server_id ||
+      share.serverId ||
+      share.server_id ||
+      null;
+
+    share.machineIdentifier =
+      share.machineIdentifier ||
+      share.machineidentifier ||
+      share.machine_id ||
+      share.machineid ||
+      share.serverId ||
+      share.server_id ||
+      share.serverid ||
+      share.serverUuid ||
+      share.server_uuid ||
+      null;
+
+    share.invitedEmail = share.invitedEmail || share.invited_email || share.email || null;
+    share.userId =
+      share.userId ||
+      share.user_id ||
+      share.accountId ||
+      share.account_id ||
+      share.invitedId ||
+      share.invited_id ||
+      null;
+
+    const user = extractUser(content);
+    if (user) {
+      share.user = user;
+      if (!share.invitedEmail && user.email) {
+        share.invitedEmail = user.email;
+      }
+      if (!share.userId && user.id) {
+        share.userId = user.id;
+      }
+    }
+
+    return share;
+  };
+
+  const blockPattern = /<SharedServer\b([^>]*)>([\s\S]*?)<\/SharedServer>/gi;
+  let blockMatch;
+  while ((blockMatch = blockPattern.exec(text))) {
+    const attrs = parseAttributes(blockMatch[1] || '');
+    const content = blockMatch[2] || '';
+    const normalized = normalizeShare(attrs, content);
+    if (normalized) {
+      results.push(normalized);
+    }
+  }
+
+  const selfClosingPattern = /<SharedServer\b([^>]*)\/>/gi;
+  let selfClosingMatch;
+  while ((selfClosingMatch = selfClosingPattern.exec(text))) {
+    const attrs = parseAttributes(selfClosingMatch[1] || '');
+    const normalized = normalizeShare(attrs, '');
+    if (normalized) {
+      results.push(normalized);
+    }
+  }
+
+  return results;
+}
+
+function parseSharedServersPayload(payload) {
+  if (payload === undefined || payload === null) {
+    return [];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (typeof payload === 'object') {
+    if (Array.isArray(payload.invitations)) {
+      return payload.invitations;
+    }
+
+    return [];
+  }
+
+  const text = String(payload).trim();
+  if (!text) {
+    return [];
+  }
+
+  try {
+    const json = JSON.parse(text);
+    return parseSharedServersPayload(json);
+  } catch (err) {
+    // fall through to XML parsing
+  }
+
+  return parseSharedServersFromXml(text);
+}
+
 function hostFromUrl(url) {
   if (!url) {
     return '';
@@ -2796,15 +2950,20 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers (shares) for this server
-  const sharedServersUrl = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plex.token}`;
+  // Fetch list of shared servers (shares) for this server via the legacy endpoint
+  let sharedServersUrl;
+  try {
+    sharedServersUrl = await buildSharedServerUrl(plex);
+  } catch (err) {
+    throw new Error(`Failed to resolve Plex shared servers URL: ${err.message}`);
+  }
 
   let response;
   try {
     response = await fetch(sharedServersUrl, {
       method: 'GET',
       headers: buildSharedServerHeaders(plex, {
-        'Accept': 'application/json',
+        Accept: 'application/json, text/xml',
       }),
     });
   } catch (err) {
@@ -2822,10 +2981,8 @@ async function revokeUser({ plexAccountId, email }) {
 
   let shares = [];
   try {
-    shares = await response.json();
-    if (!Array.isArray(shares)) {
-      shares = [];
-    }
+    const payload = await response.text();
+    shares = parseSharedServersPayload(payload);
   } catch (err) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
   }
