@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050818" />
+    <meta name="robots" content="index, follow" />
+    <title>About Plex Donate</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(
+            120% 120% at 50% -10%,
+            rgba(99, 102, 241, 0.35) 0%,
+            rgba(15, 23, 42, 0.92) 45%,
+            #050818 100%
+          ),
+          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
+        color: #e2e8f0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 48px 24px 32px;
+        position: relative;
+      }
+      body::after {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(76, 29, 149, 0.18),
+          transparent 70%
+        );
+        pointer-events: none;
+        z-index: 0;
+      }
+      .container {
+        max-width: 800px;
+        width: 100%;
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 24px;
+        padding: clamp(32px, 5vw, 48px);
+        box-shadow: 0 25px 60px -25px rgba(30, 64, 175, 0.6);
+        position: relative;
+        z-index: 1;
+      }
+      h1 {
+        margin: 0 0 24px;
+        font-size: clamp(2rem, 4vw, 2.75rem);
+        line-height: 1.2;
+        background: linear-gradient(135deg, #c7d2fe 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      h2 {
+        margin: 32px 0 16px;
+        font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+        line-height: 1.3;
+        color: #c7d2fe;
+      }
+      p {
+        margin: 0 0 16px;
+        line-height: 1.7;
+        color: #cbd5e1;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      ul {
+        margin: 16px 0;
+        padding-left: 24px;
+        line-height: 1.7;
+        color: #cbd5e1;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      .highlight {
+        color: #a5b4fc;
+        font-weight: 600;
+      }
+      .disclaimer {
+        margin-top: 48px;
+        padding-top: 32px;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        color: rgba(203, 213, 225, 0.8);
+      }
+      .disclaimer h2 {
+        font-size: 1rem;
+        margin-top: 0;
+      }
+      a {
+        color: #93c5fd;
+        text-decoration: none;
+        transition: color 0.2s ease;
+      }
+      a:hover {
+        color: #bfdbfe;
+        text-decoration: underline;
+      }
+      @media (max-width: 640px) {
+        body {
+          padding: 24px 16px;
+        }
+        .container {
+          padding: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>About Plex Donate</h1>
+
+      <p>
+        Plex Donate is a community-powered media sharing platform that enables content
+        creators and library curators to share their Plex media libraries with supporters
+        through a subscription-based model.
+      </p>
+
+      <h2>Our Purpose</h2>
+      <p>
+        We provide a streamlined solution for managing Plex library access, handling
+        subscription billing, and facilitating community growth through referral systems.
+        Our platform helps library owners:
+      </p>
+      <ul>
+        <li>Accept recurring donations via PayPal and Stripe</li>
+        <li>Automatically manage Plex user invitations and access</li>
+        <li>Track subscriber status and billing lifecycle</li>
+        <li>Enable community growth through referral invite systems</li>
+        <li>Maintain secure, password-protected account management</li>
+      </ul>
+
+      <h2>How It Works</h2>
+      <p>
+        Library supporters create an account, link their Plex identity, and choose a
+        subscription plan. Once active, supporters gain access to the shared media library
+        and can invite others to join the community. Library administrators maintain full
+        control over access, billing settings, and user management through a dedicated
+        dashboard.
+      </p>
+
+      <h2>Platform Features</h2>
+      <ul>
+        <li><span class="highlight">Automated Access Management:</span> Seamless Plex invitation handling with automatic access grants and revocations</li>
+        <li><span class="highlight">Flexible Billing:</span> Support for both PayPal and Stripe payment processing</li>
+        <li><span class="highlight">Trial System:</span> Optional 7-day trial periods for new supporters</li>
+        <li><span class="highlight">Referral System:</span> Community growth through monthly referral invites</li>
+        <li><span class="highlight">Email Notifications:</span> Automated verification and status updates</li>
+      </ul>
+
+      <div class="disclaimer">
+        <h2>Legal Disclaimer</h2>
+        <p>
+          Plex Donate is a self-hosted platform tool and does not host, store, or distribute
+          any media content. All media content is provided by individual library owners who
+          are solely responsible for ensuring they have the necessary rights and licenses
+          to share their content.
+        </p>
+        <p>
+          Users of this platform must comply with all applicable laws, including copyright
+          laws, in their jurisdiction. This software is provided "as is" without warranty
+          of any kind, express or implied. The developers and operators of Plex Donate
+          assume no liability for how the platform is used or for any content shared
+          through it.
+        </p>
+        <p>
+          By using this platform, you acknowledge that you are responsible for ensuring
+          your use complies with Plex's Terms of Service and all applicable laws. Plex
+          Donate is not affiliated with, endorsed by, or sponsored by Plex, Inc.
+        </p>
+        <p>
+          For questions or concerns, please contact your library administrator.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

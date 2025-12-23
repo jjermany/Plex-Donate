@@ -109,6 +109,10 @@ app.get('/share/:token', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/share.html'));
 });
 
+app.get('/about', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/about.html'));
+});
+
 app.get(/^\/dashboard(?:\/.*)?$/, (req, res) => {
   res.sendFile(path.join(__dirname, '../public/dashboard.html'));
 });
