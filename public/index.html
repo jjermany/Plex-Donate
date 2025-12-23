@@ -5607,7 +5607,9 @@
           // Add Plex status indicator
           if (plexStatusEl) {
             let plexIcon = '';
-            if (donor.plexShareState === 'shared') {
+            if (donor.hadPreexistingAccess) {
+              plexIcon = '<i data-lucide="shield-check" class="donor-card-icon" style="color: #3b82f6;"></i>Pre-existing';
+            } else if (donor.plexShareState === 'shared') {
               plexIcon = '<i data-lucide="play-circle" class="donor-card-icon"></i>Shared';
             } else if (donor.plexShareState === 'pending') {
               plexIcon = '<i data-lucide="clock" class="donor-card-icon"></i>Pending';
@@ -5642,7 +5644,14 @@
               </div>
             `);
           }
-          if (donor.plexShareState) {
+          if (donor.hadPreexistingAccess) {
+            tooltipRows.push(`
+              <div class="donor-card-tooltip-row">
+                <span class="donor-card-tooltip-label">Access:</span>
+                <span class="donor-card-tooltip-value">🛡️ Pre-existing</span>
+              </div>
+            `);
+          } else if (donor.plexShareState) {
             const plexLabel = donor.plexShareState === 'shared' ? '✓ Shared' :
                              donor.plexShareState === 'pending' ? '⏳ Pending' : '—';
             tooltipRows.push(`
@@ -5757,7 +5766,10 @@
         const plexStatusEl = document.getElementById('donor-detail-plex-status');
         if (plexStatusEl) {
           const plexParts = [];
-          if (donor.plexShareState === 'shared') {
+          if (donor.hadPreexistingAccess) {
+            plexParts.push('<div class="donor-info-card-value" style="color: #3b82f6;"><i data-lucide="shield-check" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Pre-existing Access</div>');
+            plexParts.push('<div class="donor-info-card-label">Access will be preserved on cancellation</div>');
+          } else if (donor.plexShareState === 'shared') {
             plexParts.push('<div class="donor-info-card-value" style="color: #10b981;"><i data-lucide="check-circle" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Shared</div>');
             plexParts.push('<div class="donor-info-card-label">Access granted</div>');
           } else if (donor.plexShareState === 'pending') {
@@ -5788,7 +5800,9 @@
           const invites = Array.isArray(donor.invites) ? donor.invites : [];
           const inviteParts = [];
 
-          if (donor.plexShareState === 'shared') {
+          if (donor.hadPreexistingAccess) {
+            inviteParts.push('<span class="badge badge-note" style="background-color: #3b82f6; color: white;">Pre-existing access - will be preserved</span>');
+          } else if (donor.plexShareState === 'shared') {
             inviteParts.push('<span class="badge badge-visited">Plex shared</span>');
           } else if (donor.plexShareState === 'pending') {
             inviteParts.push('<span class="badge badge-note">Plex invite pending</span>');

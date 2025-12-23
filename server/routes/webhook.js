@@ -14,6 +14,7 @@ const {
   markInviteEmailSent,
   updateInvitePlexDetails,
   setDonorAccessExpirationBySubscription,
+  setDonorPreexistingAccess,
 } = require('../db');
 const plexService = require('../services/plex');
 const emailService = require('../services/email');
@@ -322,6 +323,22 @@ async function revokeDonorAccess(donor) {
   if (!donor.email && !donor.plexAccountId) {
     return;
   }
+
+  // Preserve access for users who had it before subscribing
+  if (donor.hadPreexistingAccess) {
+    logger.info('Preserving Plex access for donor with pre-existing access', {
+      donorId: donor.id,
+      email: donor.email,
+      plexAccountId: donor.plexAccountId,
+    });
+    logEvent('plex.access.preserved', {
+      donorId: donor.id,
+      email: donor.email,
+      reason: 'had_preexisting_access',
+    });
+    return;
+  }
+
   if (plexService.isConfigured()) {
     try {
       const result = await plexService.revokeUser({
@@ -532,6 +549,15 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
           logger.info('Skipping automatic invite: donor already present on Plex server', {
             donorId: donor.id,
           });
+          // Mark this donor as having pre-existing access so we don't revoke it on cancellation
+          if (!donor.hadPreexistingAccess) {
+            setDonorPreexistingAccess(donor.id, true);
+            logEvent('donor.preexisting_access.detected', {
+              donorId: donor.id,
+              email: donor.email,
+              plexAccountId: donor.plexAccountId,
+            });
+          }
           return;
         }
       }
