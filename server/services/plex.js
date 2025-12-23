@@ -2797,7 +2797,8 @@ async function revokeUser({ plexAccountId, email }) {
   }
 
   // Fetch list of shared servers (shares) for this server via the v2 endpoint
-  const sharedServersUrl = `${PLEX_TV_BASE_URL}/api/v2/shared_servers`;
+  // Note: GET requests must use clients.plex.tv, not plex.tv
+  const sharedServersUrl = 'https://clients.plex.tv/api/v2/shared_servers';
 
   let response;
   try {
