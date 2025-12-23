@@ -2939,8 +2939,9 @@ async function createInvite(
     );
   }
 
+  // Plex expects form-encoded data, NOT JSON!
   const sharedHeaders = buildSharedServerHeaders(plex, {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/x-www-form-urlencoded',
   });
 
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
@@ -2956,36 +2957,33 @@ async function createInvite(
   const serverId = await resolveServerId(plex);
   const sharedServersUrl = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plex.token}`;
 
-  // Build libraries array in the format Plex Web uses
-  const libraries = finalSectionIds.map(libraryId => ({
-    library_id: parseInt(libraryId, 10),
-    allow_sync: plex?.allowSync === true || plex?.allowSync === '1'
-  }));
+  // Build form-encoded body with FLAT fields (not nested JSON)
+  const formData = new URLSearchParams();
+  formData.append('machineIdentifier', serverId);
+  formData.append('invitedEmail', normalizedEmail);
 
-  // Build request body with correct Plex API field names
-  const requestBody = {
-    shared_server: {
-      server_id: serverId,  // Plex expects "server_id", not "machineIdentifier"
-      email: normalizedEmail,  // Plex expects "email", not "invitedEmail"
-      libraries: libraries,
-      allow_channels: plex?.allowChannels === true || plex?.allowChannels === '1',
-      allow_camera_upload: plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1',
-      allow_tuners: false
-    }
-  };
+  // Add libraries as array format: libraries[0][library_id], libraries[0][allow_sync], etc.
+  finalSectionIds.forEach((libraryId, index) => {
+    formData.append(`libraries[${index}][library_id]`, parseInt(libraryId, 10));
+    formData.append(`libraries[${index}][allow_sync]`, plex?.allowSync === true || plex?.allowSync === '1' ? '1' : '0');
+  });
 
-  // Log the FULL request body for debugging
-  logger.info('Creating Plex invite - FULL REQUEST:', JSON.stringify({
-    url: 'https://plex.tv/api/v2/shared_servers',
-    body: requestBody
-  }, null, 2));
+  formData.append('allow_channels', plex?.allowChannels === true || plex?.allowChannels === '1' ? '1' : '0');
+  formData.append('allow_camera_upload', plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1' ? '1' : '0');
+  formData.append('allow_tuners', '0');
+
+  // Log the form data for debugging
+  logger.info('Creating Plex invite - Form Data:', {
+    url: sharedServersUrl,
+    body: formData.toString()
+  });
 
   let response;
   try {
     response = await fetch(sharedServersUrl, {
       method: 'POST',
       headers: sharedHeaders,
-      body: JSON.stringify(requestBody),
+      body: formData.toString(),
     });
   } catch (err) {
     throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
