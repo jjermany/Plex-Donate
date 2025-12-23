@@ -3292,7 +3292,7 @@
                 data-action="refresh"
                 role="menuitem"
               >
-                Re-verify PayPal
+                Verify Payment
               </button>
               <button
                 type="button"
@@ -6043,13 +6043,13 @@
         shareBtn.title = shareUrl ? 'Copy the existing invite page link' : 'Generate an invite page link first';
         donorDetailActions.appendChild(shareBtn);
 
-        // Re-verify PayPal
+        // Verify payment
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'secondary';
-        refreshBtn.textContent = 'Re-verify PayPal';
+        refreshBtn.textContent = 'Verify Payment';
         refreshBtn.dataset.action = 'refresh';
         refreshBtn.dataset.donorId = donor.id;
-        refreshBtn.title = 'Re-verify PayPal subscription status';
+        refreshBtn.title = 'Re-verify PayPal or Stripe subscription status';
         donorDetailActions.appendChild(refreshBtn);
 
         // Generate new invite link
