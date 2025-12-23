@@ -3932,6 +3932,7 @@
       const AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
       let autoRefreshTimerId = null;
       let dashboardDataPromise = null;
+      let isSessionExpiring = false;
 
       const statusClearTimers = new WeakMap();
       let toastTimerId = null;
@@ -4218,6 +4219,12 @@
           : {};
 
         if (!response.ok) {
+          // If session is expired (401), set flag and throw without retry
+          if (response.status === 401) {
+            isSessionExpiring = true;
+            stopDashboardAutoRefresh();
+            throw new Error('Session expired');
+          }
           const error = data.error || 'Failed to refresh session';
           throw new Error(error);
         }
@@ -4238,6 +4245,11 @@
       }
 
       async function api(path, options = {}) {
+        // Prevent new requests if session is already expiring
+        if (isSessionExpiring) {
+          throw new Error('Session expired');
+        }
+
         const { _retry, ...requestOptions } = options || {};
         const opts = { ...requestOptions };
         opts.credentials = 'include';
@@ -4268,6 +4280,9 @@
 
         if (response.status === 401) {
           // Session has expired or user is not authenticated
+          // Set flag immediately to prevent cascading retry attempts
+          isSessionExpiring = true;
+
           // Stop any background processes
           stopDashboardAutoRefresh();
           setSessionToken(null);
@@ -4308,7 +4323,8 @@
           response.status === 403 &&
           data &&
           data.error === 'Invalid CSRF token' &&
-          !_retry
+          !_retry &&
+          !isSessionExpiring
         ) {
           csrfToken = null;
           try {
@@ -4339,6 +4355,9 @@
       async function ensureCsrfToken() {
         if (csrfToken) {
           return csrfToken;
+        }
+        if (isSessionExpiring) {
+          throw new Error('Session expired');
         }
         try {
           const data = await refreshAdminSession();
@@ -6821,6 +6840,9 @@
             return;
           }
 
+          // Reset session expiring flag to allow login attempt
+          isSessionExpiring = false;
+
           // Check if we're still in rate limit cooldown
           if (loginRateLimitedUntil && Date.now() < loginRateLimitedUntil) {
             const remainingMinutes = Math.ceil((loginRateLimitedUntil - Date.now()) / 60000);
@@ -6854,6 +6876,8 @@
             csrfToken = response.csrfToken;
             state.authenticated = true;
             state.adminUsername = response.adminUsername || username;
+            // Reset session expiring flag on successful login
+            isSessionExpiring = false;
             const loginTimezone =
               response && typeof response.timezone === 'string'
                 ? response.timezone.trim()
