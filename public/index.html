@@ -6626,15 +6626,9 @@
               }
               syncSucceeded = true;
 
-              // Show success message if any records were cleared
-              if (syncResponse.clearedCount > 0) {
-                showDashboardToast(
-                  `Synced Plex status. Cleared ${syncResponse.clearedCount} stale record(s).`,
-                  'success'
-                );
-              } else {
-                showDashboardToast('Plex status is up to date', 'success');
-              }
+              // Show success message from server
+              const message = syncResponse.message || 'Plex status synced';
+              showDashboardToast(message, 'success');
 
               // Re-render with updated data
               render();
