@@ -2786,56 +2786,121 @@ async function revokeUser({ plexAccountId, email }) {
   }
 
   const plex = getPlexConfig();
-  let listResult;
+
+  // Get server identifier
+  let serverId;
   try {
-    listResult = await fetchUsersList(plex);
+    plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
+    serverId = await resolveServerId(plex);
   } catch (err) {
-    throw new Error(`Failed to fetch Plex users: ${err.message}`);
-  }
-  const users = listResult.users;
-  let target = null;
-
-  if (plexAccountId) {
-    target = users.find((user) => matchesAccountId(user, plexAccountId));
+    throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  if (!target && email) {
-    target = users.find((user) => matchesEmail(user, email));
+  // Fetch list of shared servers (shares) for this server
+  const sharedServersUrl = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plex.token}`;
+
+  let response;
+  try {
+    response = await fetch(sharedServersUrl, {
+      method: 'GET',
+      headers: buildSharedServerHeaders(plex, {
+        'Accept': 'application/json',
+      }),
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex shared servers API: ${err.message}`);
   }
 
-  if (!target) {
-    return { success: false, reason: 'User not found on Plex server' };
-  }
-
-  const userId = target.id || target.uuid || target.userID;
-  if (!userId) {
-    return { success: false, reason: 'Unable to determine Plex user id' };
-  }
-
-  const response = await fetch(
-    buildUrlFromConfig(`${listResult.basePath}/${userId}`, plex),
-    {
-      method: 'DELETE',
-      headers: {
-        Accept: 'application/json',
-      },
-    }
-  );
-
-  if (response.status === 404) {
-    return { success: false, reason: 'User not found on Plex server' };
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token');
   }
 
   if (!response.ok) {
     const details = await extractErrorMessage(response);
-    const statusText = response.statusText || 'Error';
+    throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
+  }
+
+  let shares = [];
+  try {
+    shares = await response.json();
+    if (!Array.isArray(shares)) {
+      shares = [];
+    }
+  } catch (err) {
+    throw new Error(`Failed to parse shared servers response: ${err.message}`);
+  }
+
+  // Find the share matching our server and the user
+  const normalizedEmail = email ? normalize(email) : '';
+  const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
+
+  const targetShare = shares.find((share) => {
+    // Must match our server
+    const shareServerId = share.machineIdentifier || share.server?.machineIdentifier;
+    if (normalize(shareServerId) !== normalize(serverId)) {
+      return false;
+    }
+
+    // Match by email
+    if (normalizedEmail) {
+      const shareEmail = share.invitedEmail || share.user?.email || share.email;
+      if (normalize(shareEmail) === normalizedEmail) {
+        return true;
+      }
+    }
+
+    // Match by account ID
+    if (normalizedAccountId) {
+      const shareUserId = share.user?.id || share.userId || share.invitedId;
+      if (normalize(shareUserId) === normalizedAccountId) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+
+  if (!targetShare) {
+    return { success: false, reason: 'User not found on Plex server' };
+  }
+
+  const shareId = targetShare.id;
+  if (!shareId) {
+    return { success: false, reason: 'Unable to determine share ID' };
+  }
+
+  // Delete the share
+  const deleteUrl = `https://plex.tv/api/v2/shared_servers/${shareId}?X-Plex-Token=${plex.token}`;
+
+  let deleteResponse;
+  try {
+    deleteResponse = await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: buildSharedServerHeaders(plex),
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex revoke API: ${err.message}`);
+  }
+
+  if (deleteResponse.status === 404) {
+    return { success: false, reason: 'Share not found on Plex server (may already be removed)' };
+  }
+
+  if (deleteResponse.status === 204) {
+    // Success - 204 No Content is the expected response
+    return { success: true, shareId };
+  }
+
+  if (!deleteResponse.ok) {
+    const details = await extractErrorMessage(deleteResponse);
+    const statusText = deleteResponse.statusText || 'Error';
     const suffix = details ? `: ${details}` : '';
     throw new Error(
-      `Failed to revoke Plex user: Plex returned ${response.status} (${statusText})${suffix}`
+      `Failed to revoke Plex access: ${deleteResponse.status} (${statusText})${suffix}`
     );
   }
 
-  return { success: true, user: target };
+  return { success: true, shareId };
 }
 
 async function createInvite(

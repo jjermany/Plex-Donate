@@ -53,33 +53,40 @@ console.log('');
 // Test the revoke function
 (async () => {
   try {
+    console.log('Calling revokeUser...\n');
+
     const result = await plexService.revokeUser({
       plexAccountId: selectedDonor.plex_account_id,
       email: selectedDonor.plex_email || selectedDonor.email,
     });
 
-    console.log('\n=== Revocation Result ===');
+    console.log('=== Revocation Result ===');
     console.log(JSON.stringify(result, null, 2));
 
     if (result.success) {
       console.log('\n✅ SUCCESS! Plex access has been revoked.');
+      console.log(`\nShare ID removed: ${result.shareId}`);
       console.log('\nWhat happened:');
-      console.log('- User was removed from your Plex server');
+      console.log('- User was removed from your Plex server (shared_servers relationship deleted)');
       console.log('- They can no longer access your content');
       console.log('- They may receive an email from Plex about the removal');
 
       console.log('\nTo verify:');
-      console.log('1. Go to your Plex server settings → Users');
-      console.log('2. Confirm the user is no longer in the list');
+      console.log('1. Go to Plex.tv → Settings → Users & Sharing');
+      console.log('2. Confirm the user is no longer in your Friends list');
+      console.log('3. Or run: node test-plex-revoke.js (should show "User not found")');
     } else {
       console.log(`\n⚠️  Revocation returned: ${result.reason}`);
       if (result.reason === 'User not found on Plex server') {
         console.log('\nThis could mean:');
         console.log('- The user was already removed');
         console.log('- The user never had access');
-        console.log('- The plexAccountId/email doesn\'t match any user');
+        console.log('- The plexAccountId/email doesn\'t match any shared user');
+        console.log('- The user has an invite but hasn\'t accepted it yet');
       } else if (result.reason === 'Plex integration disabled') {
         console.log('\nPlex integration is not configured. Check your .env file.');
+      } else if (result.reason === 'Share not found on Plex server (may already be removed)') {
+        console.log('\nThe share was already removed or never existed.');
       }
     }
   } catch (err) {
