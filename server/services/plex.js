@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
 const { getPlexSettings } = require('../state/settings');
 const { buildHeaders: buildPlexClientHeaders } = require('./plex-oauth');
+const logger = require('../utils/logger');
 
 const USER_LIST_ENDPOINTS = ['/accounts', '/api/v2/home/users', '/api/home/users'];
 const LIBRARY_SECTIONS_ENDPOINT = '/library/sections';
