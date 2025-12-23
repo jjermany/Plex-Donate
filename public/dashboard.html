@@ -1127,13 +1127,16 @@
                     Start 7-day trial
                   </button>
                   <button id="subscription-button" class="button-primary" type="button">
-                    Start PayPal subscription
+                    Start subscription
+                  </button>
+                  <button id="stripe-checkout-dashboard-button" class="button-primary hidden" type="button">
+                    Subscribe with Stripe
                   </button>
                   <button id="stripe-billing-portal-button" class="button-primary hidden" type="button">
                     Manage Stripe Billing
                   </button>
                   <p id="subscription-note" class="status-text small">
-                    Opens PayPal checkout in a new tab.
+                    Choose your payment method to get started.
                   </p>
                   <p id="stripe-portal-status" class="status-text small hidden"></p>
                   <p id="trial-status" class="status-text"></p>
@@ -1194,17 +1197,17 @@
                     />
                   </label>
                   <label>
-                    <span>PayPal subscription ID</span>
+                    <span>Subscription ID (optional)</span>
                     <input
                       id="profile-subscription"
                       type="text"
-                      placeholder="Starts with I-..."
+                      placeholder="PayPal (I-...) or Stripe subscription ID"
                       autocomplete="off"
                       inputmode="text"
                       spellcheck="false"
                     />
                     <p class="helper-text">
-                      Already supporting the server? Paste your PayPal subscription ID to
+                      Already have an active subscription? Paste your PayPal or Stripe subscription ID to
                       link it to this account.
                     </p>
                   </label>
@@ -1370,8 +1373,8 @@
                       <div>
                         <h3 class="step-title">Start your support subscription</h3>
                         <p id="step-subscription-note" class="muted small">
-                          Once Plex is linked, use the PayPal button above to kick
-                          off your membership.
+                          Once Plex is linked, choose PayPal or Stripe above to start
+                          your membership.
                         </p>
                       </div>
                     </div>
@@ -1591,6 +1594,7 @@
       const memberLastPayment = document.getElementById('member-last-payment');
       const subscriptionCta = document.getElementById('subscription-cta');
       const subscriptionButton = document.getElementById('subscription-button');
+      const stripeCheckoutDashboardButton = document.getElementById('stripe-checkout-dashboard-button');
       const subscriptionNote = document.getElementById('subscription-note');
       const stripeBillingPortalButton = document.getElementById('stripe-billing-portal-button');
       const stripePortalStatus = document.getElementById('stripe-portal-status');
@@ -1642,7 +1646,7 @@
       const supportReplySubmit = document.getElementById('support-reply-submit');
       const defaultSubscriptionButtonLabel = subscriptionButton
         ? subscriptionButton.textContent
-        : 'Start PayPal subscription';
+        : 'Start subscription';
       if (subscriptionButton) {
         subscriptionButton.disabled = true;
         subscriptionButton.dataset.available = 'false';
@@ -2885,9 +2889,9 @@
               message = 'Your 7-day trial is active.';
             }
             if (showSubscriptionCta) {
-              message += ' Start a PayPal subscription above to keep streaming without interruption.';
+              message += ' Start a subscription above to keep streaming without interruption.';
             } else {
-              message += ' Add your PayPal subscription ID below to keep streaming without interruption.';
+              message += ' Add your subscription ID below to keep streaming without interruption.';
             }
             break;
           case 'trial_expired':
@@ -2898,9 +2902,9 @@
               message = 'Your free trial has ended.';
             }
             if (showSubscriptionCta) {
-              message += ' Start a PayPal subscription above to continue access.';
+              message += ' Start a subscription above to continue access.';
             } else {
-              message += ' Add your PayPal subscription ID below to restore access.';
+              message += ' Add your subscription ID below to restore access.';
             }
             break;
           case 'pending':
@@ -2908,38 +2912,38 @@
             if (!donor || !donor.subscriptionId) {
               if (!plexLinked) {
                 message =
-                  'Link your Plex account above to unlock the PayPal checkout or paste your subscription ID once you have it.';
+                  'Link your Plex account above to unlock subscription checkout or paste your subscription ID once you have it.';
               } else if (showSubscriptionCta) {
                 message =
-                  'Start your PayPal subscription above or paste an existing subscription ID below to activate your membership.';
+                  'Start your subscription above or paste an existing subscription ID below to activate your membership.';
               } else {
                 message =
-                  'Already subscribed? Add your PayPal subscription ID below so we can link it to your account.';
+                  'Already subscribed? Add your subscription ID below so we can link it to your account.';
               }
             } else {
               message =
-                'We are waiting for PayPal to confirm your first payment. Check PayPal for any required steps.';
+                'We are waiting to confirm your first payment. This usually takes just a moment.';
             }
             break;
           case 'cancelled':
             tone = 'error';
             message =
-              'Your PayPal subscription was canceled. Start a new subscription to regain access.';
+              'Your subscription was canceled. Start a new subscription to regain access.';
             break;
           case 'suspended':
             tone = 'error';
             message =
-              'Your PayPal subscription is suspended. Update your billing details in PayPal to resume access.';
+              'Your subscription is suspended. Update your billing details to resume access.';
             break;
           case 'expired':
             tone = 'error';
             message =
-              'Your PayPal subscription expired. Start a new subscription to continue access.';
+              'Your subscription expired. Start a new subscription to continue access.';
             break;
           case 'past_due':
             tone = 'error';
             message =
-              'Your subscription payment is past due. Update your PayPal billing information to avoid interruptions.';
+              'Your subscription payment is past due. Update your billing information to avoid interruptions.';
             break;
           default:
             tone = 'info';
@@ -3179,7 +3183,7 @@
         if (stepSubscriptionNote) {
           if (!plexLinked) {
             stepSubscriptionNote.textContent =
-              'Finish Plex authentication first—we unlock the PayPal checkout and subscription linking right after.';
+              'Finish Plex authentication first—we unlock subscription checkout and linking right after.';
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
@@ -3193,18 +3197,18 @@
             }
           } else if (isTrialExpired) {
             stepSubscriptionNote.textContent =
-              'Your trial has ended—start a PayPal subscription to restore access.';
+              'Your trial has ended—start a subscription to restore access.';
           } else if (!subscriptionStarted) {
             if (showSubscriptionCta) {
               stepSubscriptionNote.textContent =
-                'Use the PayPal button above or paste your subscription ID below to kick off your membership.';
+                'Choose your payment method above or paste your subscription ID below to kick off your membership.';
             } else {
               stepSubscriptionNote.textContent =
-                'Already supporting the server? Paste your PayPal subscription ID below and we will link it automatically.';
+                'Already supporting the server? Paste your subscription ID below and we will link it automatically.';
             }
           } else if (!subscriptionComplete) {
             stepSubscriptionNote.textContent =
-              'We are waiting for PayPal to confirm your first payment. This usually takes just a moment.';
+              'We are waiting to confirm your first payment. This usually takes just a moment.';
           } else {
             stepSubscriptionNote.textContent =
               'Subscription active! You are ready for the next step.';
@@ -3498,7 +3502,7 @@
               subscriptionButtonVisible = true;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
-                'Verify your email to unlock the PayPal checkout.';
+                'Verify your email to unlock subscription checkout.';
             } else if (showSubscriptionCta) {
               subscriptionButtonVisible = true;
               subscriptionButtonAvailable = true;
@@ -3507,7 +3511,7 @@
               subscriptionButtonVisible = true;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
-                'Link your Plex account above and we will unlock the PayPal checkout automatically.';
+                'Link your Plex account above and we will unlock subscription checkout automatically.';
             } else {
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
@@ -3579,10 +3583,10 @@
               trialButtonHidden = false;
               trialButtonAvailable = false;
               if (trialExpiresLabel) {
-                trialStatusMessage = `Trial ended on ${trialExpiresLabel}. Start a PayPal subscription to continue.`;
+                trialStatusMessage = `Trial ended on ${trialExpiresLabel}. Start a subscription to continue.`;
               } else {
                 trialStatusMessage =
-                  'Trial ended. Start a PayPal subscription to continue.';
+                  'Trial ended. Start a subscription to continue.';
               }
               trialStatusTone = 'error';
             } else {
@@ -3609,6 +3613,16 @@
             }
           }
 
+          // Show Stripe checkout button for new subscriptions
+          if (stripeCheckoutDashboardButton) {
+            if (showSubscriptionCta && emailVerified) {
+              stripeCheckoutDashboardButton.classList.remove('hidden');
+              stripeCheckoutDashboardButton.disabled = false;
+            } else {
+              stripeCheckoutDashboardButton.classList.add('hidden');
+            }
+          }
+
           // Show Stripe billing portal button for Stripe customers
           if (stripeBillingPortalButton) {
             const hasStripeCustomer = Boolean(donor && donor.stripeCustomerId);
@@ -3629,6 +3643,10 @@
             subscriptionButton &&
               !subscriptionButton.classList.contains('hidden')
           );
+          const stripeCheckoutVisible = Boolean(
+            stripeCheckoutDashboardButton &&
+              !stripeCheckoutDashboardButton.classList.contains('hidden')
+          );
           const trialVisible = Boolean(
             trialButton && !trialButton.classList.contains('hidden')
           );
@@ -3641,7 +3659,7 @@
           );
 
           const shouldShowSubscriptionCta =
-            subscriptionButtonVisibleNow || trialVisible || trialMessageVisible || stripeBillingPortalVisible;
+            subscriptionButtonVisibleNow || stripeCheckoutVisible || trialVisible || trialMessageVisible || stripeBillingPortalVisible;
 
           setElementVisibility(subscriptionCta, shouldShowSubscriptionCta);
         }
@@ -3735,7 +3753,7 @@
             'Verify your email to unlock referral invites.';
         } else if (inviteBlocked && !limitReached) {
           inviteDescription.textContent = showSubscriptionCta
-            ? 'Start your PayPal subscription to unlock referral invites.'
+            ? 'Start your subscription to unlock referral invites.'
             : 'Referral invites unlock once your subscription is active.';
         }
 
@@ -4066,6 +4084,48 @@
             }
           } finally {
             stripeBillingPortalButton.disabled = false;
+          }
+        });
+      }
+
+      if (stripeCheckoutDashboardButton) {
+        stripeCheckoutDashboardButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (stripeCheckoutDashboardButton.disabled) {
+            return;
+          }
+
+          stripeCheckoutDashboardButton.disabled = true;
+          const originalText = stripeCheckoutDashboardButton.textContent;
+          stripeCheckoutDashboardButton.textContent = 'Opening Stripe checkout…';
+
+          if (subscriptionNote) {
+            setStatusText(subscriptionNote, 'Opening Stripe checkout in a new tab…', 'info');
+            subscriptionNote.classList.add('small');
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/stripe-checkout', {
+              method: 'POST',
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to start Stripe checkout');
+            }
+
+            if (payload.checkoutUrl) {
+              window.location.href = payload.checkoutUrl;
+            } else {
+              throw new Error('No Stripe checkout URL received.');
+            }
+          } catch (err) {
+            stripeCheckoutDashboardButton.textContent = originalText;
+            stripeCheckoutDashboardButton.disabled = false;
+            if (subscriptionNote) {
+              setStatusText(subscriptionNote, err.message, 'error');
+              subscriptionNote.classList.add('small');
+            }
           }
         });
       }
