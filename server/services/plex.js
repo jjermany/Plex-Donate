@@ -181,6 +181,11 @@ function createSharedMemberAccumulator() {
       mergeArray(existing.emails, Array.isArray(member.emails) ? member.emails : []);
       mergeArray(existing.ids, Array.isArray(member.ids) ? member.ids : []);
 
+      // Preserve the share ID from the first occurrence or update if not set
+      if (!existing.id && member.id) {
+        existing.id = member.id;
+      }
+
       existing.pending = existing.pending && Boolean(member.pending);
 
       const existingStatus = existing.status ? String(existing.status) : '';
@@ -211,6 +216,7 @@ function createSharedMemberAccumulator() {
       : [];
 
     store.set(key, {
+      id: member.id || null,
       emails,
       ids,
       pending: Boolean(member.pending),
