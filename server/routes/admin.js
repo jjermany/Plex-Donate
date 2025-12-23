@@ -1247,6 +1247,101 @@ router.post(
   })
 );
 
+router.post(
+  '/plex/sync-status',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!plexService.isConfigured()) {
+      return res.status(400).json({ error: 'Plex is not configured' });
+    }
+
+    try {
+      // Get all current shares from Plex
+      const plexResult = await plexService.getCurrentPlexShares();
+      if (!plexResult.success) {
+        return res.status(502).json({ error: plexResult.reason || 'Failed to fetch Plex shares' });
+      }
+
+      const currentShares = plexResult.shares;
+
+      // Get all donors with Plex fields set
+      const allDonors = listDonorsWithDetails();
+      const donorsWithPlex = allDonors.filter(
+        (d) => d.plexAccountId || d.plexEmail
+      );
+
+      let clearedCount = 0;
+      const clearedDonors = [];
+
+      // Check each donor against current Plex shares
+      for (const donor of donorsWithPlex) {
+        const normalizedEmail = donor.plexEmail ? donor.plexEmail.toLowerCase().trim() : '';
+        const normalizedAccountId = donor.plexAccountId ? String(donor.plexAccountId).toLowerCase().trim() : '';
+
+        // Check if donor has a current share
+        const hasShare = currentShares.some((share) => {
+          // Check by email
+          if (normalizedEmail && share.emails) {
+            const shareHasEmail = share.emails.some(
+              (email) => email.toLowerCase().trim() === normalizedEmail
+            );
+            if (shareHasEmail) return true;
+          }
+
+          // Check by user ID
+          if (normalizedAccountId && share.userIds) {
+            const shareHasId = share.userIds.some(
+              (id) => String(id).toLowerCase().trim() === normalizedAccountId
+            );
+            if (shareHasId) return true;
+          }
+
+          return false;
+        });
+
+        // If donor doesn't have a current share, clear their Plex fields
+        if (!hasShare) {
+          updateDonorPlexIdentity({
+            id: donor.id,
+            plexAccountId: null,
+            plexEmail: null,
+          });
+
+          clearedCount++;
+          clearedDonors.push({
+            id: donor.id,
+            email: donor.email,
+            name: donor.name,
+          });
+
+          logger.info('Cleared stale Plex data for donor', {
+            donorId: donor.id,
+            email: donor.email,
+          });
+
+          logEvent('plex.access.synced', {
+            donorId: donor.id,
+            email: donor.email,
+            action: 'cleared_stale_data',
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Synced Plex status. Cleared ${clearedCount} stale record(s).`,
+        totalShares: currentShares.length,
+        donorsChecked: donorsWithPlex.length,
+        clearedCount,
+        clearedDonors,
+      });
+    } catch (err) {
+      logger.error('Failed to sync Plex status', err);
+      res.status(502).json({ error: err.message });
+    }
+  })
+);
+
 router.delete(
   '/subscribers/:id',
   requireAdmin,

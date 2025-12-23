@@ -2910,6 +2910,65 @@ async function revokeUser({ plexAccountId, email }) {
   return { success: true, shareId };
 }
 
+async function getCurrentPlexShares() {
+  if (!isConfigured()) {
+    return { success: false, reason: 'Plex integration disabled', shares: [] };
+  }
+
+  const plex = getPlexConfig();
+
+  // Get server identifier
+  try {
+    plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
+  } catch (err) {
+    throw new Error(`Failed to resolve server identifier: ${err.message}`);
+  }
+
+  // Fetch the list of shares using the legacy endpoint
+  const sharedServerUrl = await buildSharedServerUrl(plex);
+
+  let response;
+  try {
+    response = await fetch(sharedServerUrl, {
+      method: 'GET',
+      headers: buildSharedServerHeaders(plex, {
+        Accept: 'application/json',
+      }),
+    });
+  } catch (err) {
+    throw new Error(`Failed to connect to Plex shared servers API: ${err.message}`);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Plex rejected the provided token');
+  }
+
+  if (response.status === 404 || response.status === 410) {
+    return { success: true, shares: [] };
+  }
+
+  if (!response.ok) {
+    const details = await extractErrorMessage(response);
+    throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
+  }
+
+  // Parse the response
+  const payload = await response.text();
+  const shares = parseSharedServerMembersPayload(payload);
+
+  // Return shares with normalized format for easy lookup
+  return {
+    success: true,
+    shares: shares.map((share) => ({
+      id: share.id,
+      emails: share.emails || [],
+      userIds: share.ids || [],
+      status: share.status,
+      pending: share.pending,
+    })),
+  };
+}
+
 async function createInvite(
   { email, friendlyName, librarySectionIds, invitedId } = {},
   overrideSettings
@@ -3394,6 +3453,7 @@ module.exports = {
   listSharedServerMembers,
   revokeUser,
   revokeUserByEmail,
+  getCurrentPlexShares,
   verifyConnection,
   getOrResolveServerIdentifier,
 };
