@@ -2962,11 +2962,11 @@ async function createInvite(
     allow_sync: plex?.allowSync === true || plex?.allowSync === '1'
   }));
 
-  // Build request body with correct field names (machineIdentifier, invitedEmail)
+  // Build request body - machineIdentifier and invitedEmail at ROOT level
   const requestBody = {
+    machineIdentifier: serverId,
+    invitedEmail: normalizedEmail,
     shared_server: {
-      machineIdentifier: serverId,
-      invitedEmail: normalizedEmail,
       libraries: libraries,
       allow_channels: plex?.allowChannels === true || plex?.allowChannels === '1',
       allow_camera_upload: plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1',
@@ -3008,8 +3008,8 @@ async function createInvite(
       statusText,
       body: bodyText,
       requestBody: {
-        machineIdentifier: requestBody.shared_server.machineIdentifier,
-        invitedEmail: requestBody.shared_server.invitedEmail,
+        machineIdentifier: requestBody.machineIdentifier,
+        invitedEmail: requestBody.invitedEmail,
         libraryCount: requestBody.shared_server.libraries.length,
       },
     });
