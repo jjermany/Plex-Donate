@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS donors (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   email TEXT NOT NULL,
   name TEXT,
+  payment_provider TEXT DEFAULT 'paypal',
   paypal_subscription_id TEXT UNIQUE,
+  stripe_customer_id TEXT,
+  stripe_subscription_id TEXT UNIQUE,
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
   access_expires_at TEXT,
@@ -70,7 +73,9 @@ CREATE TABLE IF NOT EXISTS invites (
 CREATE TABLE IF NOT EXISTS payments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   donor_id INTEGER NOT NULL,
+  payment_provider TEXT DEFAULT 'paypal',
   paypal_payment_id TEXT,
+  stripe_payment_id TEXT,
   amount REAL,
   currency TEXT,
   paid_at TEXT NOT NULL,
@@ -461,6 +466,49 @@ function ensureDonorSubscriptionOptional() {
   }
 }
 
+function ensureStripePaymentColumns() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasPaymentProvider = columns.some((column) => column.name === 'payment_provider');
+  const hasStripeCustomerId = columns.some((column) => column.name === 'stripe_customer_id');
+  const hasStripeSubscriptionId = columns.some((column) => column.name === 'stripe_subscription_id');
+
+  if (!hasPaymentProvider) {
+    db.exec(`ALTER TABLE donors ADD COLUMN payment_provider TEXT DEFAULT 'paypal'`);
+    db.exec(`UPDATE donors SET payment_provider = 'paypal' WHERE payment_provider IS NULL`);
+  }
+
+  if (!hasStripeCustomerId) {
+    db.exec('ALTER TABLE donors ADD COLUMN stripe_customer_id TEXT');
+  }
+
+  if (!hasStripeSubscriptionId) {
+    db.exec('ALTER TABLE donors ADD COLUMN stripe_subscription_id TEXT UNIQUE');
+  }
+}
+
+function ensureStripePaymentIdColumn() {
+  const columns = db.prepare("PRAGMA table_info('payments')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasPaymentProvider = columns.some((column) => column.name === 'payment_provider');
+  const hasStripePaymentId = columns.some((column) => column.name === 'stripe_payment_id');
+
+  if (!hasPaymentProvider) {
+    db.exec(`ALTER TABLE payments ADD COLUMN payment_provider TEXT DEFAULT 'paypal'`);
+    db.exec(`UPDATE payments SET payment_provider = 'paypal' WHERE payment_provider IS NULL`);
+  }
+
+  if (!hasStripePaymentId) {
+    db.exec('ALTER TABLE payments ADD COLUMN stripe_payment_id TEXT');
+  }
+}
+
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
@@ -468,6 +516,8 @@ ensureDonorEmailVerifiedColumn();
 ensureDonorPlexColumns();
 ensureDonorAccessExpirationColumn();
 ensureDonorSubscriptionOptional();
+ensureStripePaymentColumns();
+ensureStripePaymentIdColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInviteLinkExpirationColumns();
@@ -585,13 +635,19 @@ const statements = {
   getDonorBySubscriptionId: db.prepare(
     'SELECT * FROM donors WHERE paypal_subscription_id = ?'
   ),
+  getDonorByStripeSubscriptionId: db.prepare(
+    'SELECT * FROM donors WHERE stripe_subscription_id = ?'
+  ),
+  getDonorByStripeCustomerId: db.prepare(
+    'SELECT * FROM donors WHERE stripe_customer_id = ?'
+  ),
   getDonorById: db.prepare('SELECT * FROM donors WHERE id = ?'),
   getDonorByEmail: db.prepare(
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, paypal_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at)
-     VALUES (@email, @name, @subscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail, @emailVerifiedAt)`
+    `INSERT INTO donors (email, name, payment_provider, paypal_subscription_id, stripe_customer_id, stripe_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at)
+     VALUES (@email, @name, @paymentProvider, @subscriptionId, @stripeCustomerId, @stripeSubscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail, @emailVerifiedAt)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -785,8 +841,8 @@ const statements = {
      LIMIT 1`
   ),
   insertPayment: db.prepare(
-    `INSERT INTO payments (donor_id, paypal_payment_id, amount, currency, paid_at)
-     VALUES (@donorId, @paypalPaymentId, @amount, @currency, @paidAt)`
+    `INSERT INTO payments (donor_id, payment_provider, paypal_payment_id, stripe_payment_id, amount, currency, paid_at)
+     VALUES (@donorId, @paymentProvider, @paypalPaymentId, @stripePaymentId, @amount, @currency, @paidAt)`
   ),
   insertEvent: db.prepare(
     `INSERT INTO events (event_type, payload)
@@ -861,6 +917,27 @@ const statements = {
      SET paypal_subscription_id = @subscriptionId,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
+  ),
+  updateDonorStripeInfo: db.prepare(
+    `UPDATE donors
+     SET payment_provider = @paymentProvider,
+         stripe_customer_id = @stripeCustomerId,
+         stripe_subscription_id = @stripeSubscriptionId,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  updateDonorStatusByStripeSubscription: db.prepare(
+    `UPDATE donors
+     SET status = @status,
+         last_payment_at = COALESCE(@lastPaymentAt, last_payment_at),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE stripe_subscription_id = @subscriptionId`
+  ),
+  updateDonorAccessExpirationByStripeSubscription: db.prepare(
+    `UPDATE donors
+     SET access_expires_at = @accessExpiresAt,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE stripe_subscription_id = @subscriptionId`
   ),
   deleteVerificationTokensForDonor: db.prepare(
     'DELETE FROM email_verification_tokens WHERE donor_id = ?'
@@ -955,7 +1032,10 @@ function mapDonor(row) {
     id: row.id,
     email: row.email,
     name: row.name,
+    paymentProvider: row.payment_provider || 'paypal',
     subscriptionId: row.paypal_subscription_id,
+    stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
     status: row.status,
     lastPaymentAt: row.last_payment_at,
     accessExpiresAt: row.access_expires_at,
@@ -1092,7 +1172,9 @@ function mapPayment(row) {
   return {
     id: row.id,
     donorId: row.donor_id,
+    paymentProvider: row.payment_provider || 'paypal',
     paypalPaymentId: row.paypal_payment_id,
+    stripePaymentId: row.stripe_payment_id,
     amount: row.amount,
     currency: row.currency,
     paidAt: row.paid_at,
@@ -1559,13 +1641,15 @@ function markShareLinkUsed(linkId) {
   return mapInviteLink(statements.getInviteLinkById.get(linkId));
 }
 
-function recordPayment({ donorId, paypalPaymentId, amount, currency, paidAt }) {
+function recordPayment({ donorId, paymentProvider, paypalPaymentId, stripePaymentId, amount, currency, paidAt }) {
   if (!donorId) {
     throw new Error('donorId is required to record payment');
   }
   statements.insertPayment.run({
     donorId,
+    paymentProvider: paymentProvider || 'paypal',
     paypalPaymentId: paypalPaymentId || null,
+    stripePaymentId: stripePaymentId || null,
     amount: amount != null ? Number(amount) : null,
     currency: currency || null,
     paidAt,
@@ -1829,7 +1913,10 @@ function resetDonorEmailVerification(donorId) {
 function createDonor({
   email,
   name,
+  paymentProvider = 'paypal',
   subscriptionId,
+  stripeCustomerId = null,
+  stripeSubscriptionId = null,
   status = 'pending',
   lastPaymentAt = null,
   accessExpiresAt = null,
@@ -1843,10 +1930,13 @@ function createDonor({
   const info = statements.insertDonor.run({
     email: normalizedEmail || '',
     name: name ? String(name).trim() : '',
+    paymentProvider: paymentProvider || 'paypal',
     subscriptionId:
       subscriptionId == null || subscriptionId === ''
         ? null
         : String(subscriptionId).trim(),
+    stripeCustomerId: stripeCustomerId || null,
+    stripeSubscriptionId: stripeSubscriptionId || null,
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
     accessExpiresAt: normalizedAccessExpiresAt,
@@ -2100,12 +2190,67 @@ function saveSettings(updates) {
   saveSettingsTransaction(entries);
 }
 
+function getDonorByStripeSubscriptionId(subscriptionId) {
+  return mapDonor(statements.getDonorByStripeSubscriptionId.get(subscriptionId));
+}
+
+function getDonorByStripeCustomerId(customerId) {
+  return mapDonor(statements.getDonorByStripeCustomerId.get(customerId));
+}
+
+function updateDonorStripeInfo(donorId, { stripeCustomerId, stripeSubscriptionId } = {}) {
+  if (!donorId) {
+    throw new Error('donorId is required to update Stripe info');
+  }
+
+  statements.updateDonorStripeInfo.run({
+    id: donorId,
+    paymentProvider: 'stripe',
+    stripeCustomerId: stripeCustomerId || null,
+    stripeSubscriptionId: stripeSubscriptionId || null,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function updateDonorStatusByStripeSubscription(subscriptionId, status, lastPaymentAt = null) {
+  if (!subscriptionId) {
+    throw new Error('Stripe subscription ID is required to update donor status');
+  }
+  statements.updateDonorStatusByStripeSubscription.run({
+    subscriptionId,
+    status,
+    lastPaymentAt,
+  });
+  return mapDonor(statements.getDonorByStripeSubscriptionId.get(subscriptionId));
+}
+
+function setDonorAccessExpirationByStripeSubscription(subscriptionId, accessExpiresAt = null) {
+  if (!subscriptionId) {
+    throw new Error('Stripe subscription ID is required to update access expiration');
+  }
+
+  const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
+
+  statements.updateDonorAccessExpirationByStripeSubscription.run({
+    subscriptionId,
+    accessExpiresAt: normalizedAccessExpiresAt,
+  });
+
+  return mapDonor(statements.getDonorByStripeSubscriptionId.get(subscriptionId));
+}
+
 module.exports = {
   db,
   upsertDonor,
   updateDonorStatus,
   setDonorStatusById,
   getDonorBySubscriptionId,
+  getDonorByStripeSubscriptionId,
+  getDonorByStripeCustomerId,
+  updateDonorStripeInfo,
+  updateDonorStatusByStripeSubscription,
+  setDonorAccessExpirationByStripeSubscription,
   getDonorById,
   listInvitesForDonor,
   getDonorByEmailAddress,
