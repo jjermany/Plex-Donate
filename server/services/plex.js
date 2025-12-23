@@ -2944,12 +2944,8 @@ async function createInvite(
   if (!resolvedInvitedId) {
     resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
   }
-  if (!resolvedInvitedId) {
-    throw new Error(
-      `Plex did not return an invitedId for ${normalizedEmail}; verify the user has logged into Plex at least once.`
-    );
-  }
 
+  // Build invite request body - use invitedId if available, otherwise invitedEmail
   const v2Body = {
     machineIdentifier,
     librarySectionIds: finalSectionIds,
