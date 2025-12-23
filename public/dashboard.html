@@ -2811,6 +2811,16 @@
             setPlexLinkStatus('Plex account linked successfully.', 'success', {
               force: true,
             });
+            // If the user is currently on the Plex setup tab, move them to the
+            // Account tab so they can complete subscription checkout or other
+            // account actions now that Plex is linked.
+            try {
+              if (activeDashboardTab === 'plex') {
+                setActiveDashboardTab('account', { force: true });
+              }
+            } catch (err) {
+              // ignore tab switch errors
+            }
           } else {
             setPlexLinkStatus(
               'Link your Plex account so we can enable PayPal checkout and invites.',
@@ -2910,10 +2920,7 @@
           case 'pending':
             tone = 'info';
             if (!donor || !donor.subscriptionId) {
-              if (!plexLinked) {
-                message =
-                  'Link your Plex account above to unlock subscription checkout or paste your subscription ID once you have it.';
-              } else if (showSubscriptionCta) {
+              if (showSubscriptionCta) {
                 message =
                   'Start your subscription above or paste an existing subscription ID below to activate your membership.';
               } else {
@@ -3312,7 +3319,16 @@
         loginPanel.classList.add('hidden');
         dashboardPanel.classList.remove('hidden');
         if (!previouslyAuthenticated) {
-          setActiveDashboardTab('account', { force: true });
+          // If the user has verified their email but hasn't linked Plex yet,
+          // surface the Plex setup tab so they can complete linking there.
+          const _donorForTab = (data && data.donor) ? data.donor : {};
+          const _emailVerified = Boolean(_donorForTab.emailVerified);
+          const _plexLinked = Boolean(_donorForTab.plexLinked);
+          if (_emailVerified && !_plexLinked) {
+            setActiveDashboardTab('plex', { force: true });
+          } else {
+            setActiveDashboardTab('account', { force: true });
+          }
         }
 
         const donor = data.donor || {};
@@ -3511,7 +3527,7 @@
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
-                'Link your Plex account above to unlock subscription checkout or paste your subscription ID once you have it.';
+                'Link your Plex account from the Plex setup tab to unlock subscription checkout or paste your subscription ID once you have it.';
             } else {
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;

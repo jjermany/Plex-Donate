@@ -226,6 +226,12 @@ async function handleSubscriptionEvent(event) {
     if (refreshed) {
       donor = refreshed;
     }
+    // Ensure an invite is created/emailed when a subscription becomes active
+    try {
+      await ensureInviteForActiveDonor(donor);
+    } catch (err) {
+      logger.warn('Failed to create automatic invite when subscription activated', err.message);
+    }
   }
 }
 
