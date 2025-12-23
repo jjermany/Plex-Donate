@@ -2831,10 +2831,10 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
   }
 
-  logger.warn('DEBUG: Raw friends data', {
+  console.log('DEBUG: Raw friends data:', JSON.stringify({
     hasMediaContainer: !!friendsData?.MediaContainer,
     metadataCount: friendsData?.MediaContainer?.Metadata?.length || 0,
-  });
+  }, null, 2));
 
   const filteredData = filterFriendsPayloadByServer(friendsData, plex.serverIdentifier);
 
@@ -2844,7 +2844,7 @@ async function revokeUser({ plexAccountId, email }) {
     shares = filteredData.MediaContainer.Metadata;
   }
 
-  logger.warn('DEBUG: After filtering by server', {
+  const sharesDebug = {
     serverIdentifier: plex.serverIdentifier,
     sharesCount: shares.length,
     shares: shares.map((s) => ({
@@ -2856,18 +2856,19 @@ async function revokeUser({ plexAccountId, email }) {
       invitedId: s.invitedId,
       user: s.user ? { id: s.user.id, email: s.user.email } : null,
     })),
-  });
+  };
+  console.log('DEBUG: After filtering by server:', JSON.stringify(sharesDebug, null, 2));
 
   // Find the share matching the user
   const normalizedEmail = email ? normalize(email) : '';
   const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
 
-  logger.warn('DEBUG: Looking for user', {
+  console.log('DEBUG: Looking for user:', JSON.stringify({
     email,
     normalizedEmail,
     plexAccountId,
     normalizedAccountId,
-  });
+  }, null, 2));
 
   const targetShare = shares.find((share) => {
     // Match by email
