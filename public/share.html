@@ -868,6 +868,7 @@
         donor = null,
         normalizedStatus = 'pending',
         plexLinked = false,
+        hasPlexAccess = false,
         trialCountdownLabel = '',
         trialExpiresLabel = '',
         hasSevereIssue = false,
@@ -876,7 +877,7 @@
           return;
         }
 
-        if (!donor || normalizedStatus === 'active') {
+        if (!donor || normalizedStatus === 'active' || hasPlexAccess) {
           trialCta.classList.add('hidden');
           if (trialMessage) {
             trialMessage.textContent = DEFAULT_TRIAL_MESSAGE;
@@ -953,11 +954,13 @@
         const donor = state.data && state.data.donor ? state.data.donor : null;
         const normalizedStatus = state.normalizedStatus || 'pending';
         const plexLinked = Boolean(state.plexLinked);
+        const plexShared = Boolean(state.plexShared);
         const accessExpiresAt = state.accessExpiresAt;
         updateTrialCta({
           donor,
           normalizedStatus,
           plexLinked,
+          hasPlexAccess: plexShared,
           trialCountdownLabel: getTrialCountdownLabel(accessExpiresAt),
           trialExpiresLabel: formatDateTime(accessExpiresAt),
           hasSevereIssue: Boolean(state.hasSevereIssue),
