@@ -486,7 +486,8 @@ function ensureStripePaymentColumns() {
   }
 
   if (!hasStripeSubscriptionId) {
-    db.exec('ALTER TABLE donors ADD COLUMN stripe_subscription_id TEXT UNIQUE');
+    db.exec('ALTER TABLE donors ADD COLUMN stripe_subscription_id TEXT');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS donors_stripe_subscription_unique ON donors(stripe_subscription_id)');
   }
 }
 
