@@ -16,6 +16,8 @@ const {
   logEvent,
   markInviteEmailSent,
   updateInvitePlexDetails,
+  setDonorPreexistingAccess,
+  getDonorById,
 } = require('../db');
 const plexService = require('../services/plex');
 const emailService = require('../services/email');
@@ -282,15 +284,35 @@ async function handleInvoicePaymentSucceeded(event) {
     new Date(invoice.created * 1000).toISOString()
   );
 
+  // Refresh donor data to get updated status
+  let updatedDonor = getDonorByStripeSubscriptionId(subscriptionId);
+  if (!updatedDonor) {
+    updatedDonor = donor;
+  }
+
+  // Clear pre-existing access flag on first successful payment
+  // User is now managed by plex-donate subscription system
+  if (updatedDonor.hadPreexistingAccess) {
+    setDonorPreexistingAccess(updatedDonor.id, false);
+    logEvent('donor.transitioned_to_subscription', {
+      donorId: updatedDonor.id,
+      email: updatedDonor.email,
+      subscriptionId,
+      provider: 'stripe',
+    });
+    // Refresh again after clearing flag
+    updatedDonor = getDonorById(updatedDonor.id);
+  }
+
   logEvent('stripe.payment.succeeded', {
-    donorId: donor.id,
+    donorId: updatedDonor.id,
     subscriptionId,
     amount: invoice.amount_paid / 100,
     currency: invoice.currency,
   });
 
   // Create auto-invite if donor has Plex account
-  await createAutoInvite(donor);
+  await createAutoInvite(updatedDonor);
 }
 
 async function handleInvoicePaymentFailed(event) {
@@ -331,6 +353,67 @@ async function createAutoInvite(donor) {
     return;
   }
 
+  // Check if user already has Plex access before creating an invite
+  if (plexService.isConfigured()) {
+    try {
+      const plexUsers = await plexService.listUsers();
+      if (Array.isArray(plexUsers) && plexUsers.length > 0) {
+        const normalizeEmail = (value) => {
+          if (!value) return '';
+          return String(value).trim().toLowerCase();
+        };
+
+        const normalizedEmail = normalizeEmail(donor.email || donor.plexEmail);
+        const normalizedAccountId = (donor.plexAccountId || '').toString().trim().toLowerCase();
+
+        const donorHasAccess = plexUsers.some((user) => {
+          const candidateEmails = [
+            user.email,
+            user.username,
+            user.title,
+            user.account && user.account.email,
+          ];
+          const candidateIds = [
+            user.id,
+            user.uuid,
+            user.userID,
+            user.machineIdentifier,
+            user.account && user.account.id,
+          ];
+
+          const emailMatch = normalizedEmail &&
+            candidateEmails.some((value) => normalizeEmail(value) === normalizedEmail);
+          const accountMatch = normalizedAccountId &&
+            candidateIds.some((value) => {
+              if (value === undefined || value === null) return false;
+              return String(value).trim().toLowerCase() === normalizedAccountId;
+            });
+
+          return emailMatch || accountMatch;
+        });
+
+        if (donorHasAccess) {
+          logger.info('Skipping automatic invite: Stripe donor already present on Plex server', {
+            donorId: donor.id,
+          });
+          // Mark this donor as having pre-existing access
+          if (!donor.hadPreexistingAccess) {
+            setDonorPreexistingAccess(donor.id, true);
+            logEvent('donor.preexisting_access.detected', {
+              donorId: donor.id,
+              email: donor.email,
+              plexAccountId: donor.plexAccountId,
+              provider: 'stripe',
+            });
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      logger.warn('Unable to verify existing Plex users before inviting (Stripe)', err.message);
+    }
+  }
+
   try {
     const invite = await plexService.inviteFriend({
       plexAccountId: donor.plexAccountId,
@@ -362,6 +445,21 @@ async function createAutoInvite(donor) {
 }
 
 async function revokeAccessForDonor(donor) {
+  // Preserve access for users who had it before subscribing
+  if (donor.hadPreexistingAccess) {
+    logger.info('Preserving Plex access for Stripe donor with pre-existing access', {
+      donorId: donor.id,
+      email: donor.email,
+      plexAccountId: donor.plexAccountId,
+    });
+    logEvent('stripe.access.preserved', {
+      donorId: donor.id,
+      email: donor.email,
+      reason: 'had_preexisting_access',
+    });
+    return;
+  }
+
   const activeInvite = getLatestActiveInviteForDonor(donor.id);
   if (!activeInvite) {
     return;

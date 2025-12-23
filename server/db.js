@@ -509,6 +509,19 @@ function ensureStripePaymentIdColumn() {
   }
 }
 
+function ensurePreexistingAccessColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasPreexistingAccess = columns.some((column) => column.name === 'had_preexisting_access');
+
+  if (!hasPreexistingAccess) {
+    db.exec('ALTER TABLE donors ADD COLUMN had_preexisting_access INTEGER DEFAULT 0');
+  }
+}
+
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
@@ -518,6 +531,7 @@ ensureDonorAccessExpirationColumn();
 ensureDonorSubscriptionOptional();
 ensureStripePaymentColumns();
 ensureStripePaymentIdColumn();
+ensurePreexistingAccessColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInviteLinkExpirationColumns();
@@ -646,8 +660,8 @@ const statements = {
     'SELECT * FROM donors WHERE lower(email) = lower(?) LIMIT 1'
   ),
   insertDonor: db.prepare(
-    `INSERT INTO donors (email, name, payment_provider, paypal_subscription_id, stripe_customer_id, stripe_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at)
-     VALUES (@email, @name, @paymentProvider, @subscriptionId, @stripeCustomerId, @stripeSubscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail, @emailVerifiedAt)`
+    `INSERT INTO donors (email, name, payment_provider, paypal_subscription_id, stripe_customer_id, stripe_subscription_id, status, last_payment_at, access_expires_at, password_hash, plex_account_id, plex_email, email_verified_at, had_preexisting_access)
+     VALUES (@email, @name, @paymentProvider, @subscriptionId, @stripeCustomerId, @stripeSubscriptionId, @status, @lastPaymentAt, @accessExpiresAt, @passwordHash, @plexAccountId, @plexEmail, @emailVerifiedAt, @hadPreexistingAccess)`
   ),
   updateDonor: db.prepare(
     `UPDATE donors
@@ -939,6 +953,12 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE stripe_subscription_id = @subscriptionId`
   ),
+  updateDonorPreexistingAccess: db.prepare(
+    `UPDATE donors
+     SET had_preexisting_access = @hadPreexistingAccess,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   deleteVerificationTokensForDonor: db.prepare(
     'DELETE FROM email_verification_tokens WHERE donor_id = ?'
   ),
@@ -1044,6 +1064,7 @@ function mapDonor(row) {
     plexEmail: row.plex_email,
     emailVerifiedAt: row.email_verified_at,
     emailVerified: Boolean(row.email_verified_at),
+    hadPreexistingAccess: Boolean(row.had_preexisting_access),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1304,7 +1325,10 @@ function upsertDonor({
   const newDonor = {
     email: normalizedEmail || '',
     name: name || '',
+    paymentProvider: 'paypal',
     subscriptionId,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
     status: status || 'pending',
     lastPaymentAt: lastPaymentAt || null,
     accessExpiresAt: normalizedAccessExpiresAt,
@@ -1312,6 +1336,7 @@ function upsertDonor({
     plexAccountId: null,
     plexEmail: null,
     emailVerifiedAt: null,
+    hadPreexistingAccess: 0,
   };
   const info = statements.insertDonor.run(newDonor);
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
@@ -1924,6 +1949,7 @@ function createDonor({
   plexAccountId = null,
   plexEmail = null,
   emailVerifiedAt = null,
+  hadPreexistingAccess = false,
 } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
@@ -1949,6 +1975,7 @@ function createDonor({
       emailVerifiedAt == null || emailVerifiedAt === ''
         ? null
         : normalizeAccessExpiresAt(emailVerifiedAt) || null,
+    hadPreexistingAccess: hadPreexistingAccess ? 1 : 0,
   });
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
 }
@@ -2240,6 +2267,19 @@ function setDonorAccessExpirationByStripeSubscription(subscriptionId, accessExpi
   return mapDonor(statements.getDonorByStripeSubscriptionId.get(subscriptionId));
 }
 
+function setDonorPreexistingAccess(donorId, hadPreexistingAccess = false) {
+  if (!donorId) {
+    throw new Error('donorId is required to update preexisting access flag');
+  }
+
+  statements.updateDonorPreexistingAccess.run({
+    id: donorId,
+    hadPreexistingAccess: hadPreexistingAccess ? 1 : 0,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
 module.exports = {
   db,
   upsertDonor,
@@ -2294,6 +2334,7 @@ module.exports = {
   clearDonorPlexIdentity,
   setDonorAccessExpirationBySubscription,
   setDonorAccessExpirationById,
+  setDonorPreexistingAccess,
   startDonorTrial,
   listDonorsWithExpiredAccess,
   getRecentEvents,
