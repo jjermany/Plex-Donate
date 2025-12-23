@@ -2796,9 +2796,11 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers (shares) for this server via the v2 endpoint
-  // Note: GET requests must use clients.plex.tv, not plex.tv
-  const sharedServersUrl = 'https://clients.plex.tv/api/v2/shared_servers';
+  // Fetch list of shared servers using the /api/v2/friends endpoint
+  // This endpoint returns friends/shares and works with query param authentication
+  const sharedServersUrl =
+    `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
+    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
 
   let response;
   try {
@@ -2821,32 +2823,30 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
   }
 
-  let shares = [];
+  // Parse the /api/v2/friends response and filter by our server
+  let friendsData;
   try {
-    const payload = await response.json();
-    if (Array.isArray(payload)) {
-      shares = payload;
-    } else if (payload && typeof payload === 'object' && Array.isArray(payload.invitations)) {
-      shares = payload.invitations;
-    }
+    friendsData = await response.json();
   } catch (err) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
   }
 
-  // Find the share matching our server and the user
+  const filteredData = filterFriendsPayloadByServer(friendsData, plex.serverIdentifier);
+
+  // Extract the metadata array which contains friend/share entries
+  let shares = [];
+  if (filteredData?.MediaContainer?.Metadata) {
+    shares = filteredData.MediaContainer.Metadata;
+  }
+
+  // Find the share matching the user
   const normalizedEmail = email ? normalize(email) : '';
   const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
 
   const targetShare = shares.find((share) => {
-    // Must match our server
-    const shareServerId = share.machineIdentifier || share.server?.machineIdentifier;
-    if (normalize(shareServerId) !== normalize(serverId)) {
-      return false;
-    }
-
     // Match by email
     if (normalizedEmail) {
-      const shareEmail = share.invitedEmail || share.user?.email || share.email;
+      const shareEmail = share.invitedEmail || share.user?.email || share.email || share.title;
       if (normalize(shareEmail) === normalizedEmail) {
         return true;
       }
@@ -2854,7 +2854,7 @@ async function revokeUser({ plexAccountId, email }) {
 
     // Match by account ID
     if (normalizedAccountId) {
-      const shareUserId = share.user?.id || share.userId || share.invitedId;
+      const shareUserId = share.user?.id || share.userId || share.invitedId || share.id;
       if (normalize(shareUserId) === normalizedAccountId) {
         return true;
       }
