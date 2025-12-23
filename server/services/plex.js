@@ -2796,13 +2796,8 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers (shares) for this server via the legacy endpoint
-  let sharedServersUrl;
-  try {
-    sharedServersUrl = await buildSharedServerUrl(plex);
-  } catch (err) {
-    throw new Error(`Failed to resolve Plex shared servers URL: ${err.message}`);
-  }
+  // Fetch list of shared servers (shares) for this server via the v2 endpoint
+  const sharedServersUrl = `${PLEX_TV_BASE_URL}/api/v2/shared_servers`;
 
   let response;
   try {
