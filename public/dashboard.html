@@ -3508,10 +3508,9 @@
               subscriptionButtonAvailable = true;
               subscriptionNoteMessage = 'Opens PayPal checkout in a new tab.';
             } else if (subscriptionCheckoutEligible && !plexLinked) {
-              subscriptionButtonVisible = true;
+              subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
-              subscriptionNoteMessage =
-                'Link your Plex account above to unlock subscription checkout.';
+              subscriptionNoteMessage = '';
             } else {
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
