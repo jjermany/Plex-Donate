@@ -2800,14 +2800,22 @@ async function revokeUser({ plexAccountId, email }) {
   // Note: GET requests must use clients.plex.tv, not plex.tv
   const sharedServersUrl = 'https://clients.plex.tv/api/v2/shared_servers';
 
+  const requestConfig = {
+    method: 'GET',
+    headers: buildSharedServerHeaders(plex, {
+      Accept: 'application/json',
+    }),
+  };
+
+  logger.warn('DEBUG: Fetching shared servers', {
+    method: requestConfig.method,
+    url: sharedServersUrl,
+    headers: Object.keys(requestConfig.headers || {}),
+  });
+
   let response;
   try {
-    response = await fetch(sharedServersUrl, {
-      method: 'GET',
-      headers: buildSharedServerHeaders(plex, {
-        Accept: 'application/json',
-      }),
-    });
+    response = await fetch(sharedServersUrl, requestConfig);
   } catch (err) {
     throw new Error(`Failed to connect to Plex shared servers API: ${err.message}`);
   }
