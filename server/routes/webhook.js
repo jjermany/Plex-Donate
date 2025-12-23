@@ -464,6 +464,21 @@ async function handlePaymentEvent(event) {
   if (clearedDonor) {
     donor = clearedDonor;
   }
+
+  // Clear pre-existing access flag on first successful payment
+  // User is now managed by plex-donate subscription system
+  if (donor.hadPreexistingAccess) {
+    const transitionedDonor = setDonorPreexistingAccess(donor.id, false);
+    if (transitionedDonor) {
+      donor = transitionedDonor;
+    }
+    logEvent('donor.transitioned_to_subscription', {
+      donorId: donor.id,
+      email: donor.email,
+      subscriptionId,
+    });
+  }
+
   logEvent('paypal.payment.recorded', {
     donorId: donor.id,
     amount,

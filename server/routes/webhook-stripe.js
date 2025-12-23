@@ -284,15 +284,35 @@ async function handleInvoicePaymentSucceeded(event) {
     new Date(invoice.created * 1000).toISOString()
   );
 
+  // Refresh donor data to get updated status
+  let updatedDonor = getDonorByStripeSubscriptionId(subscriptionId);
+  if (!updatedDonor) {
+    updatedDonor = donor;
+  }
+
+  // Clear pre-existing access flag on first successful payment
+  // User is now managed by plex-donate subscription system
+  if (updatedDonor.hadPreexistingAccess) {
+    setDonorPreexistingAccess(updatedDonor.id, false);
+    logEvent('donor.transitioned_to_subscription', {
+      donorId: updatedDonor.id,
+      email: updatedDonor.email,
+      subscriptionId,
+      provider: 'stripe',
+    });
+    // Refresh again after clearing flag
+    updatedDonor = getDonorById(updatedDonor.id);
+  }
+
   logEvent('stripe.payment.succeeded', {
-    donorId: donor.id,
+    donorId: updatedDonor.id,
     subscriptionId,
     amount: invoice.amount_paid / 100,
     currency: invoice.currency,
   });
 
   // Create auto-invite if donor has Plex account
-  await createAutoInvite(donor);
+  await createAutoInvite(updatedDonor);
 }
 
 async function handleInvoicePaymentFailed(event) {
