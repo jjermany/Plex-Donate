@@ -183,8 +183,7 @@ async function revokePlexAccessForDonor(donor, context) {
 
     if (success) {
       // Clear Plex identity from donor record
-      updateDonorPlexIdentity({
-        id: donor.id,
+      updateDonorPlexIdentity(donor.id, {
         plexAccountId: null,
         plexEmail: null,
       });
@@ -397,6 +396,8 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     const donorId = Number.parseInt(req.params.id, 10);
+    logger.info('[REFRESH ENDPOINT HIT]', { donorId, rawId: req.params.id });
+
     if (!Number.isFinite(donorId) || donorId <= 0) {
       return res.status(400).json({
         error: 'Invalid subscriber ID',
@@ -411,6 +412,13 @@ router.post(
         csrfToken: res.locals.csrfToken,
       });
     }
+
+    logger.info('[REFRESH ENDPOINT] Donor found', {
+      donorId: donor.id,
+      email: donor.email,
+      hasPlexAccountId: !!donor.plexAccountId,
+      hasPlexEmail: !!donor.plexEmail
+    });
 
     const donorForRefresh = donor;
     const { donor: refreshedDonor, error } = await refreshDonorSubscription(
@@ -468,8 +476,7 @@ router.post(
                 donorId: freshDonor.id,
                 email: freshDonor.email,
               });
-              updateDonorPlexIdentity({
-                id: freshDonor.id,
+              updateDonorPlexIdentity(freshDonor.id, {
                 plexAccountId: null,
                 plexEmail: null,
               });
@@ -1354,8 +1361,7 @@ router.post(
 
         // If donor doesn't have a current share, clear their Plex fields
         if (!hasShare) {
-          updateDonorPlexIdentity({
-            id: donor.id,
+          updateDonorPlexIdentity(donor.id, {
             plexAccountId: null,
             plexEmail: null,
           });
@@ -1458,8 +1464,7 @@ router.post(
 
         // If donor doesn't have a current share, clear their Plex fields
         if (!hasShare) {
-          updateDonorPlexIdentity({
-            id: donor.id,
+          updateDonorPlexIdentity(donor.id, {
             plexAccountId: null,
             plexEmail: null,
           });

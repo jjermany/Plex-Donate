@@ -542,8 +542,7 @@ router.get(
           const hasShare = plexService.checkDonorHasPlexShare(donor, plexResult.shares);
           if (!hasShare) {
             // Donor doesn't have a current share, clear their Plex fields
-            updateDonorPlexIdentity({
-              id: donor.id,
+            updateDonorPlexIdentity(donor.id, {
               plexAccountId: null,
               plexEmail: null,
             });
