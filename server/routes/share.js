@@ -1,5 +1,5 @@
 const express = require('express');
-const { nanoid } = require('nanoid');
+const { nanoid } = require('../utils/nanoid-shim');
 const {
   getShareLinkByToken,
   getDonorById,

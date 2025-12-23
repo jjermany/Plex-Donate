@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
-const { nanoid } = require('nanoid');
+const { nanoid } = require('./utils/nanoid-shim');
 const config = require('./config');
 
 fs.mkdirSync(path.dirname(config.databaseFile), { recursive: true });

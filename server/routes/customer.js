@@ -1,5 +1,5 @@
 const express = require('express');
-const { nanoid } = require('nanoid');
+const { nanoid } = require('../utils/nanoid-shim');
 const { authLimiter, emailVerificationLimiter } = require('../middleware/rate-limit');
 const {
   getDonorById,
@@ -15,6 +15,9 @@ const {
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
   updateInvitePlexDetails,
+  markInviteEmailSent,
+  revokeInvite,
+  setDonorPreexistingAccess,
   getDonorEmailVerificationToken,
   markDonorEmailVerified,
   markEmailVerificationTokenUsed,
@@ -38,6 +41,7 @@ const {
   buildSubscriberDetails,
 } = require('../utils/paypal');
 const plexOAuth = require('../services/plex-oauth');
+const plexService = require('../services/plex');
 const {
   ensureSessionToken,
   hasValidSessionToken,
@@ -1636,6 +1640,136 @@ router.post(
       route: 'customer',
       accessExpiresAt: trialDonor.accessExpiresAt,
     });
+
+    // Attempt to automatically create and email a Plex invite for the trial.
+    (async () => {
+      try {
+        if (!plexService.isConfigured()) return;
+
+        // First, try to detect if the donor already has access on the Plex server
+        // to avoid creating duplicate invites and to preserve preexisting access.
+        let donorHasAccess = false;
+        try {
+          const plexUsers = await plexService.listUsers();
+          if (Array.isArray(plexUsers) && plexUsers.length > 0) {
+            const normalizedEmail = normalizeEmail(trialDonor.email);
+            const normalizedAccountId = (trialDonor.plexAccountId || '')
+              .toString()
+              .trim()
+              .toLowerCase();
+            donorHasAccess = plexUsers.some((user) => {
+              const candidateEmails = [
+                user.email,
+                user.username,
+                user.title,
+                user.account && user.account.email,
+              ];
+              const candidateIds = [
+                user.id,
+                user.uuid,
+                user.userID,
+                user.machineIdentifier,
+                user.account && user.account.id,
+              ];
+              const emailMatch =
+                normalizedEmail &&
+                candidateEmails.some((value) => normalizeEmail(value) === normalizedEmail);
+              const accountMatch =
+                normalizedAccountId &&
+                candidateIds.some((value) => {
+                  if (value === undefined || value === null) return false;
+                  return String(value).trim().toLowerCase() === normalizedAccountId;
+                });
+              return emailMatch || accountMatch;
+            });
+          }
+        } catch (err) {
+          logger.warn('Unable to verify existing Plex users before trial invite', err.message);
+        }
+
+        if (donorHasAccess) {
+          if (!trialDonor.hadPreexistingAccess) {
+            setDonorPreexistingAccess(trialDonor.id, true);
+            logEvent('donor.preexisting_access.detected', {
+              donorId: trialDonor.id,
+              email: trialDonor.email,
+              plexAccountId: trialDonor.plexAccountId,
+            });
+          }
+          return;
+        }
+
+        // Create Plex invite
+        try {
+          const note = 'Auto-generated for trial';
+          const inviteData = await plexService.createInvite({
+            email: trialDonor.email,
+            friendlyName: trialDonor.name || undefined,
+          });
+
+          const inviteRecord = createInviteRecord({
+            donorId: trialDonor.id,
+            inviteId: inviteData.inviteId,
+            inviteUrl: inviteData.inviteUrl || '',
+            inviteStatus: inviteData.status || null,
+            invitedAt: inviteData.invitedAt || new Date().toISOString(),
+            sharedLibraries: Array.isArray(inviteData.sharedLibraries)
+              ? inviteData.sharedLibraries
+              : undefined,
+            recipientEmail: trialDonor.email,
+            note,
+            plexAccountId: trialDonor.plexAccountId,
+            plexEmail: trialDonor.plexEmail,
+          });
+
+          logEvent('invite.trial.generated', {
+            donorId: trialDonor.id,
+            inviteId: inviteRecord.id,
+            plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
+          });
+
+          if (!inviteRecord.inviteUrl) {
+            logger.warn('Plex invite created without a shareable URL for trial', {
+              donorId: trialDonor.id,
+              plexInviteId: inviteRecord.plexInviteId,
+            });
+            return;
+          }
+
+          try {
+            await emailService.sendInviteEmail({
+              to: trialDonor.email,
+              inviteUrl: inviteRecord.inviteUrl,
+              name: trialDonor.name,
+              subscriptionId: trialDonor.subscriptionId,
+            });
+            markInviteEmailSent(inviteRecord.id);
+            logEvent('invite.trial.email_sent', {
+              donorId: trialDonor.id,
+              inviteId: inviteRecord.id,
+            });
+          } catch (err) {
+            logger.warn('Failed to send trial invite email', err.message);
+            if (inviteRecord.plexInviteId) {
+              try {
+                await plexService.cancelInvite(inviteRecord.plexInviteId);
+              } catch (cancelErr) {
+                logger.warn('Failed to cancel Plex invite after email failure', cancelErr.message);
+              }
+            }
+            try {
+              revokeInvite(inviteRecord.id);
+            } catch (revokeErr) {
+              logger.warn('Failed to revoke invite record after email failure', revokeErr.message);
+            }
+          }
+        } catch (err) {
+          logger.warn('Failed to create automatic trial invite', err.message);
+        }
+      } catch (err) {
+        logger.warn('Automatic trial invite workflow failed', err.message);
+      }
+    })();
 
     const {
       activeInvite: invite,

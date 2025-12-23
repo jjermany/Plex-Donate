@@ -1,6 +1,6 @@
 'use strict';
 
-const { nanoid } = require('nanoid');
+const { nanoid } = require('./nanoid-shim');
 
 const SESSION_TOKEN_QUERY_PARAM = 'session';
 const SESSION_TOKEN_HEADER = 'x-session-token';

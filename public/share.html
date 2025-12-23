@@ -1709,8 +1709,9 @@
       });
 
       // Handle Stripe checkout return
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('stripe_success') === 'true') {
+      if (typeof URLSearchParams !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search || '');
+        if (urlParams.get('stripe_success') === 'true') {
         setTimeout(() => {
           if (stripeStatus) {
             stripeStatus.textContent = 'Payment successful! Your subscription is being activated.';
@@ -1719,7 +1720,7 @@
           // Clean up URL
           window.history.replaceState({}, '', window.location.pathname);
         }, 500);
-      } else if (urlParams.get('stripe_canceled') === 'true') {
+        } else if (urlParams.get('stripe_canceled') === 'true') {
         setTimeout(() => {
           if (stripeStatus) {
             stripeStatus.textContent = 'Checkout was canceled. You can try again when ready.';
@@ -1728,6 +1729,7 @@
           // Clean up URL
           window.history.replaceState({}, '', window.location.pathname);
         }, 500);
+        }
       }
 
       registerServiceWorker();

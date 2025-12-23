@@ -1,7 +1,7 @@
 const express = require('express');
 const csurf = require('csurf');
 const { authLimiter } = require('../middleware/rate-limit');
-const { nanoid } = require('nanoid');
+const { nanoid } = require('../utils/nanoid-shim');
 const {
   listDonorsWithDetails,
   getDonorById,

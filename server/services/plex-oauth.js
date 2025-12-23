@@ -1,5 +1,5 @@
 const fetch = require('node-fetch');
-const { nanoid } = require('nanoid');
+const { nanoid } = require('../utils/nanoid-shim');
 
 const PLEX_API_BASE = 'https://plex.tv/api/v2';
 const PLEX_APP_PRODUCT = 'Plex Donate';
