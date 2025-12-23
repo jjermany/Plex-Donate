@@ -1263,11 +1263,26 @@ router.get(
         clientIdentifier: sessionLink.clientIdentifier,
       });
 
+      // DEBUG: Log what we got from Plex
+      logger.info('Plex OAuth identity received', {
+        plexAccountId: identity.plexAccountId,
+        plexEmail: identity.plexEmail,
+        plexUsername: identity.plexUsername,
+        hasAccountId: !!identity.plexAccountId,
+      });
+
       delete req.session.plexLink;
 
       const updatedDonor = updateDonorPlexIdentity(donor.id, {
         plexAccountId: identity.plexAccountId,
         plexEmail: identity.plexEmail,
+      });
+
+      // DEBUG: Log what was saved
+      logger.info('Updated donor Plex identity in database', {
+        donorId: updatedDonor.id,
+        plexAccountId: updatedDonor.plexAccountId,
+        plexEmail: updatedDonor.plexEmail,
       });
 
       let invite = getLatestActiveInviteForDonor(donor.id);

@@ -2946,46 +2946,54 @@ async function createInvite(
     resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
   }
 
-  // Build invite request body - use invitedId if available, otherwise invitedEmail
-  const v2Body = {
-    machineIdentifier,
-    librarySectionIds: finalSectionIds,
-    ...(normalizedFriendlyName ? { friendlyName: normalizedFriendlyName } : {}),
-    settings: {
-      allowSync: to01(plex?.allowSync),
-      allowCameraUpload: to01(plex?.allowCameraUpload),
-      allowChannels: to01(plex?.allowChannels),
+  // Use legacy endpoint - /api/v2/friends is deprecated and returns 404
+  const serverId = await resolveServerId(plex);
+  const legacyUrl =
+    `https://plex.tv${LEGACY_SHARED_SERVERS_PATH(serverId)}?` +
+    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
+
+  // Build request body in legacy format
+  const legacyBody = {
+    server_id: serverId,
+    shared_server: {
+      library_section_ids: finalSectionIds,
+      settings: {
+        allowSync: to01(plex?.allowSync),
+        allowCameraUpload: to01(plex?.allowCameraUpload),
+        allowChannels: to01(plex?.allowChannels),
+      },
     },
   };
 
+  // Add invited_id or invited_email
   if (resolvedInvitedId) {
-    v2Body.invitedId = resolvedInvitedId;
+    legacyBody.shared_server.invited_id = resolvedInvitedId;
   } else {
-    v2Body.invitedEmail = normalizedEmail;
+    legacyBody.shared_server.invited_email = normalizedEmail;
   }
 
-  const v2Url =
-    `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
-    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
+  // Add friendly name if provided
+  if (normalizedFriendlyName) {
+    legacyBody.shared_server.friendlyName = normalizedFriendlyName;
+  }
 
   // Log the invite request for debugging
-  logger.info('Creating Plex invite', {
-    url: v2Url.replace(/X-Plex-Token=[^&]+/, 'X-Plex-Token=REDACTED'),
+  logger.info('Creating Plex invite (legacy endpoint)', {
+    url: legacyUrl.replace(/X-Plex-Token=[^&]+/, 'X-Plex-Token=REDACTED'),
     body: {
-      ...v2Body,
-      invitedEmail: v2Body.invitedEmail ? '[REDACTED]' : undefined,
-      invitedId: v2Body.invitedId || undefined,
-      machineIdentifier: v2Body.machineIdentifier,
-      librarySectionIds: v2Body.librarySectionIds,
+      server_id: serverId,
+      library_section_ids: finalSectionIds,
+      has_invited_id: !!resolvedInvitedId,
+      has_invited_email: !resolvedInvitedId,
     },
   });
 
   let response;
   try {
-    response = await fetch(v2Url, {
+    response = await fetch(legacyUrl, {
       method: 'POST',
       headers: sharedHeaders,
-      body: JSON.stringify(v2Body),
+      body: JSON.stringify(legacyBody),
     });
   } catch (err) {
     throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
@@ -3008,10 +3016,10 @@ async function createInvite(
       statusText,
       body: bodyText,
       requestBody: {
-        machineIdentifier: v2Body.machineIdentifier,
-        librarySectionIds: v2Body.librarySectionIds,
-        hasInvitedId: !!v2Body.invitedId,
-        hasInvitedEmail: !!v2Body.invitedEmail,
+        serverId: legacyBody.server_id,
+        librarySectionIds: legacyBody.shared_server.library_section_ids,
+        hasInvitedId: !!legacyBody.shared_server.invited_id,
+        hasInvitedEmail: !!legacyBody.shared_server.invited_email,
       },
     });
 
