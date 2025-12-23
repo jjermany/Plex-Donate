@@ -10,6 +10,7 @@ const {
   getLatestInviteForDonor,
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
+  updateDonorPlexIdentity,
   createOrUpdateShareLink,
   getShareLinkByDonorId,
   getShareLinkById,
@@ -181,6 +182,13 @@ async function revokePlexAccessForDonor(donor, context) {
     }
 
     if (success) {
+      // Clear Plex identity from donor record
+      updateDonorPlexIdentity({
+        id: donor.id,
+        plexAccountId: null,
+        plexEmail: null,
+      });
+
       logEvent('plex.access.revoked', {
         donorId: donor.id,
         email: plexEmail || donor.email,
