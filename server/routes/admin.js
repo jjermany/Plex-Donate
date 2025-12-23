@@ -1388,36 +1388,28 @@ router.post(
         plexAccountId: d.plexAccountId
       })), null, 2));
 
-      let clearedCount = 0;
-      const clearedDonors = [];
+      // Check each donor against current Plex shares (for status verification only)
+      // NOTE: We do NOT clear plexAccountId/plexEmail fields here because:
+      // 1. These fields represent the user's Plex identity link (not access status)
+      // 2. The UI correctly shows status by matching against LIVE Plex shares
+      // 3. Clearing would require users to re-link their Plex account if re-invited
+      // 4. Only explicit admin revoke should clear the identity link
+      let mismatchCount = 0;
+      const mismatchedDonors = [];
 
-      // Check each donor against current Plex shares
       for (const donor of donorsWithPlex) {
         const hasShare = plexService.checkDonorHasPlexShare(donor, currentShares);
 
-        logger.info(`[SYNC DEBUG] Checking donor ${donor.id} (email: ${donor.email}, plexEmail: ${donor.plexEmail}, plexAccountId: ${donor.plexAccountId}) - hasShare: ${hasShare}`);
+        logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`);
 
-        // If donor doesn't have a current share, clear their Plex fields
         if (!hasShare) {
-          updateDonorPlexIdentity(donor.id, {
-            plexAccountId: null,
-            plexEmail: null,
-          });
-
-          clearedCount++;
-          clearedDonors.push({
+          mismatchCount++;
+          mismatchedDonors.push({
             id: donor.id,
             email: donor.email,
             name: donor.name,
           });
-
-          logger.info(`Cleared stale Plex data for donor ${donor.id} (${donor.email || donor.name})`);
-
-          logEvent('plex.access.synced', {
-            donorId: donor.id,
-            email: donor.email,
-            action: 'cleared_stale_data',
-          });
+          logger.info(`Donor ${donor.id} has Plex link but no current share - UI will correctly show as NOT shared`);
         }
       }
 
@@ -1426,11 +1418,13 @@ router.post(
 
       res.json({
         success: true,
-        message: `Synced Plex status. Cleared ${clearedCount} stale record(s).`,
+        message: mismatchCount > 0
+          ? `Plex sync complete. ${mismatchCount} donor(s) have Plex linked but no current access (UI will show correctly).`
+          : 'Plex status is up to date.',
         totalShares: currentShares.length,
         donorsChecked: donorsWithPlex.length,
-        clearedCount,
-        clearedDonors,
+        mismatchCount,
+        mismatchedDonors,
         donors,
         plex: {
           configured: plexContext.configured,
