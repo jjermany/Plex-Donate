@@ -1346,11 +1346,27 @@ router.post(
       const currentShares = plexResult.shares;
       logger.info(`Syncing Plex status - found ${currentShares.length} current shares on Plex server`);
 
+      // Log what shares we found
+      logger.info('[SYNC DEBUG] Current Plex shares:', JSON.stringify(currentShares.map(s => ({
+        id: s.id,
+        emails: s.emails,
+        userIds: s.userIds,
+        status: s.status
+      })), null, 2));
+
       // Get all donors with Plex fields set
       const allDonors = listDonorsWithDetails();
       const donorsWithPlex = allDonors.filter(
         (d) => d.plexAccountId || d.plexEmail
       );
+
+      logger.info(`[SYNC DEBUG] Found ${donorsWithPlex.length} donors with Plex fields`);
+      logger.info('[SYNC DEBUG] Donors with Plex:', JSON.stringify(donorsWithPlex.map(d => ({
+        id: d.id,
+        email: d.email,
+        plexEmail: d.plexEmail,
+        plexAccountId: d.plexAccountId
+      })), null, 2));
 
       let clearedCount = 0;
       const clearedDonors = [];
@@ -1358,6 +1374,8 @@ router.post(
       // Check each donor against current Plex shares
       for (const donor of donorsWithPlex) {
         const hasShare = plexService.checkDonorHasPlexShare(donor, currentShares);
+
+        logger.info(`[SYNC DEBUG] Checking donor ${donor.id} (email: ${donor.email}, plexEmail: ${donor.plexEmail}, plexAccountId: ${donor.plexAccountId}) - hasShare: ${hasShare}`);
 
         // If donor doesn't have a current share, clear their Plex fields
         if (!hasShare) {
