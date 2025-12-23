@@ -2837,6 +2837,7 @@ async function revokeUser({ plexAccountId, email }) {
       email: s.email,
       emails: s.emails,
       ids: s.ids,
+      allKeys: Object.keys(s),
     })),
   }, null, 2));
 
@@ -2860,6 +2861,7 @@ async function revokeUser({ plexAccountId, email }) {
         if (normalize(shareEmail) === normalizedEmail) {
           targetShare = share;
           console.log('DEBUG: Matched by email:', shareEmail);
+          console.log('DEBUG: Matched share object:', JSON.stringify(share, null, 2));
           break;
         }
       }
