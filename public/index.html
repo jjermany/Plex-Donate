@@ -6609,6 +6609,35 @@
         refreshButton.disabled = true;
       }
       try {
+        // First sync Plex status for all donors if Plex is configured
+        if (state.plex && state.plex.configured) {
+          try {
+            const syncResponse = await api('/api/admin/plex/sync-status-now', {
+              method: 'POST',
+            });
+
+            // Update donors with the synced list from response
+            if (syncResponse && Array.isArray(syncResponse.donors)) {
+              state.donors = syncResponse.donors;
+              if (syncResponse.plex) {
+                state.plex = syncResponse.plex;
+              }
+
+              // Show success message if any records were cleared
+              if (syncResponse.clearedCount > 0) {
+                showDashboardToast(
+                  `Synced Plex status. Cleared ${syncResponse.clearedCount} stale record(s).`,
+                  'success'
+                );
+              }
+            }
+          } catch (plexErr) {
+            console.warn('Failed to sync Plex status during refresh:', plexErr);
+            // Continue with normal refresh even if Plex sync fails
+          }
+        }
+
+        // Then reload all dashboard data
         await loadDashboardData();
       } catch (err) {
         console.error(err);
