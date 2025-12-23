@@ -427,16 +427,47 @@ router.post(
 
     // Also sync Plex status for this donor
     let plexWasCleared = false;
+    logger.info('[REFRESH DEBUG] Starting Plex sync check', {
+      donorId,
+      plexConfigured: plexService.isConfigured(),
+    });
+
     if (plexService.isConfigured()) {
       // Get fresh donor data to check current Plex fields
       const freshDonor = getDonorById(donorId);
+      logger.info('[REFRESH DEBUG] Fresh donor data', {
+        donorId,
+        hasPlexAccountId: !!freshDonor?.plexAccountId,
+        hasPlexEmail: !!freshDonor?.plexEmail,
+        plexAccountId: freshDonor?.plexAccountId,
+        plexEmail: freshDonor?.plexEmail,
+      });
+
       if (freshDonor && (freshDonor.plexAccountId || freshDonor.plexEmail)) {
         try {
+          logger.info('[REFRESH DEBUG] Fetching current Plex shares...');
           const plexResult = await plexService.getCurrentPlexShares();
+          logger.info('[REFRESH DEBUG] Plex shares result', {
+            success: plexResult.success,
+            shareCount: plexResult.shares?.length || 0,
+            shares: plexResult.shares,
+          });
+
           if (plexResult.success) {
             const hasShare = plexService.checkDonorHasPlexShare(freshDonor, plexResult.shares);
+            logger.info('[REFRESH DEBUG] Donor share check result', {
+              donorId: freshDonor.id,
+              hasShare,
+              donorPlexAccountId: freshDonor.plexAccountId,
+              donorPlexEmail: freshDonor.plexEmail,
+            });
+
             if (!hasShare) {
               // Donor doesn't have a current share, clear their Plex fields
+              logger.info('[REFRESH DEBUG] CLEARING PLEX FIELDS - donor has no share', {
+                donorId: freshDonor.id,
+                email: freshDonor.email,
+              });
               updateDonorPlexIdentity({
                 id: freshDonor.id,
                 plexAccountId: null,
@@ -447,15 +478,24 @@ router.post(
                 donorId: freshDonor.id,
                 email: freshDonor.email,
               });
+            } else {
+              logger.info('[REFRESH DEBUG] Donor still has active share, keeping Plex fields', {
+                donorId: freshDonor.id,
+              });
             }
           }
         } catch (plexErr) {
-          logger.warn('Failed to sync Plex status during refresh', {
+          logger.warn('[REFRESH DEBUG] Failed to sync Plex status during refresh', {
             donorId: donorId,
             error: plexErr.message,
+            stack: plexErr.stack,
           });
         }
+      } else {
+        logger.info('[REFRESH DEBUG] Donor has no Plex fields to check');
       }
+    } else {
+      logger.info('[REFRESH DEBUG] Plex is not configured');
     }
 
     // Get updated donor list AFTER potential Plex sync
