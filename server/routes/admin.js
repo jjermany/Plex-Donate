@@ -1356,11 +1356,23 @@ router.post(
 
       // Get all donors with Plex fields set
       const allDonors = listDonorsWithDetails();
+
+      // Log ALL donors first to see what we're working with
+      logger.info(`[SYNC DEBUG] Total donors in database: ${allDonors.length}`);
+      logger.info('[SYNC DEBUG] ALL donors:', JSON.stringify(allDonors.map(d => ({
+        id: d.id,
+        email: d.email,
+        plexEmail: d.plexEmail,
+        plexAccountId: d.plexAccountId,
+        plexEmailType: typeof d.plexEmail,
+        plexAccountIdType: typeof d.plexAccountId
+      })), null, 2));
+
       const donorsWithPlex = allDonors.filter(
         (d) => d.plexAccountId || d.plexEmail
       );
 
-      logger.info(`[SYNC DEBUG] Found ${donorsWithPlex.length} donors with Plex fields`);
+      logger.info(`[SYNC DEBUG] Found ${donorsWithPlex.length} donors with Plex fields (after filter)`);
       logger.info('[SYNC DEBUG] Donors with Plex:', JSON.stringify(donorsWithPlex.map(d => ({
         id: d.id,
         email: d.email,
