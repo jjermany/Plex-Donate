@@ -2780,6 +2780,117 @@ function matchesEmail(user, email) {
   return candidates.some((candidate) => normalize(candidate) === normalized);
 }
 
+async function parseSharedServersPayload(response) {
+  const parseFromJson = (payload) => {
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (Array.isArray(payload.invitations)) {
+      return payload.invitations;
+    }
+
+    if (
+      payload.MediaContainer &&
+      typeof payload.MediaContainer === 'object' &&
+      Array.isArray(payload.MediaContainer.SharedServer)
+    ) {
+      return payload.MediaContainer.SharedServer;
+    }
+
+    return [];
+  };
+
+  const extractAttributes = (text) => {
+    const shares = [];
+
+    const sharedServerPattern = /<SharedServer\b([^>]*)\/?>(?:[^<]*<\/SharedServer>)?/gi;
+    let match;
+    while ((match = sharedServerPattern.exec(text))) {
+      const attrs = match[1] || '';
+      const share = { user: {} };
+      const attrPattern = /(\w+)="([^"]*)"/gi;
+      let attrMatch;
+      while ((attrMatch = attrPattern.exec(attrs))) {
+        const key = attrMatch[1];
+        const value = attrMatch[2];
+        const normalizedKey = key.toLowerCase();
+
+        switch (normalizedKey) {
+          case 'id':
+            share.id = value;
+            break;
+          case 'machineidentifier':
+            share.machineIdentifier = value;
+            break;
+          case 'serverid':
+          case 'server_id':
+          case 'serveruuid':
+          case 'server_uuid':
+            share.machineIdentifier = share.machineIdentifier || value;
+            share.server = { machineIdentifier: value };
+            break;
+          case 'invitedemail':
+            share.invitedEmail = value;
+            if (!share.user.email) {
+              share.user.email = value;
+            }
+            break;
+          case 'email':
+            share.user.email = share.user.email || value;
+            break;
+          case 'invitedid':
+          case 'invited_id':
+            share.invitedId = value;
+            if (!share.user.id) {
+              share.user.id = value;
+            }
+            break;
+          case 'userid':
+          case 'user_id':
+            share.user.id = share.user.id || value;
+            break;
+          case 'username':
+            share.user.username = value;
+            break;
+          case 'status':
+            share.status = value;
+            break;
+          default:
+            break;
+        }
+      }
+
+      shares.push(share);
+    }
+
+    return shares;
+  };
+
+  const textPayload = await response.text();
+
+  const trimmed = textPayload.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const jsonPayload = JSON.parse(trimmed);
+    const parsed = parseFromJson(jsonPayload);
+    if (parsed.length) {
+      return parsed;
+    }
+  } catch (err) {
+    // fall through to XML parsing
+  }
+
+  return extractAttributes(trimmed);
+}
+
 async function revokeUser({ plexAccountId, email }) {
   if (!isConfigured()) {
     return { skipped: true, reason: 'Plex integration disabled' };
@@ -2825,17 +2936,7 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
   }
 
-  let shares = [];
-  try {
-    const payload = await response.json();
-    if (Array.isArray(payload)) {
-      shares = payload;
-    } else if (payload && typeof payload === 'object' && Array.isArray(payload.invitations)) {
-      shares = payload.invitations;
-    }
-  } catch (err) {
-    throw new Error(`Failed to parse shared servers response: ${err.message}`);
-  }
+  const shares = await parseSharedServersPayload(response);
 
   // Find the share matching our server and the user
   const normalizedEmail = email ? normalize(email) : '';
