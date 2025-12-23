@@ -2962,11 +2962,11 @@ async function createInvite(
     allow_sync: plex?.allowSync === true || plex?.allowSync === '1'
   }));
 
-  // Build request body in Plex Web format
+  // Build request body with correct field names (machineIdentifier, invitedEmail)
   const requestBody = {
     shared_server: {
-      server_id: serverId,
-      email: normalizedEmail,
+      machineIdentifier: serverId,
+      invitedEmail: normalizedEmail,
       libraries: libraries,
       allow_channels: plex?.allowChannels === true || plex?.allowChannels === '1',
       allow_camera_upload: plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1',
@@ -2976,8 +2976,8 @@ async function createInvite(
 
   // Log the invite request for debugging
   logger.info('Creating Plex invite (Plex Web API)', {
-    server_id: serverId,
-    email: normalizedEmail,
+    machineIdentifier: serverId,
+    invitedEmail: normalizedEmail,
     library_count: libraries.length,
     library_ids: libraries.map(l => l.library_id),
   });
@@ -3010,8 +3010,8 @@ async function createInvite(
       statusText,
       body: bodyText,
       requestBody: {
-        serverId: requestBody.shared_server.server_id,
-        email: requestBody.shared_server.email,
+        machineIdentifier: requestBody.shared_server.machineIdentifier,
+        invitedEmail: requestBody.shared_server.invitedEmail,
         libraryCount: requestBody.shared_server.libraries.length,
       },
     });
