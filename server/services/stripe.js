@@ -192,6 +192,15 @@ async function cancelSubscription(subscriptionId, overrideSettings) {
   return await stripe.subscriptions.cancel(subscriptionId);
 }
 
+async function createBillingPortalSession({ customerId, returnUrl }, overrideSettings) {
+  const stripe = getStripeClient(overrideSettings);
+
+  return await stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  });
+}
+
 async function getPaymentIntent(paymentIntentId, overrideSettings) {
   const stripe = getStripeClient(overrideSettings);
   return await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -247,6 +256,7 @@ module.exports = {
   createCustomer,
   getSubscription,
   cancelSubscription,
+  createBillingPortalSession,
   getPaymentIntent,
   getInvoice,
   constructWebhookEvent,

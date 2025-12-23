@@ -1129,9 +1129,13 @@
                   <button id="subscription-button" class="button-primary" type="button">
                     Start PayPal subscription
                   </button>
+                  <button id="stripe-billing-portal-button" class="button-primary hidden" type="button">
+                    Manage Stripe Billing
+                  </button>
                   <p id="subscription-note" class="status-text small">
                     Opens PayPal checkout in a new tab.
                   </p>
+                  <p id="stripe-portal-status" class="status-text small hidden"></p>
                   <p id="trial-status" class="status-text"></p>
                 </div>
               </article>
@@ -1588,6 +1592,8 @@
       const subscriptionCta = document.getElementById('subscription-cta');
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
+      const stripeBillingPortalButton = document.getElementById('stripe-billing-portal-button');
+      const stripePortalStatus = document.getElementById('stripe-portal-status');
       const trialButton = document.getElementById('trial-button');
       const trialStatus = document.getElementById('trial-status');
       const trialPanel = document.getElementById('trial-panel');
@@ -3603,6 +3609,22 @@
             }
           }
 
+          // Show Stripe billing portal button for Stripe customers
+          if (stripeBillingPortalButton) {
+            const hasStripeCustomer = Boolean(donor && donor.stripeCustomerId);
+            if (hasStripeCustomer) {
+              stripeBillingPortalButton.classList.remove('hidden');
+              if (stripePortalStatus) {
+                stripePortalStatus.classList.add('hidden');
+              }
+            } else {
+              stripeBillingPortalButton.classList.add('hidden');
+              if (stripePortalStatus) {
+                stripePortalStatus.classList.add('hidden');
+              }
+            }
+          }
+
           const subscriptionButtonVisibleNow = Boolean(
             subscriptionButton &&
               !subscriptionButton.classList.contains('hidden')
@@ -3613,9 +3635,13 @@
           const trialMessageVisible = Boolean(
             trialStatus && trialStatus.textContent.trim().length > 0
           );
+          const stripeBillingPortalVisible = Boolean(
+            stripeBillingPortalButton &&
+              !stripeBillingPortalButton.classList.contains('hidden')
+          );
 
           const shouldShowSubscriptionCta =
-            subscriptionButtonVisibleNow || trialVisible || trialMessageVisible;
+            subscriptionButtonVisibleNow || trialVisible || trialMessageVisible || stripeBillingPortalVisible;
 
           setElementVisibility(subscriptionCta, shouldShowSubscriptionCta);
         }
@@ -3988,6 +4014,59 @@
             return;
           }
           await openDashboardSubscriptionCheckout();
+        });
+      }
+
+      if (stripeBillingPortalButton) {
+        stripeBillingPortalButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (stripeBillingPortalButton.disabled) {
+            return;
+          }
+
+          stripeBillingPortalButton.disabled = true;
+          stripeBillingPortalButton.textContent = 'Opening billing portal…';
+
+          if (stripePortalStatus) {
+            stripePortalStatus.classList.remove('hidden');
+            setStatusText(stripePortalStatus, 'Opening Stripe billing portal in a new tab…', 'info');
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/stripe-billing-portal', {
+              method: 'POST',
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to access billing portal');
+            }
+
+            if (payload.portalUrl) {
+              const opened = window.open(payload.portalUrl, '_blank', 'noopener,noreferrer');
+              if (opened) {
+                stripeBillingPortalButton.textContent = 'Manage Stripe Billing';
+                if (stripePortalStatus) {
+                  setStatusText(
+                    stripePortalStatus,
+                    'Billing portal opened. Manage your subscription in the new tab.',
+                    'success'
+                  );
+                }
+              } else {
+                throw new Error('Please allow popups to access the billing portal.');
+              }
+            } else {
+              throw new Error('No billing portal URL received.');
+            }
+          } catch (err) {
+            stripeBillingPortalButton.textContent = 'Manage Stripe Billing';
+            if (stripePortalStatus) {
+              setStatusText(stripePortalStatus, err.message, 'error');
+            }
+          } finally {
+            stripeBillingPortalButton.disabled = false;
+          }
         });
       }
 

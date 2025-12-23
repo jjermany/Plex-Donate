@@ -186,6 +186,14 @@
           grid-column: 1 / -1;
         }
       }
+      .centered-section {
+        display: flex;
+        justify-content: center;
+      }
+      .centered-section > * {
+        max-width: 720px;
+        width: 100%;
+      }
       .muted {
         color: rgba(203, 213, 225, 0.8);
       }
@@ -408,7 +416,7 @@
           </div>
         </header>
 
-        <section class="grid">
+        <section class="centered-section">
           <article class="surface" id="support-card">
             <h2>Here's how it works</h2>
             <p class="muted">
@@ -436,8 +444,8 @@
                 before sharing invites.
               </li>
               <li>
-                Once Plex is linked, start your PayPal donation or paste your subscription ID so
-                we can verify billing.
+                Once Plex is linked, start your subscription with PayPal or Stripe, or paste your
+                existing subscription ID so we can verify billing.
               </li>
               <li>
                 Use the referral tool to welcome new viewers once your donation is active. Existing
@@ -532,6 +540,35 @@
               <p id="account-status" class="status-text"></p>
             </div>
           </form>
+        </section>
+
+        <section class="surface" id="payment-panel">
+          <h2>Step 1.5 · Choose your subscription</h2>
+          <p id="payment-description" class="muted">
+            Once you've created your account and linked Plex, choose a payment method to activate your subscription.
+            You can manage your subscription and billing details anytime from the customer dashboard.
+          </p>
+          <div id="payment-options" class="grid" style="margin-top: 24px;">
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button id="paypal-checkout-button" class="cta-button" disabled>
+                Subscribe with PayPal
+              </button>
+              <p id="paypal-status" class="status-text small"></p>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button id="stripe-checkout-button" class="cta-button" disabled>
+                Subscribe with Stripe
+              </button>
+              <p id="stripe-status" class="status-text small"></p>
+            </div>
+          </div>
+          <div id="account-management" class="cta hidden">
+            <h3>Manage your subscription</h3>
+            <p class="muted">
+              Access your customer dashboard to manage your subscription. Stripe subscribers can manage billing, update payment methods, and cancel directly through the Stripe billing portal. PayPal subscribers can manage their subscription through their PayPal account.
+            </p>
+            <a class="cta-button" href="/dashboard">Go to dashboard</a>
+          </div>
         </section>
 
         <section class="surface" id="invite-panel">
@@ -649,6 +686,11 @@
       const inviteLinkEl = document.getElementById('invite-link');
       const inviteCreatedEl = document.getElementById('invite-created');
       const inviteEmailEl = document.getElementById('invite-email');
+      const paypalCheckoutButton = document.getElementById('paypal-checkout-button');
+      const stripeCheckoutButton = document.getElementById('stripe-checkout-button');
+      const paypalStatus = document.getElementById('paypal-status');
+      const stripeStatus = document.getElementById('stripe-status');
+      const accountManagement = document.getElementById('account-management');
 
       function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) {
@@ -1296,6 +1338,64 @@
         if (identifier) {
           document.title = `Plex Invite • ${identifier}`;
         }
+
+        // Update payment button states
+        const canCheckout = !isProspect && accountReady && plexLinked && !isActive && !hasSevereIssue;
+
+        if (paypalCheckoutButton) {
+          paypalCheckoutButton.disabled = !canCheckout;
+          if (isProspect) {
+            paypalStatus.textContent = 'Create your account first to enable checkout.';
+            paypalStatus.className = 'status-text small info';
+          } else if (!accountReady) {
+            paypalStatus.textContent = 'Set your password to enable checkout.';
+            paypalStatus.className = 'status-text small info';
+          } else if (!plexLinked) {
+            paypalStatus.textContent = 'Link Plex to enable checkout.';
+            paypalStatus.className = 'status-text small info';
+          } else if (isActive) {
+            paypalStatus.textContent = 'Subscription is already active.';
+            paypalStatus.className = 'status-text small success';
+          } else if (hasSevereIssue) {
+            paypalStatus.textContent = 'Subscription needs attention.';
+            paypalStatus.className = 'status-text small error';
+          } else {
+            paypalStatus.textContent = '';
+            paypalStatus.className = 'status-text small';
+          }
+        }
+
+        if (stripeCheckoutButton) {
+          stripeCheckoutButton.disabled = !canCheckout;
+          if (isProspect) {
+            stripeStatus.textContent = 'Create your account first to enable checkout.';
+            stripeStatus.className = 'status-text small info';
+          } else if (!accountReady) {
+            stripeStatus.textContent = 'Set your password to enable checkout.';
+            stripeStatus.className = 'status-text small info';
+          } else if (!plexLinked) {
+            stripeStatus.textContent = 'Link Plex to enable checkout.';
+            stripeStatus.className = 'status-text small info';
+          } else if (isActive) {
+            stripeStatus.textContent = 'Subscription is already active.';
+            stripeStatus.className = 'status-text small success';
+          } else if (hasSevereIssue) {
+            stripeStatus.textContent = 'Subscription needs attention.';
+            stripeStatus.className = 'status-text small error';
+          } else {
+            stripeStatus.textContent = '';
+            stripeStatus.className = 'status-text small';
+          }
+        }
+
+        // Show account management for active donors
+        if (accountManagement) {
+          if (isActive && accountReady) {
+            accountManagement.classList.remove('hidden');
+          } else {
+            accountManagement.classList.add('hidden');
+          }
+        }
       }
 
       async function loadShareData(options = {}) {
@@ -1460,6 +1560,92 @@
         });
       }
 
+      if (paypalCheckoutButton) {
+        paypalCheckoutButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (paypalCheckoutButton.disabled || !state.token || !state.sessionToken) {
+            return;
+          }
+
+          paypalCheckoutButton.disabled = true;
+          paypalStatus.textContent = 'Starting PayPal checkout…';
+          paypalStatus.className = 'status-text small info';
+
+          const headers = {
+            'Content-Type': 'application/json',
+            'X-Share-Session': state.sessionToken,
+            'Authorization': `Bearer ${state.sessionToken}`,
+          };
+
+          try {
+            const response = await fetch(
+              `/api/share/${encodeURIComponent(state.token)}/paypal-checkout`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ sessionToken: state.sessionToken }),
+              }
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to start PayPal checkout');
+            }
+            if (payload.approvalUrl) {
+              window.location.href = payload.approvalUrl;
+            } else {
+              throw new Error('No PayPal approval URL received');
+            }
+          } catch (err) {
+            paypalStatus.textContent = err.message;
+            paypalStatus.className = 'status-text small error';
+            paypalCheckoutButton.disabled = false;
+          }
+        });
+      }
+
+      if (stripeCheckoutButton) {
+        stripeCheckoutButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (stripeCheckoutButton.disabled || !state.token || !state.sessionToken) {
+            return;
+          }
+
+          stripeCheckoutButton.disabled = true;
+          stripeStatus.textContent = 'Starting Stripe checkout…';
+          stripeStatus.className = 'status-text small info';
+
+          const headers = {
+            'Content-Type': 'application/json',
+            'X-Share-Session': state.sessionToken,
+            'Authorization': `Bearer ${state.sessionToken}`,
+          };
+
+          try {
+            const response = await fetch(
+              `/api/share/${encodeURIComponent(state.token)}/stripe-checkout`,
+              {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ sessionToken: state.sessionToken }),
+              }
+            );
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.error || 'Failed to start Stripe checkout');
+            }
+            if (payload.checkoutUrl) {
+              window.location.href = payload.checkoutUrl;
+            } else {
+              throw new Error('No Stripe checkout URL received');
+            }
+          } catch (err) {
+            stripeStatus.textContent = err.message;
+            stripeStatus.className = 'status-text small error';
+            stripeCheckoutButton.disabled = false;
+          }
+        });
+      }
+
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (
@@ -1523,6 +1709,28 @@
           }
         }
       });
+
+      // Handle Stripe checkout return
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('stripe_success') === 'true') {
+        setTimeout(() => {
+          if (stripeStatus) {
+            stripeStatus.textContent = 'Payment successful! Your subscription is being activated.';
+            stripeStatus.className = 'status-text small success';
+          }
+          // Clean up URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }, 500);
+      } else if (urlParams.get('stripe_canceled') === 'true') {
+        setTimeout(() => {
+          if (stripeStatus) {
+            stripeStatus.textContent = 'Checkout was canceled. You can try again when ready.';
+            stripeStatus.className = 'status-text small info';
+          }
+          // Clean up URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }, 500);
+      }
 
       registerServiceWorker();
       if (!state.token) {

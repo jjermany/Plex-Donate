@@ -947,6 +947,56 @@ router.post(
 );
 
 router.post(
+  '/stripe-billing-portal',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const stripeSettings = settingsStore.getStripeSettings();
+    const appSettings = settingsStore.getAppSettings();
+
+    if (!stripeSettings.secretKey) {
+      return res
+        .status(503)
+        .json({ error: 'Stripe billing portal is not available right now.' });
+    }
+
+    const donor = req.customer.donor;
+
+    if (!donor.stripeCustomerId) {
+      return res.status(400).json({
+        error: 'No Stripe customer found. You can only access the billing portal if you subscribed via Stripe.',
+      });
+    }
+
+    const baseUrl = appSettings.publicBaseUrl || `${req.protocol}://${req.get('host')}`;
+    const returnUrl = `${baseUrl}/dashboard`;
+
+    try {
+      const session = await stripeService.createBillingPortalSession({
+        customerId: donor.stripeCustomerId,
+        returnUrl: returnUrl,
+      }, stripeSettings);
+
+      logEvent('stripe.billing_portal.created', {
+        donorId: donor.id,
+        sessionId: session.id,
+      });
+
+      return res.json({
+        portalUrl: session.url,
+      });
+    } catch (err) {
+      logger.error('Failed to create Stripe billing portal for donor', {
+        donorId: donor.id,
+        error: err && err.message,
+      });
+      return res.status(502).json({
+        error: 'Failed to access billing portal. Try again shortly.',
+      });
+    }
+  })
+);
+
+router.post(
   '/profile',
   requireCustomer,
   asyncHandler(async (req, res) => {
