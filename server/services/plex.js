@@ -2787,21 +2787,15 @@ async function revokeUser({ plexAccountId, email }) {
 
   const plex = getPlexConfig();
 
-  // Get server identifier and descriptor (need legacy ID for this endpoint)
+  // Get server identifier
   try {
     plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
   } catch (err) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  const descriptor = await resolveServerDescriptor(plex);
-  if (!descriptor.legacyNumericId) {
-    throw new Error(
-      'Plex did not return a legacy numeric server id; revoking access is not supported via this token.'
-    );
-  }
-
   // Fetch the list of shares using the legacy endpoint (same as fetchSharedServerMembersLegacy)
+  // Note: buildSharedServerUrl uses resolveServerId which falls back to machineIdentifier if no legacy ID
   const sharedServerUrl = await buildSharedServerUrl(plex);
 
   console.log('DEBUG: Fetching shares from:', sharedServerUrl);
