@@ -2434,6 +2434,7 @@
                 placeholder="Username"
                 required
               />
+              <span aria-hidden="true" style="width: 52px;"></span>
             </div>
             <label class="visually-hidden" for="password">Password</label>
             <div class="input-shell">
@@ -4218,8 +4219,25 @@
 
         if (response.status === 401) {
           state.authenticated = false;
+          state.donors = [];
+          state.shareLinks = [];
+          state.events = [];
           state.settings = null;
           clearSettingsFormDirtyFlags();
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanError = '';
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanLoading = false;
+          state.prospectShare = null;
+          state.plex = null;
+          state.support = {
+            threads: [],
+            activeThreadId: null,
+            includeResolved: false,
+            error: '',
+            loaded: false,
+          };
           stopDashboardAutoRefresh();
           setSessionToken(null);
           render();
@@ -4240,6 +4258,12 @@
             throw new Error(data.error || 'Invalid CSRF token');
           }
           return api(path, { ...requestOptions, _retry: true });
+        }
+
+        if (response.status === 429) {
+          stopDashboardAutoRefresh();
+          const error = data.error || 'Too many requests. Please wait a few minutes before trying again.';
+          throw new Error(error);
         }
 
         if (!response.ok) {
@@ -6409,6 +6433,9 @@
       dashboardDataPromise = (async () => {
         try {
           await loadAdminAccount();
+          if (!state.authenticated) {
+            return;
+          }
           try {
             const donorsResponse = await api('/api/admin/subscribers');
             const previousErrors = new Map(
@@ -6444,16 +6471,37 @@
             console.error(err);
             state.donors = [];
             state.plex = null;
+            if (!state.authenticated) {
+              return;
+            }
+          }
+          if (!state.authenticated) {
+            return;
           }
           try {
             const eventsResponse = await api('/api/admin/events');
             state.events = eventsResponse.events || [];
           } catch (err) {
             console.error(err);
+            if (!state.authenticated) {
+              return;
+            }
+          }
+          if (!state.authenticated) {
+            return;
           }
           await loadSettings();
+          if (!state.authenticated) {
+            return;
+          }
           await loadPaypalPlan();
+          if (!state.authenticated) {
+            return;
+          }
           await refreshShareLinks();
+          if (!state.authenticated) {
+            return;
+          }
           await loadSupportRequests({ silent: true });
         } finally {
           try {
