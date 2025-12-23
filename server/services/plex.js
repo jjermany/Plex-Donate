@@ -2796,11 +2796,9 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers using the /api/v2/friends endpoint
-  // This endpoint returns friends/shares and works with query param authentication
-  const sharedServersUrl =
-    `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
-    new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
+  // Fetch list of shared servers using clients.plex.tv endpoint
+  // This returns the actual server shares, not just friends
+  const sharedServersUrl = 'https://clients.plex.tv/api/v2/shared_servers';
 
   let response;
   try {
@@ -2823,21 +2821,24 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
   }
 
-  // Parse the /api/v2/friends response and filter by our server
-  let friendsData;
+  // Parse the shared_servers response
+  let sharesData;
   try {
-    friendsData = await response.json();
+    sharesData = await response.json();
   } catch (err) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
   }
 
-  console.log('DEBUG: Raw friends response:', JSON.stringify({
-    isArray: Array.isArray(friendsData),
-    friendsCount: Array.isArray(friendsData) ? friendsData.length : 0,
+  console.log('DEBUG: Shared servers response:', JSON.stringify({
+    isArray: Array.isArray(sharesData),
+    type: typeof sharesData,
+    keys: sharesData && typeof sharesData === 'object' ? Object.keys(sharesData).slice(0, 10) : [],
+    sharesCount: Array.isArray(sharesData) ? sharesData.length : 0,
+    sample: Array.isArray(sharesData) && sharesData[0] ? sharesData[0] : null,
   }, null, 2));
 
-  // The response is an array of friends, each with a sharedServers array
-  const friends = Array.isArray(friendsData) ? friendsData : [];
+  // The response should be an array of shared server objects
+  const shares = Array.isArray(sharesData) ? sharesData : [];
 
   const normalizedEmail = email ? normalize(email) : '';
   const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
@@ -2850,62 +2851,50 @@ async function revokeUser({ plexAccountId, email }) {
     normalizedAccountId,
     serverId,
     normalizedServerId,
-    totalFriends: friends.length,
+    totalShares: shares.length,
   }, null, 2));
 
-  // Find the friend and their share for our server
-  let targetFriend = null;
+  // Find the share matching our user and server
   let targetShare = null;
 
-  for (const friend of friends) {
-    console.log('DEBUG: Checking friend:', JSON.stringify({
-      email: friend.email,
-      uuid: friend.uuid,
-      id: friend.id,
-      sharedServersCount: friend.sharedServers?.length || 0,
+  for (const share of shares) {
+    console.log('DEBUG: Checking share:', JSON.stringify({
+      id: share.id,
+      machineIdentifier: share.machineIdentifier,
+      serverId: share.serverId,
+      invitedEmail: share.invitedEmail,
+      invitedId: share.invitedId,
+      userEmail: share.user?.email,
+      userId: share.user?.id,
+      allKeys: Object.keys(share).slice(0, 15),
     }, null, 2));
 
-    // Check if this friend matches our search criteria
-    const friendMatches =
-      (normalizedEmail && normalize(friend.email) === normalizedEmail) ||
-      (normalizedAccountId && (
-        normalize(friend.uuid) === normalizedAccountId ||
-        normalize(String(friend.id)) === normalizedAccountId
-      ));
+    // Check if this share is for our server
+    const shareMachineId = share.machineIdentifier || share.serverId || share.server?.machineIdentifier;
+    const isOurServer = normalize(shareMachineId) === normalizedServerId;
 
-    if (!friendMatches) {
+    if (!isOurServer) {
+      console.log('DEBUG: Share is not for our server, skipping');
       continue;
     }
 
-    console.log('DEBUG: Friend matched! Looking for server in sharedServers...');
+    // Check if this share matches our user
+    const shareEmail = share.invitedEmail || share.user?.email || share.email;
+    const shareUserId = share.invitedId || share.user?.id || share.userId || share.user?.uuid;
 
-    // Found matching friend, now look for our server in their sharedServers
-    if (Array.isArray(friend.sharedServers)) {
-      for (const server of friend.sharedServers) {
-        console.log('DEBUG: Checking server:', JSON.stringify({
-          id: server.id,
-          machineIdentifier: server.machineIdentifier,
-          matches: normalize(server.machineIdentifier) === normalizedServerId,
-        }, null, 2));
+    const userMatches =
+      (normalizedEmail && normalize(shareEmail) === normalizedEmail) ||
+      (normalizedAccountId && normalize(shareUserId) === normalizedAccountId);
 
-        const serverMachineId = server.machineIdentifier || server.clientIdentifier;
-        if (normalize(serverMachineId) === normalizedServerId) {
-          targetFriend = friend;
-          targetShare = server;
-          break;
-        }
-      }
-    }
-
-    if (targetShare) {
+    if (userMatches) {
+      console.log('DEBUG: Share matched!');
+      targetShare = share;
       break;
     }
   }
 
   console.log('DEBUG: Match result:', JSON.stringify({
-    foundFriend: !!targetFriend,
     foundShare: !!targetShare,
-    friendEmail: targetFriend?.email,
     shareId: targetShare?.id,
   }, null, 2));
 
