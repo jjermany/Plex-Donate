@@ -54,22 +54,25 @@ console.log('\n=== Testing Plex API Call ===');
 
 const fetch = require('node-fetch');
 
-const sections = librarySectionIds.split(',').map(s => s.trim()).filter(Boolean);
+const sections = librarySectionIds.split(',').map(s => ({
+  library_id: parseInt(s.trim(), 10),
+  allow_sync: false
+}));
 
 const body = {
-  machineIdentifier: serverIdentifier,
-  librarySectionIds: sections,
-  invitedId: donor.plex_account_id,
-  settings: {
-    allowSync: '0',
-    allowCameraUpload: '0',
-    allowChannels: '0'
+  shared_server: {
+    server_id: serverIdentifier,
+    email: donor.plex_email || donor.email,
+    libraries: sections,
+    allow_channels: false,
+    allow_camera_upload: false,
+    allow_tuners: false
   }
 };
 
 console.log('Request body:', JSON.stringify(body, null, 2));
 
-const url = `https://plex.tv/api/v2/friends?X-Plex-Token=${plexToken}`;
+const url = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plexToken}`;
 
 fetch(url, {
   method: 'POST',
