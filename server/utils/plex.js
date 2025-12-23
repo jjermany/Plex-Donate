@@ -185,7 +185,14 @@ async function loadPlexContext({ logContext } = {}) {
     let sharedMembers = [];
 
     try {
-      sharedMembers = await plexService.listSharedServerMembers();
+      // Use getCurrentPlexShares instead of listSharedServerMembers
+      // This ensures UI and sync use the same data source
+      const sharesResult = await plexService.getCurrentPlexShares();
+      if (sharesResult.success && Array.isArray(sharesResult.shares)) {
+        sharedMembers = sharesResult.shares;
+      } else {
+        sharedMembers = [];
+      }
     } catch (err) {
       logger.warn(
         `Failed to load Plex shared server members${contextSuffix}`,
@@ -203,8 +210,8 @@ async function loadPlexContext({ logContext } = {}) {
         const emails = Array.isArray(member.emails)
           ? member.emails.map((email) => String(email).trim()).filter(Boolean)
           : [];
-        const ids = Array.isArray(member.ids)
-          ? member.ids.map((id) => String(id).trim()).filter(Boolean)
+        const ids = Array.isArray(member.userIds)  // Changed from member.ids to member.userIds
+          ? member.userIds.map((id) => String(id).trim()).filter(Boolean)
           : [];
 
         if (!emails.length && !ids.length) {
