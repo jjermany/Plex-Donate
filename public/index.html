@@ -3548,6 +3548,7 @@
       let csrfToken = null;
       const SESSION_TOKEN_QUERY_PARAM = 'session';
       let sessionToken = null;
+      let loginRateLimitedUntil = null; // Timestamp when rate limit cooldown expires
 
       let openSubscriberActionMenu = null;
 
@@ -4258,6 +4259,12 @@
         updateSessionTokenFromResponse(data);
 
         if (response.status === 401) {
+          // Session has expired or user is not authenticated
+          // Stop any background processes
+          stopDashboardAutoRefresh();
+          setSessionToken(null);
+
+          // Clear all state
           state.authenticated = false;
           state.donors = [];
           state.shareLinks = [];
@@ -4278,9 +4285,14 @@
             error: '',
             loaded: false,
           };
-          stopDashboardAutoRefresh();
-          setSessionToken(null);
-          render();
+
+          // Reload the page to show login screen and ensure clean state
+          // Use a small delay to allow any pending operations to complete
+          console.log('Session expired. Reloading page...');
+          setTimeout(() => {
+            window.location.reload();
+          }, 100);
+
           throw new Error('Authentication required');
         }
 
@@ -4302,7 +4314,9 @@
 
         if (response.status === 429) {
           stopDashboardAutoRefresh();
-          const error = data.error || 'Too many requests. Please wait a few minutes before trying again.';
+          // Preserve the server's specific error message which includes timing details
+          const error = data.error || 'Too many requests. Please wait before trying again.';
+          console.warn('Rate limit exceeded:', error);
           throw new Error(error);
         }
 
@@ -6737,6 +6751,17 @@
           if (!loginUsernameInput || !loginPasswordInput) {
             return;
           }
+
+          // Check if we're still in rate limit cooldown
+          if (loginRateLimitedUntil && Date.now() < loginRateLimitedUntil) {
+            const remainingMinutes = Math.ceil((loginRateLimitedUntil - Date.now()) / 60000);
+            setLoginStatus(
+              `Too many login attempts. Please wait ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''} before trying again.`,
+              'error'
+            );
+            return;
+          }
+
           const username = loginUsernameInput.value.trim();
           const password = loginPasswordInput.value;
           if (!username) {
@@ -6768,11 +6793,19 @@
               state.timezone = loginTimezone;
             }
             loginPasswordInput.value = '';
+            // Clear rate limit cooldown on successful login
+            loginRateLimitedUntil = null;
             await loadDashboardData();
             startDashboardAutoRefresh();
             setLoginStatus('');
           } catch (err) {
-            setLoginStatus(err.message || 'Sign in failed', 'error');
+            const errorMessage = err.message || 'Sign in failed';
+            setLoginStatus(errorMessage, 'error');
+
+            // If this is a rate limit error, set cooldown for 15 minutes
+            if (errorMessage.toLowerCase().includes('too many')) {
+              loginRateLimitedUntil = Date.now() + (15 * 60 * 1000); // 15 minutes
+            }
           } finally {
             if (loginSubmitButton) {
               loginSubmitButton.disabled = false;
