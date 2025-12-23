@@ -2787,22 +2787,28 @@ async function revokeUser({ plexAccountId, email }) {
 
   const plex = getPlexConfig();
 
-  // Get server identifier
-  let serverId;
+  // Get server identifier and descriptor (need legacy ID for this endpoint)
   try {
     plex.serverIdentifier = await getOrResolveServerIdentifier(plex);
-    serverId = await resolveServerId(plex);
   } catch (err) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers using clients.plex.tv endpoint
-  // This returns the actual server shares, not just friends
-  const sharedServersUrl = 'https://clients.plex.tv/api/v2/shared_servers';
+  const descriptor = await resolveServerDescriptor(plex);
+  if (!descriptor.legacyNumericId) {
+    throw new Error(
+      'Plex did not return a legacy numeric server id; revoking access is not supported via this token.'
+    );
+  }
+
+  // Fetch the list of shares using the legacy endpoint (same as fetchSharedServerMembersLegacy)
+  const sharedServerUrl = await buildSharedServerUrl(plex);
+
+  console.log('DEBUG: Fetching shares from:', sharedServerUrl);
 
   let response;
   try {
-    response = await fetch(sharedServersUrl, {
+    response = await fetch(sharedServerUrl, {
       method: 'GET',
       headers: buildSharedServerHeaders(plex, {
         Accept: 'application/json',
@@ -2816,87 +2822,70 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error('Plex rejected the provided token');
   }
 
+  if (response.status === 404 || response.status === 410) {
+    return { success: false, reason: 'No shares found on Plex server' };
+  }
+
   if (!response.ok) {
     const details = await extractErrorMessage(response);
     throw new Error(`Failed to fetch shared servers: ${response.status} ${details || ''}`);
   }
 
-  // Parse the shared_servers response
-  let sharesData;
-  try {
-    sharesData = await response.json();
-  } catch (err) {
-    throw new Error(`Failed to parse shared servers response: ${err.message}`);
-  }
+  // Parse the response (could be XML or JSON)
+  const payload = await response.text();
+  console.log('DEBUG: Response payload (first 500 chars):', payload.substring(0, 500));
 
-  console.log('DEBUG: Shared servers response:', JSON.stringify({
-    isArray: Array.isArray(sharesData),
-    type: typeof sharesData,
-    keys: sharesData && typeof sharesData === 'object' ? Object.keys(sharesData).slice(0, 10) : [],
-    sharesCount: Array.isArray(sharesData) ? sharesData.length : 0,
-    sample: Array.isArray(sharesData) && sharesData[0] ? sharesData[0] : null,
+  const shares = parseSharedServerMembersPayload(payload);
+  console.log('DEBUG: Parsed shares:', JSON.stringify({
+    sharesCount: shares.length,
+    shares: shares.map((s) => ({
+      id: s.id,
+      email: s.email,
+      emails: s.emails,
+      ids: s.ids,
+    })),
   }, null, 2));
-
-  // The response should be an array of shared server objects
-  const shares = Array.isArray(sharesData) ? sharesData : [];
 
   const normalizedEmail = email ? normalize(email) : '';
   const normalizedAccountId = plexAccountId ? normalize(plexAccountId) : '';
-  const normalizedServerId = normalize(serverId);
 
-  console.log('DEBUG: Looking for user:', JSON.stringify({
+  console.log('DEBUG: Looking for:', JSON.stringify({
     email,
     normalizedEmail,
     plexAccountId,
     normalizedAccountId,
-    serverId,
-    normalizedServerId,
-    totalShares: shares.length,
   }, null, 2));
 
-  // Find the share matching our user and server
+  // Find the share matching our user
   let targetShare = null;
 
   for (const share of shares) {
-    console.log('DEBUG: Checking share:', JSON.stringify({
-      id: share.id,
-      machineIdentifier: share.machineIdentifier,
-      serverId: share.serverId,
-      invitedEmail: share.invitedEmail,
-      invitedId: share.invitedId,
-      userEmail: share.user?.email,
-      userId: share.user?.id,
-      allKeys: Object.keys(share).slice(0, 15),
-    }, null, 2));
-
-    // Check if this share is for our server
-    const shareMachineId = share.machineIdentifier || share.serverId || share.server?.machineIdentifier;
-    const isOurServer = normalize(shareMachineId) === normalizedServerId;
-
-    if (!isOurServer) {
-      console.log('DEBUG: Share is not for our server, skipping');
-      continue;
+    // Check emails
+    if (normalizedEmail && share.emails) {
+      for (const shareEmail of share.emails) {
+        if (normalize(shareEmail) === normalizedEmail) {
+          targetShare = share;
+          console.log('DEBUG: Matched by email:', shareEmail);
+          break;
+        }
+      }
     }
 
-    // Check if this share matches our user
-    const shareEmail = share.invitedEmail || share.user?.email || share.email;
-    const shareUserId = share.invitedId || share.user?.id || share.userId || share.user?.uuid;
+    // Check IDs
+    if (!targetShare && normalizedAccountId && share.ids) {
+      for (const shareId of share.ids) {
+        if (normalize(shareId) === normalizedAccountId) {
+          targetShare = share;
+          console.log('DEBUG: Matched by ID:', shareId);
+          break;
+        }
+      }
+    }
 
-    const userMatches =
-      (normalizedEmail && normalize(shareEmail) === normalizedEmail) ||
-      (normalizedAccountId && normalize(shareUserId) === normalizedAccountId);
-
-    if (userMatches) {
-      console.log('DEBUG: Share matched!');
-      targetShare = share;
+    if (targetShare) {
       break;
     }
   }
-
-  console.log('DEBUG: Match result:', JSON.stringify({
-    foundShare: !!targetShare,
-    shareId: targetShare?.id,
-  }, null, 2));
 
   if (!targetShare) {
     return { success: false, reason: 'User not found on Plex server' };
@@ -2907,8 +2896,10 @@ async function revokeUser({ plexAccountId, email }) {
     return { success: false, reason: 'Unable to determine share ID' };
   }
 
-  // Delete the share
-  const deleteUrl = `https://plex.tv/api/v2/shared_servers/${shareId}?X-Plex-Token=${plex.token}`;
+  // Delete the share using the legacy endpoint (same as cancelInvite)
+  const deleteUrl = await buildSharedServerUrl(plex, shareId);
+
+  console.log('DEBUG: Deleting share at:', deleteUrl);
 
   let deleteResponse;
   try {
@@ -2920,13 +2911,12 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to connect to Plex revoke API: ${err.message}`);
   }
 
-  if (deleteResponse.status === 404) {
-    return { success: false, reason: 'Share not found on Plex server (may already be removed)' };
+  if (deleteResponse.status === 401 || deleteResponse.status === 403) {
+    throw new Error('Plex rejected the provided token');
   }
 
-  if (deleteResponse.status === 204) {
-    // Success - 204 No Content is the expected response
-    return { success: true, shareId };
+  if (deleteResponse.status === 404 || deleteResponse.status === 410) {
+    return { success: false, reason: 'Share not found on Plex server (may already be removed)' };
   }
 
   if (!deleteResponse.ok) {
