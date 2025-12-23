@@ -1365,7 +1365,15 @@ router.post(
         plexEmail: d.plexEmail,
         plexAccountId: d.plexAccountId,
         plexEmailType: typeof d.plexEmail,
-        plexAccountIdType: typeof d.plexAccountId
+        plexAccountIdType: typeof d.plexAccountId,
+        inviteCount: d.invites ? d.invites.length : 0,
+        invites: (d.invites || []).map(inv => ({
+          id: inv.id,
+          recipientEmail: inv.recipientEmail,
+          plexEmail: inv.plexEmail,
+          plexInviteId: inv.plexInviteId,
+          revokedAt: inv.revokedAt
+        }))
       })), null, 2));
 
       const donorsWithPlex = allDonors.filter(
