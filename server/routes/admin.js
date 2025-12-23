@@ -1344,7 +1344,7 @@ router.post(
       }
 
       const currentShares = plexResult.shares;
-      logger.info('Syncing Plex status', { totalShares: currentShares.length });
+      logger.info(`Syncing Plex status - found ${currentShares.length} current shares on Plex server`);
 
       // Get all donors with Plex fields set
       const allDonors = listDonorsWithDetails();
@@ -1373,10 +1373,7 @@ router.post(
             name: donor.name,
           });
 
-          logger.info('Cleared stale Plex data for donor', {
-            donorId: donor.id,
-            email: donor.email,
-          });
+          logger.info(`Cleared stale Plex data for donor ${donor.id} (${donor.email || donor.name})`);
 
           logEvent('plex.access.synced', {
             donorId: donor.id,
@@ -1476,10 +1473,7 @@ router.post(
             name: donor.name,
           });
 
-          logger.info('Cleared stale Plex data for donor', {
-            donorId: donor.id,
-            email: donor.email,
-          });
+          logger.info(`Cleared stale Plex data for donor ${donor.id} (${donor.email || donor.name})`);
 
           logEvent('plex.access.synced', {
             donorId: donor.id,

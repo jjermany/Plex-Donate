@@ -6609,19 +6609,22 @@
         refreshButton.disabled = true;
       }
       try {
-        // First sync Plex status for all donors if Plex is configured
+        let syncSucceeded = false;
+
+        // Sync Plex status if configured - this returns updated donor list
         if (state.plex && state.plex.configured) {
           try {
             const syncResponse = await api('/api/admin/plex/sync-status-now', {
               method: 'POST',
             });
 
-            // Update donors with the synced list from response
+            // Update state with the synced data from response
             if (syncResponse && Array.isArray(syncResponse.donors)) {
               state.donors = syncResponse.donors;
               if (syncResponse.plex) {
                 state.plex = syncResponse.plex;
               }
+              syncSucceeded = true;
 
               // Show success message if any records were cleared
               if (syncResponse.clearedCount > 0) {
@@ -6629,16 +6632,24 @@
                   `Synced Plex status. Cleared ${syncResponse.clearedCount} stale record(s).`,
                   'success'
                 );
+              } else {
+                showDashboardToast('Plex status is up to date', 'success');
               }
+
+              // Re-render with updated data
+              render();
             }
           } catch (plexErr) {
             console.warn('Failed to sync Plex status during refresh:', plexErr);
-            // Continue with normal refresh even if Plex sync fails
+            // Fall back to normal refresh
           }
         }
 
-        // Then reload all dashboard data
-        await loadDashboardData();
+        // Only do full data reload if Plex sync didn't succeed
+        // (This avoids making duplicate API calls and hitting rate limits)
+        if (!syncSucceeded) {
+          await loadDashboardData();
+        }
       } catch (err) {
         console.error(err);
       } finally {
