@@ -447,6 +447,9 @@ function parseSharedServerMembersFromXml(payload) {
     const idValues = [];
     const statusValues = [];
 
+    // Extract the share ID from the id attribute of <SharedServer>
+    const shareId = attr(attributes, 'id');
+
     const emailAttr =
       attr(attributes, 'invitedEmail') ||
       attr(attributes, 'invited_email') ||
@@ -537,7 +540,7 @@ function parseSharedServerMembersFromXml(payload) {
     });
     const status = statuses[0] || (pending ? 'pending' : SHARED_MEMBER_DEFAULT_STATUS);
 
-    accumulator.add({ emails, ids, pending, status });
+    accumulator.add({ id: shareId, emails, ids, pending, status });
   };
 
   const blockPattern = /<SharedServer\b([^>]*)>([\s\S]*?)<\/SharedServer>/gi;
