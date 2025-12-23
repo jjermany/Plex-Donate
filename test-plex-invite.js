@@ -53,24 +53,26 @@ console.log(`✓ Token: ${plexToken.substring(0, 10)}...`);
 console.log('\n=== Testing Plex API Call ===');
 
 const fetch = require('node-fetch');
+const { URLSearchParams } = require('url');
 
-const sections = librarySectionIds.split(',').map(s => ({
-  library_id: parseInt(s.trim(), 10),
-  allow_sync: false
-}));
+const sections = librarySectionIds.split(',').map(s => s.trim()).filter(Boolean);
 
-const body = {
-  shared_server: {
-    server_id: serverIdentifier,
-    email: donor.plex_email || donor.email,
-    libraries: sections,
-    allow_channels: false,
-    allow_camera_upload: false,
-    allow_tuners: false
-  }
-};
+// Build form-encoded body with FLAT fields (Plex expects form data, not JSON!)
+const formData = new URLSearchParams();
+formData.append('machineIdentifier', serverIdentifier);
+formData.append('invitedEmail', donor.plex_email || donor.email);
 
-console.log('Request body:', JSON.stringify(body, null, 2));
+// Add libraries as array format
+sections.forEach((libraryId, index) => {
+  formData.append(`libraries[${index}][library_id]`, parseInt(libraryId, 10));
+  formData.append(`libraries[${index}][allow_sync]`, '0');
+});
+
+formData.append('allow_channels', '0');
+formData.append('allow_camera_upload', '0');
+formData.append('allow_tuners', '0');
+
+console.log('Request body (form-encoded):', formData.toString());
 
 const url = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plexToken}`;
 
@@ -78,14 +80,14 @@ fetch(url, {
   method: 'POST',
   headers: {
     'Accept': 'application/json',
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/x-www-form-urlencoded',
     'X-Plex-Product': 'Plex-Donate',
     'X-Plex-Version': '1.0',
     'X-Plex-Device': 'Server',
     'X-Plex-Platform': 'Web',
     'X-Plex-Client-Identifier': 'plex-donate-test'
   },
-  body: JSON.stringify(body)
+  body: formData.toString()
 })
 .then(async (response) => {
   console.log(`\nResponse status: ${response.status} ${response.statusText}`);
