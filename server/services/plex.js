@@ -1614,22 +1614,28 @@ function summarizeServerIdentifiers(servers, limit = 10) {
 
 async function resolveServerId(plex) {
   const descriptor = await resolveServerDescriptor(plex);
-  if (!descriptor.legacyNumericId) {
-    const sample = summarizeServerIdentifiers([
-      {
-        name: descriptor.name,
-        machineIdentifier: descriptor.machineIdentifier,
-        id: descriptor.legacyNumericId,
-      },
-    ]);
-    throw new Error(
-      `Matched server but no numeric "id" field was found to use with the invite API. Matched: ${JSON.stringify(
-        sample
-      )}`
-    );
+
+  // Try legacy numeric ID first
+  if (descriptor.legacyNumericId) {
+    return descriptor.legacyNumericId;
   }
 
-  return descriptor.legacyNumericId;
+  // Fall back to machine identifier - modern Plex accepts this too
+  if (descriptor.machineIdentifier) {
+    logger.info('Using machine identifier as server ID (legacy numeric ID not available)');
+    return descriptor.machineIdentifier;
+  }
+
+  const sample = summarizeServerIdentifiers([
+    {
+      name: descriptor.name,
+      machineIdentifier: descriptor.machineIdentifier,
+      id: descriptor.legacyNumericId,
+    },
+  ]);
+  throw new Error(
+    `Could not determine server ID for invite API. Matched: ${JSON.stringify(sample)}`
+  );
 }
 
 async function resolveServerDescriptor(plex) {
