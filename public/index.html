@@ -3065,6 +3065,46 @@
                 </div>
               </form>
 
+              <form class="settings-form" data-group="stripe">
+                <h3>Stripe</h3>
+                <div class="field-grid">
+                  <label>
+                    Publishable Key
+                    <input name="publishableKey" type="text" autocomplete="off" placeholder="pk_..." />
+                    <span class="help">Public key used for client-side Stripe integration.</span>
+                  </label>
+                  <label>
+                    Secret Key
+                    <input name="secretKey" type="password" autocomplete="new-password" placeholder="sk_..." />
+                    <span class="help">Private key for server-side Stripe operations. Keep this secure.</span>
+                  </label>
+                  <label>
+                    Webhook Secret
+                    <input name="webhookSecret" type="password" autocomplete="new-password" placeholder="whsec_..." />
+                    <span class="help">Used to verify webhook events from Stripe.</span>
+                  </label>
+                  <label>
+                    Price ID
+                    <input name="priceId" type="text" autocomplete="off" placeholder="price_..." />
+                    <span class="help">The recurring price ID for your subscription product.</span>
+                  </label>
+                  <label>
+                    Monthly price
+                    <input name="subscriptionPrice" type="number" min="0" step="0.01" placeholder="5.00" />
+                    <span class="help">Shown on share pages so donors know the recurring amount.</span>
+                  </label>
+                  <label>
+                    Currency
+                    <input name="currency" type="text" autocomplete="off" placeholder="USD" />
+                  </label>
+                </div>
+                <p class="form-status" data-status-for="stripe"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save Stripe settings</button>
+                  <button type="button" data-action="test">Test Stripe settings</button>
+                </div>
+              </form>
+
               <form class="settings-form" data-group="smtp">
                 <h3>Email (SMTP)</h3>
                 <div class="field-grid">
