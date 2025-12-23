@@ -1114,6 +1114,38 @@ router.delete(
       return res.status(404).json({ error: 'Subscriber not found' });
     }
 
+    // Revoke Plex access before removing from database
+    if (plexService.isConfigured() && (donor.plexAccountId || donor.plexEmail || donor.email)) {
+      try {
+        const result = await plexService.revokeUser({
+          plexAccountId: donor.plexAccountId,
+          email: donor.plexEmail || donor.email,
+        });
+        if (result.success) {
+          logger.info('Revoked Plex access for removed user', {
+            donorId: donor.id,
+            email: donor.email,
+          });
+          logEvent('plex.access.revoked', {
+            donorId: donor.id,
+            email: donor.email,
+            plexAccountId: donor.plexAccountId,
+            reason: 'admin_removed_user',
+          });
+        } else {
+          logger.warn('Failed to revoke Plex access for removed user', {
+            donorId: donor.id,
+            reason: result.reason,
+          });
+        }
+      } catch (err) {
+        logger.warn('Error revoking Plex access during user removal', {
+          donorId: donor.id,
+          error: err.message,
+        });
+      }
+    }
+
     const removed = deleteDonorById(donor.id);
     if (!removed) {
       return res.status(500).json({ error: 'Failed to remove subscriber' });
