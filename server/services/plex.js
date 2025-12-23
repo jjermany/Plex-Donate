@@ -3014,6 +3014,17 @@ async function createInvite(
       },
     });
 
+    // Provide helpful error messages for common scenarios
+    if (response.status === 404) {
+      throw new Error(
+        'Unable to create Plex invite. This typically happens when: (1) the user is the server owner, ' +
+        '(2) the email is linked to the server owner account (including email aliases like user+test@gmail.com), ' +
+        'or (3) the server configuration is invalid. ' +
+        'For testing, you must use a completely separate Plex account with a different email. ' +
+        `Technical details: ${response.status} (${statusText})${suffix}`
+      );
+    }
+
     throw new Error(
       `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
     );
