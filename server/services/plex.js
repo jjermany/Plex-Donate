@@ -2962,11 +2962,11 @@ async function createInvite(
     allow_sync: plex?.allowSync === true || plex?.allowSync === '1'
   }));
 
-  // Build request body - machineIdentifier and invitedEmail at ROOT level
+  // Build request body with correct Plex API field names
   const requestBody = {
-    machineIdentifier: serverId,
-    invitedEmail: normalizedEmail,
     shared_server: {
+      server_id: serverId,  // Plex expects "server_id", not "machineIdentifier"
+      email: normalizedEmail,  // Plex expects "email", not "invitedEmail"
       libraries: libraries,
       allow_channels: plex?.allowChannels === true || plex?.allowChannels === '1',
       allow_camera_upload: plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1',
