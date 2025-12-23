@@ -2831,9 +2831,13 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
   }
 
-  console.log('DEBUG: Raw friends data:', JSON.stringify({
+  console.log('DEBUG: Raw friends response structure:', JSON.stringify({
+    isArray: Array.isArray(friendsData),
+    type: typeof friendsData,
+    keys: friendsData && typeof friendsData === 'object' ? Object.keys(friendsData) : [],
     hasMediaContainer: !!friendsData?.MediaContainer,
     metadataCount: friendsData?.MediaContainer?.Metadata?.length || 0,
+    sampleData: Array.isArray(friendsData) ? friendsData.slice(0, 1) : friendsData,
   }, null, 2));
 
   const filteredData = filterFriendsPayloadByServer(friendsData, plex.serverIdentifier);
