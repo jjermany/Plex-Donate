@@ -426,31 +426,39 @@ router.post(
     );
 
     // Also sync Plex status for this donor
-    if (plexService.isConfigured() && (donor.plexAccountId || donor.plexEmail)) {
-      try {
-        const plexResult = await plexService.getCurrentPlexShares();
-        if (plexResult.success) {
-          const hasShare = plexService.checkDonorHasPlexShare(donor, plexResult.shares);
-          if (!hasShare) {
-            // Donor doesn't have a current share, clear their Plex fields
-            updateDonorPlexIdentity({
-              id: donor.id,
-              plexAccountId: null,
-              plexEmail: null,
-            });
-            logger.info('Cleared stale Plex data during refresh', {
-              donorId: donor.id,
-            });
+    let plexWasCleared = false;
+    if (plexService.isConfigured()) {
+      // Get fresh donor data to check current Plex fields
+      const freshDonor = getDonorById(donorId);
+      if (freshDonor && (freshDonor.plexAccountId || freshDonor.plexEmail)) {
+        try {
+          const plexResult = await plexService.getCurrentPlexShares();
+          if (plexResult.success) {
+            const hasShare = plexService.checkDonorHasPlexShare(freshDonor, plexResult.shares);
+            if (!hasShare) {
+              // Donor doesn't have a current share, clear their Plex fields
+              updateDonorPlexIdentity({
+                id: freshDonor.id,
+                plexAccountId: null,
+                plexEmail: null,
+              });
+              plexWasCleared = true;
+              logger.info('Cleared stale Plex data during refresh', {
+                donorId: freshDonor.id,
+                email: freshDonor.email,
+              });
+            }
           }
+        } catch (plexErr) {
+          logger.warn('Failed to sync Plex status during refresh', {
+            donorId: donorId,
+            error: plexErr.message,
+          });
         }
-      } catch (plexErr) {
-        logger.warn('Failed to sync Plex status during refresh', {
-          donorId: donor.id,
-          error: plexErr.message,
-        });
       }
     }
 
+    // Get updated donor list AFTER potential Plex sync
     const donorsWithDetails = listDonorsWithDetails();
     const detailedDonor =
       donorsWithDetails.find((item) => item.id === donorId) ||
@@ -1270,6 +1278,89 @@ router.post(
       },
       csrfToken: res.locals.csrfToken,
     });
+  })
+);
+
+router.post(
+  '/plex/sync-status-now',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!plexService.isConfigured()) {
+      return res.status(400).json({ error: 'Plex is not configured' });
+    }
+
+    try {
+      // Get all current shares from Plex
+      const plexResult = await plexService.getCurrentPlexShares();
+      if (!plexResult.success) {
+        return res.status(502).json({ error: plexResult.reason || 'Failed to fetch Plex shares' });
+      }
+
+      const currentShares = plexResult.shares;
+      logger.info('Syncing Plex status', { totalShares: currentShares.length });
+
+      // Get all donors with Plex fields set
+      const allDonors = listDonorsWithDetails();
+      const donorsWithPlex = allDonors.filter(
+        (d) => d.plexAccountId || d.plexEmail
+      );
+
+      let clearedCount = 0;
+      const clearedDonors = [];
+
+      // Check each donor against current Plex shares
+      for (const donor of donorsWithPlex) {
+        const hasShare = plexService.checkDonorHasPlexShare(donor, currentShares);
+
+        // If donor doesn't have a current share, clear their Plex fields
+        if (!hasShare) {
+          updateDonorPlexIdentity({
+            id: donor.id,
+            plexAccountId: null,
+            plexEmail: null,
+          });
+
+          clearedCount++;
+          clearedDonors.push({
+            id: donor.id,
+            email: donor.email,
+            name: donor.name,
+          });
+
+          logger.info('Cleared stale Plex data for donor', {
+            donorId: donor.id,
+            email: donor.email,
+          });
+
+          logEvent('plex.access.synced', {
+            donorId: donor.id,
+            email: donor.email,
+            action: 'cleared_stale_data',
+          });
+        }
+      }
+
+      // Return updated donor list
+      const { donors, plexContext } = await buildDonorListWithPlex();
+
+      res.json({
+        success: true,
+        message: `Synced Plex status. Cleared ${clearedCount} stale record(s).`,
+        totalShares: currentShares.length,
+        donorsChecked: donorsWithPlex.length,
+        clearedCount,
+        clearedDonors,
+        donors,
+        plex: {
+          configured: plexContext.configured,
+          error: plexContext.error,
+        },
+        csrfToken: res.locals.csrfToken,
+      });
+    } catch (err) {
+      logger.error('Failed to sync Plex status', err);
+      res.status(502).json({ error: err.message });
+    }
   })
 );
 
