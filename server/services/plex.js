@@ -2974,13 +2974,11 @@ async function createInvite(
     }
   };
 
-  // Log the invite request for debugging
-  logger.info('Creating Plex invite (Plex Web API)', {
-    machineIdentifier: serverId,
-    invitedEmail: normalizedEmail,
-    library_count: libraries.length,
-    library_ids: libraries.map(l => l.library_id),
-  });
+  // Log the FULL request body for debugging
+  logger.info('Creating Plex invite - FULL REQUEST:', JSON.stringify({
+    url: 'https://plex.tv/api/v2/shared_servers',
+    body: requestBody
+  }, null, 2));
 
   let response;
   try {
