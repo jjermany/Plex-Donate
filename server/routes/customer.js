@@ -534,6 +534,34 @@ router.get(
       subscriptionRefreshError = error || '';
     }
 
+    // Sync Plex status for this donor
+    if (plexService.isConfigured() && (donor.plexAccountId || donor.plexEmail)) {
+      try {
+        const plexResult = await plexService.getCurrentPlexShares();
+        if (plexResult.success) {
+          const hasShare = plexService.checkDonorHasPlexShare(donor, plexResult.shares);
+          if (!hasShare) {
+            // Donor doesn't have a current share, clear their Plex fields
+            updateDonorPlexIdentity({
+              id: donor.id,
+              plexAccountId: null,
+              plexEmail: null,
+            });
+            // Refresh donor data to reflect the change
+            donor = getDonorById(donor.id);
+            logger.info('Cleared stale Plex data during dashboard load', {
+              donorId: donor.id,
+            });
+          }
+        }
+      } catch (plexErr) {
+        logger.warn('Failed to sync Plex status during dashboard load', {
+          donorId: donor.id,
+          error: plexErr.message,
+        });
+      }
+    }
+
     const {
       activeInvite: invite,
       inviteLimitReached,

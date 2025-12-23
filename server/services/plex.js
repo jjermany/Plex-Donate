@@ -2969,6 +2969,42 @@ async function getCurrentPlexShares() {
   };
 }
 
+function checkDonorHasPlexShare(donor, currentShares) {
+  if (!donor || !currentShares || currentShares.length === 0) {
+    return false;
+  }
+
+  const normalizedEmail = donor.plexEmail ? donor.plexEmail.toLowerCase().trim() : '';
+  const normalizedAccountId = donor.plexAccountId
+    ? String(donor.plexAccountId).toLowerCase().trim()
+    : '';
+
+  if (!normalizedEmail && !normalizedAccountId) {
+    return false;
+  }
+
+  // Check if donor has a current share
+  return currentShares.some((share) => {
+    // Check by email
+    if (normalizedEmail && share.emails) {
+      const shareHasEmail = share.emails.some(
+        (email) => email.toLowerCase().trim() === normalizedEmail
+      );
+      if (shareHasEmail) return true;
+    }
+
+    // Check by user ID
+    if (normalizedAccountId && share.userIds) {
+      const shareHasId = share.userIds.some(
+        (id) => String(id).toLowerCase().trim() === normalizedAccountId
+      );
+      if (shareHasId) return true;
+    }
+
+    return false;
+  });
+}
+
 async function createInvite(
   { email, friendlyName, librarySectionIds, invitedId } = {},
   overrideSettings
@@ -3454,6 +3490,7 @@ module.exports = {
   revokeUser,
   revokeUserByEmail,
   getCurrentPlexShares,
+  checkDonorHasPlexShare,
   verifyConnection,
   getOrResolveServerIdentifier,
 };
