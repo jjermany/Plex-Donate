@@ -246,6 +246,42 @@ function buildSubscriberDetails(donor) {
   };
 }
 
+async function verifyConnection(overrideSettings) {
+  const settings = overrideSettings || getStripeSettings();
+
+  // Validate required fields
+  if (!settings.secretKey) {
+    throw new Error('Stripe secret key is required');
+  }
+
+  if (!settings.publishableKey) {
+    throw new Error('Stripe publishable key is required');
+  }
+
+  if (!settings.webhookSecret) {
+    throw new Error('Stripe webhook secret is required');
+  }
+
+  // Validate webhook secret format
+  if (!settings.webhookSecret.startsWith('whsec_')) {
+    throw new Error('Webhook secret should start with "whsec_"');
+  }
+
+  // Test the API connection by retrieving account information
+  const stripe = getStripeClient(overrideSettings);
+  const balance = await stripe.balance.retrieve();
+
+  // Check if we're in test mode or live mode
+  const isTestMode = settings.secretKey.startsWith('sk_test_');
+  const environment = isTestMode ? 'test' : 'live';
+
+  return {
+    message: `Stripe credentials verified successfully in ${environment} mode.`,
+    environment,
+    currency: balance.available?.[0]?.currency || 'usd',
+  };
+}
+
 module.exports = {
   getStripeClient,
   ensureProduct,
@@ -262,4 +298,5 @@ module.exports = {
   constructWebhookEvent,
   mapStripeSubscriptionStatus,
   buildSubscriberDetails,
+  verifyConnection,
 };
