@@ -1702,6 +1702,7 @@ router.post(
             const inviteData = await plexService.createInvite({
               email: trialDonor.email,
               friendlyName: trialDonor.name || undefined,
+              invitedId: trialDonor.plexAccountId || undefined,
             });
 
             const inviteRecord = createInviteRecord({

@@ -2967,6 +2967,18 @@ async function createInvite(
     `https://plex.tv${V2_SHARED_SERVERS_PATH}?` +
     new URLSearchParams({ 'X-Plex-Token': plex.token }).toString();
 
+  // Log the invite request for debugging
+  logger.info('Creating Plex invite', {
+    url: v2Url.replace(/X-Plex-Token=[^&]+/, 'X-Plex-Token=REDACTED'),
+    body: {
+      ...v2Body,
+      invitedEmail: v2Body.invitedEmail ? '[REDACTED]' : undefined,
+      invitedId: v2Body.invitedId || undefined,
+      machineIdentifier: v2Body.machineIdentifier,
+      librarySectionIds: v2Body.librarySectionIds,
+    },
+  });
+
   let response;
   try {
     response = await fetch(v2Url, {
@@ -2988,6 +3000,31 @@ async function createInvite(
     const bodyText = await response.text().catch(() => '');
     const statusText = response.statusText || 'Error';
     const suffix = bodyText ? `: ${bodyText}` : '';
+
+    // Log the full error for debugging
+    logger.error('Plex invite creation failed', {
+      status: response.status,
+      statusText,
+      body: bodyText,
+      requestBody: {
+        machineIdentifier: v2Body.machineIdentifier,
+        librarySectionIds: v2Body.librarySectionIds,
+        hasInvitedId: !!v2Body.invitedId,
+        hasInvitedEmail: !!v2Body.invitedEmail,
+      },
+    });
+
+    // Provide helpful error messages for common scenarios
+    if (response.status === 404) {
+      throw new Error(
+        'Unable to create Plex invite. This typically happens when: (1) the user is the server owner, ' +
+        '(2) the email is linked to the server owner account (including email aliases like user+test@gmail.com), ' +
+        'or (3) the server configuration is invalid. ' +
+        'For testing, you must use a completely separate Plex account with a different email. ' +
+        `Technical details: ${response.status} (${statusText})${suffix}`
+      );
+    }
+
     throw new Error(
       `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
     );

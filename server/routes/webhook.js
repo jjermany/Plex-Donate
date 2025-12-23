@@ -638,6 +638,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     const inviteData = await plexService.createInvite({
       email,
       friendlyName: donor.name || undefined,
+      invitedId: donor.plexAccountId || undefined,
     });
 
     const inviteRecord = createInviteRecord({
