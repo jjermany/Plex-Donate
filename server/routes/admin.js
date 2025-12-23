@@ -721,6 +721,7 @@ router.post(
       plexInvite = await plexService.createInvite({
         email: donor.email,
         friendlyName: donor.name || donor.email,
+        invitedId: donor.plexAccountId || undefined,
       });
     } catch (err) {
       logger.error('Failed to create Plex invite for donor', {
