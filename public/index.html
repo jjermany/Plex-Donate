@@ -3321,6 +3321,14 @@
               <button
                 type="button"
                 class="menu-item danger"
+                data-action="revoke-plex"
+                role="menuitem"
+              >
+                Revoke Plex access
+              </button>
+              <button
+                type="button"
+                class="menu-item danger"
                 data-action="remove"
                 role="menuitem"
               >
@@ -6075,6 +6083,20 @@
         revokeBtn.title = canRevoke ? 'Revoke the most recent active invite' : 'No active invite available to revoke';
         donorDetailActions.appendChild(revokeBtn);
 
+        const canRevokePlex = Boolean(
+          plexState && plexState.configured !== false && (donor.plexShared || donor.plexPending)
+        );
+        const revokePlexBtn = document.createElement('button');
+        revokePlexBtn.className = 'danger secondary';
+        revokePlexBtn.textContent = 'Revoke Plex access';
+        revokePlexBtn.disabled = !canRevokePlex;
+        revokePlexBtn.dataset.action = 'revoke-plex';
+        revokePlexBtn.dataset.donorId = donor.id;
+        revokePlexBtn.title = canRevokePlex
+          ? 'Revoke Plex access for this user'
+          : 'Revoke is available only for users with Plex access or pending share';
+        donorDetailActions.appendChild(revokePlexBtn);
+
         // Remove user
         const removeBtn = document.createElement('button');
         removeBtn.className = 'danger secondary';
@@ -6309,6 +6331,9 @@
           );
           const resendButton = clone.querySelector('button[data-action="resend"]');
           const revokeButton = clone.querySelector('button[data-action="revoke"]');
+          const revokePlexButton = clone.querySelector(
+            'button[data-action="revoke-plex"]'
+          );
           const removeButton = clone.querySelector('button[data-action="remove"]');
 
           const hasShareUrl = Boolean(shareUrl);
@@ -6361,6 +6386,16 @@
             revokeButton.title = canRevoke
               ? 'Revoke the most recent active invite'
               : 'No active invite available to revoke';
+          }
+
+          if (revokePlexButton) {
+            const canRevokePlex = Boolean(
+              plexState && plexState.configured !== false && (donor.plexShared || donor.plexPending)
+            );
+            revokePlexButton.disabled = !canRevokePlex;
+            revokePlexButton.title = canRevokePlex
+              ? 'Revoke Plex access for this user'
+              : 'Revoke is available only for users with Plex access or pending share';
           }
 
           if (removeButton) {
@@ -7489,6 +7524,30 @@
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
+            } else if (action === 'revoke-plex') {
+              if (!confirm('Revoke Plex access for this user?')) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/revoke-plex`, {
+                method: 'POST',
+              });
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex((item) => String(item.id) === String(response.donor.id));
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage = (response && response.message) || 'Plex access revoked successfully.';
+              showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
               const confirmation = confirm(
                 'Remove this user and delete all related invites, payments, and share links?'
@@ -7754,6 +7813,31 @@
                 requiresReload = true;
               }
               const successMessage = (response && response.message) || 'Invite revoked successfully.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'revoke-plex') {
+              const confirmation = confirm('Revoke Plex access for this user?');
+              if (!confirmation) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(`/api/admin/subscribers/${donorId}/revoke-plex`, {
+                method: 'POST',
+              });
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (response && response.donor) {
+                const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+                const index = donors.findIndex(item => String(item.id) === String(response.donor.id));
+                if (index !== -1) {
+                  donors[index] = { ...donors[index], ...response.donor };
+                }
+                state.donors = donors;
+              } else {
+                requiresReload = true;
+              }
+              const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
               const confirmation = confirm('Remove this user and all related records? This cannot be undone.');

@@ -2796,15 +2796,20 @@ async function revokeUser({ plexAccountId, email }) {
     throw new Error(`Failed to resolve server identifier: ${err.message}`);
   }
 
-  // Fetch list of shared servers (shares) for this server
-  const sharedServersUrl = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plex.token}`;
+  // Fetch list of shared servers (shares) for this server via the legacy endpoint
+  let sharedServersUrl;
+  try {
+    sharedServersUrl = await buildSharedServerUrl(plex);
+  } catch (err) {
+    throw new Error(`Failed to resolve Plex shared servers URL: ${err.message}`);
+  }
 
   let response;
   try {
     response = await fetch(sharedServersUrl, {
       method: 'GET',
       headers: buildSharedServerHeaders(plex, {
-        'Accept': 'application/json',
+        Accept: 'application/json',
       }),
     });
   } catch (err) {
@@ -2822,9 +2827,11 @@ async function revokeUser({ plexAccountId, email }) {
 
   let shares = [];
   try {
-    shares = await response.json();
-    if (!Array.isArray(shares)) {
-      shares = [];
+    const payload = await response.json();
+    if (Array.isArray(payload)) {
+      shares = payload;
+    } else if (payload && typeof payload === 'object' && Array.isArray(payload.invitations)) {
+      shares = payload.invitations;
     }
   } catch (err) {
     throw new Error(`Failed to parse shared servers response: ${err.message}`);
