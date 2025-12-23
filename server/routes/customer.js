@@ -1642,10 +1642,9 @@ router.post(
     });
 
     // Attempt to automatically create and email a Plex invite for the trial.
-    (async () => {
-      try {
-        if (!plexService.isConfigured()) return;
-
+    let inviteError = null;
+    try {
+      if (plexService.isConfigured()) {
         // First, try to detect if the donor already has access on the Plex server
         // to avoid creating duplicate invites and to preserve preexisting access.
         let donorHasAccess = false;
@@ -1696,80 +1695,86 @@ router.post(
               plexAccountId: trialDonor.plexAccountId,
             });
           }
-          return;
-        }
-
-        // Create Plex invite
-        try {
-          const note = 'Auto-generated for trial';
-          const inviteData = await plexService.createInvite({
-            email: trialDonor.email,
-            friendlyName: trialDonor.name || undefined,
-          });
-
-          const inviteRecord = createInviteRecord({
-            donorId: trialDonor.id,
-            inviteId: inviteData.inviteId,
-            inviteUrl: inviteData.inviteUrl || '',
-            inviteStatus: inviteData.status || null,
-            invitedAt: inviteData.invitedAt || new Date().toISOString(),
-            sharedLibraries: Array.isArray(inviteData.sharedLibraries)
-              ? inviteData.sharedLibraries
-              : undefined,
-            recipientEmail: trialDonor.email,
-            note,
-            plexAccountId: trialDonor.plexAccountId,
-            plexEmail: trialDonor.plexEmail,
-          });
-
-          logEvent('invite.trial.generated', {
-            donorId: trialDonor.id,
-            inviteId: inviteRecord.id,
-            plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
-          });
-
-          if (!inviteRecord.inviteUrl) {
-            logger.warn('Plex invite created without a shareable URL for trial', {
-              donorId: trialDonor.id,
-              plexInviteId: inviteRecord.plexInviteId,
-            });
-            return;
-          }
-
+        } else {
+          // Create Plex invite
           try {
-            await emailService.sendInviteEmail({
-              to: trialDonor.email,
-              inviteUrl: inviteRecord.inviteUrl,
-              name: trialDonor.name,
-              subscriptionId: trialDonor.subscriptionId,
+            const note = 'Auto-generated for trial';
+            const inviteData = await plexService.createInvite({
+              email: trialDonor.email,
+              friendlyName: trialDonor.name || undefined,
             });
-            markInviteEmailSent(inviteRecord.id);
-            logEvent('invite.trial.email_sent', {
+
+            const inviteRecord = createInviteRecord({
+              donorId: trialDonor.id,
+              inviteId: inviteData.inviteId,
+              inviteUrl: inviteData.inviteUrl || '',
+              inviteStatus: inviteData.status || null,
+              invitedAt: inviteData.invitedAt || new Date().toISOString(),
+              sharedLibraries: Array.isArray(inviteData.sharedLibraries)
+                ? inviteData.sharedLibraries
+                : undefined,
+              recipientEmail: trialDonor.email,
+              note,
+              plexAccountId: trialDonor.plexAccountId,
+              plexEmail: trialDonor.plexEmail,
+            });
+
+            logEvent('invite.trial.generated', {
               donorId: trialDonor.id,
               inviteId: inviteRecord.id,
+              plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
             });
-          } catch (err) {
-            logger.warn('Failed to send trial invite email', err.message);
-            if (inviteRecord.plexInviteId) {
+
+            if (!inviteRecord.inviteUrl) {
+              const errorMsg = 'Plex invite created but no URL was returned. Please contact support.';
+              logger.warn('Plex invite created without a shareable URL for trial', {
+                donorId: trialDonor.id,
+                plexInviteId: inviteRecord.plexInviteId,
+              });
+              inviteError = errorMsg;
+            } else {
               try {
-                await plexService.cancelInvite(inviteRecord.plexInviteId);
-              } catch (cancelErr) {
-                logger.warn('Failed to cancel Plex invite after email failure', cancelErr.message);
+                await emailService.sendInviteEmail({
+                  to: trialDonor.email,
+                  inviteUrl: inviteRecord.inviteUrl,
+                  name: trialDonor.name,
+                  subscriptionId: trialDonor.subscriptionId,
+                });
+                markInviteEmailSent(inviteRecord.id);
+                logEvent('invite.trial.email_sent', {
+                  donorId: trialDonor.id,
+                  inviteId: inviteRecord.id,
+                });
+              } catch (err) {
+                logger.error('Failed to send trial invite email', err.message);
+                inviteError = 'Trial started but failed to send invite email. Check your email or contact support.';
+                if (inviteRecord.plexInviteId) {
+                  try {
+                    await plexService.cancelInvite(inviteRecord.plexInviteId);
+                  } catch (cancelErr) {
+                    logger.warn('Failed to cancel Plex invite after email failure', cancelErr.message);
+                  }
+                }
+                try {
+                  revokeInvite(inviteRecord.id);
+                } catch (revokeErr) {
+                  logger.warn('Failed to revoke invite record after email failure', revokeErr.message);
+                }
               }
             }
-            try {
-              revokeInvite(inviteRecord.id);
-            } catch (revokeErr) {
-              logger.warn('Failed to revoke invite record after email failure', revokeErr.message);
-            }
+          } catch (err) {
+            logger.error('Failed to create automatic trial invite', err.message);
+            inviteError = `Failed to create Plex invite: ${err.message}`;
           }
-        } catch (err) {
-          logger.warn('Failed to create automatic trial invite', err.message);
         }
-      } catch (err) {
-        logger.warn('Automatic trial invite workflow failed', err.message);
+      } else {
+        logger.warn('Plex service not configured - cannot send trial invite');
+        inviteError = 'Plex service is not configured. Please contact the administrator.';
       }
-    })();
+    } catch (err) {
+      logger.error('Automatic trial invite workflow failed', err.message);
+      inviteError = `Trial invite failed: ${err.message}`;
+    }
 
     const {
       activeInvite: invite,
@@ -1778,15 +1783,20 @@ router.post(
     } = getInviteState(trialDonor.id);
     const pendingPlexLink = getPendingPlexLink(req, trialDonor);
 
-    return res.json(
-      buildDashboardResponse({
-        donor: trialDonor,
-        invite,
-        pendingPlexLink,
-        inviteLimitReached,
-        nextInviteAvailableAt,
-      })
-    );
+    const response = buildDashboardResponse({
+      donor: trialDonor,
+      invite,
+      pendingPlexLink,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    });
+
+    // Add invite error to response if there was one
+    if (inviteError) {
+      response.inviteError = inviteError;
+    }
+
+    return res.json(response);
   })
 );
 

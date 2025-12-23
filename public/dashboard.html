@@ -1371,12 +1371,17 @@
                     <div class="step-header">
                       <span class="step-number" data-step-number="2">2</span>
                       <div>
-                        <h3 class="step-title">Start your support subscription</h3>
+                        <h3 class="step-title">Start your trial or subscription</h3>
                         <p id="step-subscription-note" class="muted small">
-                          Once Plex is linked, choose PayPal or Stripe above to start
-                          your membership.
+                          Once Plex is linked, start a 7-day trial or go directly to the Account tab to set up a subscription.
                         </p>
                       </div>
+                    </div>
+                    <div id="plex-trial-controls" class="plex-link-controls">
+                      <button id="plex-tab-trial-button" class="button-secondary" type="button">
+                        Start 7-day trial
+                      </button>
+                      <p id="plex-tab-trial-status" class="status-text" aria-live="polite"></p>
                     </div>
                   </div>
                   <div id="step-invite" class="step" data-state="upcoming">
@@ -1600,6 +1605,8 @@
       const stripePortalStatus = document.getElementById('stripe-portal-status');
       const trialButton = document.getElementById('trial-button');
       const trialStatus = document.getElementById('trial-status');
+      const plexTabTrialButton = document.getElementById('plex-tab-trial-button');
+      const plexTabTrialStatus = document.getElementById('plex-tab-trial-status');
       const trialPanel = document.getElementById('trial-panel');
       const trialDaysRemainingValue = document.getElementById(
         'trial-days-remaining'
@@ -1657,6 +1664,13 @@
       if (trialButton) {
         trialButton.disabled = true;
         trialButton.dataset.available = 'false';
+      }
+      const defaultPlexTabTrialButtonLabel = plexTabTrialButton
+        ? plexTabTrialButton.textContent
+        : 'Start 7-day trial';
+      if (plexTabTrialButton) {
+        plexTabTrialButton.disabled = true;
+        plexTabTrialButton.dataset.available = 'false';
       }
 
       if (supportReplyMessage) {
@@ -3566,6 +3580,9 @@
           if (trialButton) {
             trialButton.textContent = defaultTrialButtonLabel;
           }
+          if (plexTabTrialButton) {
+            plexTabTrialButton.textContent = defaultPlexTabTrialButtonLabel;
+          }
 
           if (trialButton || trialStatus) {
             if (!emailVerified) {
@@ -3625,6 +3642,22 @@
               trialStatus.classList.add('small');
             } else {
               trialStatus.classList.remove('small');
+            }
+          }
+
+          // Apply same logic to Plex tab trial button
+          if (plexTabTrialButton) {
+            plexTabTrialButton.classList.toggle('hidden', trialButtonHidden);
+            plexTabTrialButton.disabled = !trialButtonAvailable;
+            plexTabTrialButton.dataset.available = trialButtonAvailable ? 'true' : 'false';
+          }
+
+          if (plexTabTrialStatus) {
+            setStatusText(plexTabTrialStatus, trialStatusMessage, trialStatusTone);
+            if (trialStatusMessage) {
+              plexTabTrialStatus.classList.add('small');
+            } else {
+              plexTabTrialStatus.classList.remove('small');
             }
           }
 
@@ -4176,11 +4209,20 @@
               throw new Error(payload.error || 'Unable to start a trial.');
             }
             if (trialStatus) {
-              setStatusText(
-                trialStatus,
-                'Trial activated! Refreshing your dashboard…',
-                'success'
-              );
+              // Check if there was an invite error
+              if (payload.inviteError) {
+                setStatusText(
+                  trialStatus,
+                  `Trial activated, but invite failed: ${payload.inviteError}`,
+                  'warning'
+                );
+              } else {
+                setStatusText(
+                  trialStatus,
+                  'Trial activated! Check your email for the Plex invite.',
+                  'success'
+                );
+              }
               trialStatus.classList.add('small');
             }
             renderDashboard(payload);
@@ -4193,6 +4235,71 @@
             trialButton.dataset.available = 'true';
           } finally {
             trialButton.textContent = defaultTrialButtonLabel;
+          }
+        });
+      }
+
+      // Add handler for Plex tab trial button (same as Account tab trial button)
+      if (plexTabTrialButton) {
+        const defaultPlexTabTrialButtonLabel = plexTabTrialButton.textContent || 'Start 7-day trial';
+        plexTabTrialButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (plexTabTrialButton.disabled || plexTabTrialButton.dataset.available !== 'true') {
+            return;
+          }
+
+          plexTabTrialButton.disabled = true;
+          plexTabTrialButton.dataset.available = 'false';
+          plexTabTrialButton.textContent = 'Starting trial…';
+
+          if (plexTabTrialStatus) {
+            setStatusText(plexTabTrialStatus, 'Activating your trial…', 'info');
+            plexTabTrialStatus.classList.add('small');
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/trial', {
+              method: 'POST',
+            });
+            let payload;
+            try {
+              payload = await response.json();
+            } catch (err) {
+              payload = {};
+            }
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to start a trial.');
+            }
+            if (plexTabTrialStatus) {
+              // Check if there was an invite error
+              if (payload.inviteError) {
+                setStatusText(
+                  plexTabTrialStatus,
+                  `Trial activated, but invite failed: ${payload.inviteError}`,
+                  'warning'
+                );
+              } else {
+                setStatusText(
+                  plexTabTrialStatus,
+                  'Trial activated! Check your email for the Plex invite.',
+                  'success'
+                );
+              }
+              plexTabTrialStatus.classList.add('small');
+            }
+            renderDashboard(payload);
+            // Switch to Account tab to show trial countdown
+            setActiveDashboardTab('account', { force: true });
+          } catch (err) {
+            if (plexTabTrialStatus) {
+              setStatusText(plexTabTrialStatus, err.message, 'error');
+              plexTabTrialStatus.classList.add('small');
+            }
+            plexTabTrialButton.disabled = false;
+            plexTabTrialButton.dataset.available = 'true';
+          } finally {
+            plexTabTrialButton.textContent = defaultPlexTabTrialButtonLabel;
           }
         });
       }
