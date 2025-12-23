@@ -1699,6 +1699,16 @@ router.post(
           // Create Plex invite
           try {
             const note = 'Auto-generated for trial';
+
+            // Debug logging to see what we're passing
+            logger.info('Trial: About to create Plex invite', {
+              donorId: trialDonor.id,
+              email: trialDonor.email,
+              plexAccountId: trialDonor.plexAccountId,
+              plexEmail: trialDonor.plexEmail,
+              hasPlexAccountId: !!trialDonor.plexAccountId,
+            });
+
             const inviteData = await plexService.createInvite({
               email: trialDonor.email,
               friendlyName: trialDonor.name || undefined,
