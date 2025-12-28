@@ -3106,51 +3106,52 @@ async function createInvite(
     );
   }
 
-  // Plex expects form-encoded data, NOT JSON!
-  const sharedHeaders = buildSharedServerHeaders(plex, {
-    'Content-Type': 'application/x-www-form-urlencoded',
-  });
-
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
 
   let resolvedInvitedId = invitedId === undefined || invitedId === null
     ? ''
     : String(invitedId).trim();
+
   if (!resolvedInvitedId) {
     resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
   }
 
-  // Use Plex Web's private API endpoint (the one that actually works)
-  const serverId = await resolveServerId(plex);
-  const sharedServersUrl = `https://plex.tv/api/v2/shared_servers?X-Plex-Token=${plex.token}`;
+  if (!resolvedInvitedId) {
+    throw new Error('Unable to resolve invitedId for Plex invite creation');
+  }
 
-  // Build form-encoded body with FLAT fields (not nested JSON)
-  const formData = new URLSearchParams();
-  formData.append('machineIdentifier', serverId);
-  formData.append('invitedEmail', normalizedEmail);
+  const allowSync = plex?.allowSync === true || plex?.allowSync === '1';
+  const allowCameraUpload = plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1';
+  const allowChannels = plex?.allowChannels === true || plex?.allowChannels === '1';
 
-  // Add libraries as array format: libraries[0][library_id], libraries[0][allow_sync], etc.
-  finalSectionIds.forEach((libraryId, index) => {
-    formData.append(`libraries[${index}][library_id]`, parseInt(libraryId, 10));
-    formData.append(`libraries[${index}][allow_sync]`, plex?.allowSync === true || plex?.allowSync === '1' ? '1' : '0');
+  const requestPayload = {
+    machineIdentifier,
+    librarySectionIds: finalSectionIds.map((id) => String(id)),
+    invitedId: resolvedInvitedId,
+    settings: {
+      allowSync: allowSync ? '1' : '0',
+      allowCameraUpload: allowCameraUpload ? '1' : '0',
+      allowChannels: allowChannels ? '1' : '0',
+    },
+  };
+
+  if (normalizedFriendlyName) {
+    requestPayload.friendlyName = normalizedFriendlyName;
+  }
+
+  // Use Plex Web's v2 friends endpoint
+  const sharedHeaders = buildSharedServerHeaders(plex, {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
   });
-
-  formData.append('allow_channels', plex?.allowChannels === true || plex?.allowChannels === '1' ? '1' : '0');
-  formData.append('allow_camera_upload', plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1' ? '1' : '0');
-  formData.append('allow_tuners', '0');
-
-  // Log the form data for debugging
-  logger.info('Creating Plex invite - Form Data:', {
-    url: sharedServersUrl,
-    body: formData.toString()
-  });
+  const friendsUrl = `https://plex.tv/api/v2/friends?X-Plex-Token=${plex.token}`;
 
   let response;
   try {
-    response = await fetch(sharedServersUrl, {
+    response = await fetch(friendsUrl, {
       method: 'POST',
       headers: sharedHeaders,
-      body: formData.toString(),
+      body: JSON.stringify(requestPayload),
     });
   } catch (err) {
     throw new Error(`Failed to connect to Plex invite API: ${err.message}`);
@@ -3163,51 +3164,10 @@ async function createInvite(
   }
 
   if (!response.ok) {
-    const bodyText = await response.text().catch(() => '');
+    const bodyText = await extractErrorMessage(response);
     const statusText = response.statusText || 'Error';
-    const suffix = bodyText ? `: ${bodyText}` : '';
-
-    // Log the full error for debugging
-    logger.error('Plex invite creation failed', {
-      status: response.status,
-      statusText,
-      body: bodyText,
-      requestBody: {
-        machineIdentifier: requestBody.machineIdentifier,
-        invitedEmail: requestBody.invitedEmail,
-        libraryCount: requestBody.shared_server.libraries.length,
-      },
-    });
-
-    // Provide helpful error messages for common scenarios
-    if (response.status === 404) {
-      throw new Error(
-        'Unable to create Plex invite. This typically happens when: (1) the user is the server owner, ' +
-        '(2) the email is linked to the server owner account (including email aliases like user+test@gmail.com), ' +
-        'or (3) the server configuration is invalid. ' +
-        'For testing, you must use a completely separate Plex account with a different email. ' +
-        `Technical details: ${response.status} (${statusText})${suffix}`
-      );
-    }
-
-    throw new Error(
-      `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
-    );
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    const details = await extractErrorMessage(response);
-    const suffix = details ? `: ${details}` : '';
-    throw new Error(`Plex rejected the provided token${suffix}`);
-  }
-
-  if (!response.ok) {
-    const details = await extractErrorMessage(response);
-    const statusText = response.statusText || 'Error';
-    const suffix = details ? `: ${details}` : '';
-    throw new Error(
-      `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
-    );
+    const message = bodyText || `${response.status} (${statusText})`;
+    throw new Error(`Plex invite creation failed: ${message}`);
   }
 
   let data = {};

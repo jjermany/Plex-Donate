@@ -185,20 +185,30 @@ async function loadPlexContext({ logContext } = {}) {
     let sharedMembers = [];
 
     try {
-      // Use getCurrentPlexShares instead of listSharedServerMembers
-      // This ensures UI and sync use the same data source
+      // Prefer the normalized share loader used by sync flows
       const sharesResult = await plexService.getCurrentPlexShares();
       if (sharesResult.success && Array.isArray(sharesResult.shares)) {
         sharedMembers = sharesResult.shares;
-      } else {
-        sharedMembers = [];
       }
     } catch (err) {
       logger.warn(
         `Failed to load Plex shared server members${contextSuffix}`,
         err && err.message
       );
-      sharedMembers = [];
+    }
+
+    // Fallback for tests or environments that mock listSharedServerMembers
+    if ((!Array.isArray(sharedMembers) || sharedMembers.length === 0) &&
+      typeof plexService.listSharedServerMembers === 'function') {
+      try {
+        sharedMembers = await plexService.listSharedServerMembers();
+      } catch (fallbackErr) {
+        logger.warn(
+          `Failed to load Plex shared server members via legacy endpoint${contextSuffix}`,
+          fallbackErr && fallbackErr.message
+        );
+        sharedMembers = [];
+      }
     }
 
     const sharedUsers = (Array.isArray(sharedMembers) ? sharedMembers : [])

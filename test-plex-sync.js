@@ -3,22 +3,22 @@ require('dotenv').config();
 const { db } = require('./server/db');
 const plexService = require('./server/services/plex');
 
-console.log('=== Plex Status Sync Test ===\n');
+async function main() {
+  console.log('=== Plex Status Sync Test ===\n');
 
-if (!plexService.isConfigured()) {
-  console.log('❌ Plex is not configured');
-  process.exit(1);
-}
+  if (!plexService.isConfigured()) {
+    console.log('❌ Plex is not configured');
+    return;
+  }
 
-console.log('Step 1: Fetching current Plex shares...\n');
+  console.log('Step 1: Fetching current Plex shares...\n');
 
-(async () => {
   try {
     const plexResult = await plexService.getCurrentPlexShares();
 
     if (!plexResult.success) {
       console.log('❌ Failed to fetch Plex shares:', plexResult.reason);
-      process.exit(1);
+      return;
     }
 
     const currentShares = plexResult.shares;
@@ -100,11 +100,16 @@ console.log('Step 1: Fetching current Plex shares...\n');
     } else {
       console.log('\n✅ No stale records found! Database is in sync with Plex.');
     }
-
   } catch (err) {
     console.log('\n❌ ERROR:', err.message);
     console.log('\nFull error:');
     console.error(err);
-    process.exit(1);
   }
-})();
+}
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
