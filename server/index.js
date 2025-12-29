@@ -6,7 +6,6 @@ const bodyParser = require('body-parser');
 const config = require('./config');
 const adminRouter = require('./routes/admin');
 const webhookRouter = require('./routes/webhook');
-const webhookStripeRouter = require('./routes/webhook-stripe');
 const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
@@ -100,7 +99,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api', apiLimiter);
 
 app.use('/api/paypal/webhook', webhookRouter);
-app.use('/api/stripe/webhook', webhookStripeRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/share', shareRouter);
 app.use('/api/customer', customerRouter);

@@ -26,15 +26,6 @@ const DEFAULT_SETTINGS = {
     subscriptionPrice: 0,
     currency: 'USD',
   },
-  stripe: {
-    secretKey: '',
-    publishableKey: '',
-    webhookSecret: '',
-    productId: '',
-    priceId: '',
-    subscriptionPrice: 0,
-    currency: 'USD',
-  },
   smtp: {
     host: '',
     port: 587,
@@ -209,10 +200,6 @@ function getPaypalSettings() {
   return getGroup('paypal');
 }
 
-function getStripeSettings() {
-  return getGroup('stripe');
-}
-
 function getAppSettings() {
   return getGroup('app');
 }
@@ -233,7 +220,6 @@ module.exports = {
   previewGroup,
   getAppSettings,
   getPaypalSettings,
-  getStripeSettings,
   getSmtpSettings,
   getPlexSettings,
   getAnnouncementSettings,

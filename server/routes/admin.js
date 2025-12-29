@@ -33,7 +33,6 @@ const {
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
-const stripeService = require('../services/stripe');
 const emailService = require('../services/email');
 const plexService = require('../services/plex');
 const logger = require('../utils/logger');
@@ -581,7 +580,7 @@ router.post(
     const group = req.params.group;
     const overrides = req.body || {};
 
-    if (!['paypal', 'stripe', 'smtp', 'plex'].includes(group)) {
+    if (!['paypal', 'smtp', 'plex'].includes(group)) {
       return res.status(404).json({
         error: 'Unknown settings group',
         csrfToken: res.locals.csrfToken,
@@ -600,9 +599,6 @@ router.post(
           environment,
           message: `PayPal credentials verified against the ${environment} environment.`,
         };
-      } else if (group === 'stripe') {
-        const config = settingsStore.previewGroup('stripe', overrides);
-        result = await stripeService.verifyConnection(config);
       } else if (group === 'smtp') {
         const config = settingsStore.previewGroup('smtp', overrides);
         result = await emailService.verifyConnection(config);
