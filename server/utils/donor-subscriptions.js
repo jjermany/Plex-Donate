@@ -1,10 +1,7 @@
 const paypalService = require('../services/paypal');
-const stripeService = require('../services/stripe');
 const {
   updateDonorStatus,
-  updateDonorStatusByStripeSubscription,
   setDonorAccessExpirationBySubscription,
-  setDonorAccessExpirationByStripeSubscription,
 } = require('../db');
 const logger = require('./logger');
 const { mapPaypalSubscriptionStatus } = require('./paypal');
@@ -33,9 +30,8 @@ function needsSubscriptionRefresh(donor, subscriptionLinked) {
   }
 
   const hasPayPalSubscription = normalizeSubscriptionId(donor.subscriptionId || '');
-  const hasStripeSubscription = normalizeSubscriptionId(donor.stripeSubscriptionId || '');
 
-  if (!hasPayPalSubscription && !hasStripeSubscription) {
+  if (!hasPayPalSubscription) {
     return false;
   }
 
@@ -97,32 +93,12 @@ function extractPaypalErrorMessage(err) {
   return defaultMessage;
 }
 
-function extractStripeErrorMessage(err) {
-  const defaultMessage = 'Unable to verify Stripe subscription. Try again shortly.';
-  if (!err) {
-    return defaultMessage;
-  }
-
-  if (err.message) {
-    return String(err.message);
-  }
-
-  return defaultMessage;
-}
-
 async function refreshDonorSubscription(donor, { onError } = {}) {
   if (!donor) {
     return { donor, error: '' };
   }
 
-  const paymentProvider = donor.paymentProvider || 'paypal';
-
-  // Refresh based on payment provider
-  if (paymentProvider === 'stripe') {
-    return await refreshStripeSubscription(donor, { onError });
-  } else {
-    return await refreshPayPalSubscription(donor, { onError });
-  }
+  return await refreshPayPalSubscription(donor, { onError });
 }
 
 async function refreshPayPalSubscription(donor, { onError } = {}) {
@@ -181,75 +157,6 @@ async function refreshPayPalSubscription(donor, { onError } = {}) {
     }
 
     const errorMessage = extractPaypalErrorMessage(err);
-    return { donor, error: errorMessage || '' };
-  }
-}
-
-async function refreshStripeSubscription(donor, { onError } = {}) {
-  const subscriptionId = normalizeSubscriptionId(donor.stripeSubscriptionId || '');
-  if (!subscriptionId) {
-    return { donor, error: '' };
-  }
-
-  try {
-    const subscription = await stripeService.getSubscription(subscriptionId);
-    const subscriptionStatus = subscription.status || '';
-    const normalizedStatus = stripeService.mapStripeSubscriptionStatus(subscriptionStatus);
-
-    // Get last payment date from latest invoice
-    let lastPaymentAt = null;
-    if (subscription.latest_invoice) {
-      const invoice = typeof subscription.latest_invoice === 'object'
-        ? subscription.latest_invoice
-        : await stripeService.getInvoice(subscription.latest_invoice);
-
-      if (invoice && invoice.status_transitions && invoice.status_transitions.paid_at) {
-        lastPaymentAt = new Date(invoice.status_transitions.paid_at * 1000).toISOString();
-      }
-    }
-
-    if (!normalizedStatus && !lastPaymentAt) {
-      return { donor, error: '' };
-    }
-
-    const statusToApply = normalizedStatus || donor.status || 'pending';
-    const statusUpdated = updateDonorStatusByStripeSubscription(
-      subscriptionId,
-      statusToApply,
-      lastPaymentAt || donor.lastPaymentAt || null
-    );
-
-    let updatedDonor = statusUpdated || donor;
-
-    if (normalizedStatus === 'active') {
-      const donorWithAccess = setDonorAccessExpirationByStripeSubscription(
-        subscriptionId,
-        null
-      );
-      if (donorWithAccess) {
-        updatedDonor = donorWithAccess;
-      }
-    }
-
-    return { donor: updatedDonor, error: '' };
-  } catch (err) {
-    if (typeof onError === 'function') {
-      try {
-        onError(err);
-      } catch (handlerError) {
-        logger.warn('Stripe refresh error handler failed', {
-          error: handlerError && handlerError.message,
-        });
-      }
-    } else {
-      logger.warn('Failed to refresh Stripe subscription', {
-        donorId: donor.id,
-        stripeSubscriptionId: donor.stripeSubscriptionId,
-        error: err && err.message,
-      });
-    }
-
-    const errorMessage = extractStripeErrorMessage(err);
     return { donor, error: errorMessage || '' };
   }
 }

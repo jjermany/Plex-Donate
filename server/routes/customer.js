@@ -30,7 +30,6 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
-const stripeService = require('../services/stripe');
 const emailService = require('../services/email');
 const logger = require('../utils/logger');
 const { verifyPassword } = require('../utils/passwords');
@@ -372,7 +371,6 @@ function buildDashboardResponse({
   paypalError = '',
 }) {
   const paypal = settingsStore.getPaypalSettings();
-  const stripe = settingsStore.getStripeSettings();
   let appSettings = {};
   try {
     appSettings = settingsStore.getAppSettings();
@@ -401,9 +399,6 @@ function buildDashboardResponse({
         apiBase: paypal.apiBase,
       })
     : '';
-  const stripeCheckoutAvailable = Boolean(
-    stripe.secretKey && stripe.publishableKey && stripe.priceId
-  );
   return {
     authenticated: Boolean(donor),
     donor: donor
@@ -414,8 +409,6 @@ function buildDashboardResponse({
           paymentProvider: donor.paymentProvider || 'paypal',
           status: donor.status,
           subscriptionId: donor.subscriptionId,
-          stripeCustomerId: donor.stripeCustomerId,
-          stripeSubscriptionId: donor.stripeSubscriptionId,
           lastPaymentAt: donor.lastPaymentAt,
           accessExpiresAt: donor.accessExpiresAt || null,
           hasPassword: Boolean(donor.hasPassword),
@@ -437,12 +430,6 @@ function buildDashboardResponse({
       subscriptionUrl,
       subscriptionCheckoutAvailable: checkoutAvailable,
       refreshError: paypalError ? String(paypalError) : '',
-    },
-    stripe: {
-      publishableKey: stripe.publishableKey || '',
-      subscriptionPrice: stripe.subscriptionPrice || 0,
-      currency: stripe.currency || '',
-      subscriptionCheckoutAvailable: stripeCheckoutAvailable,
     },
     plexLink: pendingPlexLink
       ? {
@@ -899,106 +886,6 @@ router.post(
       });
       return res.status(502).json({
         error: 'Failed to start PayPal subscription. Try again shortly.',
-      });
-    }
-  })
-);
-
-router.post(
-  '/stripe-checkout',
-  requireCustomer,
-  asyncHandler(async (req, res) => {
-    const stripeSettings = settingsStore.getStripeSettings();
-    const appSettings = settingsStore.getAppSettings();
-
-    if (!stripeSettings.secretKey || !stripeSettings.priceId) {
-      return res
-        .status(503)
-        .json({ error: 'Stripe checkout is not available right now.' });
-    }
-
-    const donor = req.customer.donor;
-    const baseUrl = appSettings.publicBaseUrl || `${req.protocol}://${req.get('host')}`;
-
-    const successUrl = `${baseUrl}/dashboard?stripe_success=true`;
-    const cancelUrl = `${baseUrl}/dashboard?stripe_canceled=true`;
-
-    try {
-      const checkout = await stripeService.createCheckoutSession({
-        priceId: stripeSettings.priceId,
-        customerEmail: donor.email,
-        customerId: donor.stripeCustomerId || null,
-        successUrl: successUrl,
-        cancelUrl: cancelUrl,
-      }, stripeSettings);
-
-      logEvent('stripe.checkout.created', {
-        donorId: donor.id,
-        sessionId: checkout.sessionId,
-        context: 'customer-dashboard',
-      });
-
-      return res.json({
-        checkoutUrl: checkout.checkoutUrl,
-        sessionId: checkout.sessionId,
-      });
-    } catch (err) {
-      logger.error('Failed to create Stripe checkout for donor', {
-        donorId: donor.id,
-        error: err && err.message,
-      });
-      return res.status(502).json({
-        error: 'Failed to start Stripe checkout. Try again shortly.',
-      });
-    }
-  })
-);
-
-router.post(
-  '/stripe-billing-portal',
-  requireCustomer,
-  asyncHandler(async (req, res) => {
-    const stripeSettings = settingsStore.getStripeSettings();
-    const appSettings = settingsStore.getAppSettings();
-
-    if (!stripeSettings.secretKey) {
-      return res
-        .status(503)
-        .json({ error: 'Stripe billing portal is not available right now.' });
-    }
-
-    const donor = req.customer.donor;
-
-    if (!donor.stripeCustomerId) {
-      return res.status(400).json({
-        error: 'No Stripe customer found. You can only access the billing portal if you subscribed via Stripe.',
-      });
-    }
-
-    const baseUrl = appSettings.publicBaseUrl || `${req.protocol}://${req.get('host')}`;
-    const returnUrl = `${baseUrl}/dashboard`;
-
-    try {
-      const session = await stripeService.createBillingPortalSession({
-        customerId: donor.stripeCustomerId,
-        returnUrl: returnUrl,
-      }, stripeSettings);
-
-      logEvent('stripe.billing_portal.created', {
-        donorId: donor.id,
-        sessionId: session.id,
-      });
-
-      return res.json({
-        portalUrl: session.url,
-      });
-    } catch (err) {
-      logger.error('Failed to create Stripe billing portal for donor', {
-        donorId: donor.id,
-        error: err && err.message,
-      });
-      return res.status(502).json({
-        error: 'Failed to access billing portal. Try again shortly.',
       });
     }
   })
