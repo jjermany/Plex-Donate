@@ -120,6 +120,16 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  donor_id INTEGER NOT NULL,
+  token TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at TEXT,
+  expires_at TEXT NOT NULL,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS support_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   donor_id INTEGER NOT NULL,
@@ -552,6 +562,8 @@ function ensurePerformanceIndexes() {
     'CREATE INDEX IF NOT EXISTS invites_donor_revoked_idx ON invites(donor_id, revoked_at)',
     'CREATE INDEX IF NOT EXISTS email_verification_tokens_donor_idx ON email_verification_tokens(donor_id)',
     'CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON email_verification_tokens(token)',
+    'CREATE INDEX IF NOT EXISTS password_reset_tokens_donor_idx ON password_reset_tokens(donor_id)',
+    'CREATE INDEX IF NOT EXISTS password_reset_tokens_token_idx ON password_reset_tokens(token)',
     'CREATE INDEX IF NOT EXISTS payments_donor_idx ON payments(donor_id)',
     'CREATE INDEX IF NOT EXISTS events_type_idx ON events(event_type)',
     'CREATE INDEX IF NOT EXISTS events_created_idx ON events(created_at)',
@@ -978,6 +990,24 @@ const statements = {
   deleteVerificationTokenById: db.prepare(
     'DELETE FROM email_verification_tokens WHERE id = ?'
   ),
+  deletePasswordResetTokensForDonor: db.prepare(
+    'DELETE FROM password_reset_tokens WHERE donor_id = ?'
+  ),
+  insertPasswordResetToken: db.prepare(
+    `INSERT INTO password_reset_tokens (donor_id, token, expires_at)
+     VALUES (@donorId, @token, @expiresAt)`
+  ),
+  getPasswordResetTokenByToken: db.prepare(
+    'SELECT * FROM password_reset_tokens WHERE token = ?'
+  ),
+  markPasswordResetTokenUsed: db.prepare(
+    `UPDATE password_reset_tokens
+     SET used_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  deletePasswordResetTokenById: db.prepare(
+    'DELETE FROM password_reset_tokens WHERE id = ?'
+  ),
   insertSupportRequest: db.prepare(
     `INSERT INTO support_requests (donor_id, donor_display_name, subject)
      VALUES (@donorId, @donorDisplayName, @subject)`
@@ -1149,6 +1179,18 @@ function mapSupportMessage(row) {
 }
 
 function mapEmailVerificationToken(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    donorId: row.donor_id,
+    token: row.token,
+    createdAt: row.created_at,
+    usedAt: row.used_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+function mapPasswordResetToken(row) {
   if (!row) return null;
   return {
     id: row.id,
@@ -1936,6 +1978,64 @@ function resetDonorEmailVerification(donorId) {
   return mapDonor(statements.getDonorById.get(donorId));
 }
 
+function clearDonorPasswordResetTokens(donorId) {
+  if (!donorId) {
+    return;
+  }
+  statements.deletePasswordResetTokensForDonor.run(donorId);
+}
+
+function createDonorPasswordResetToken(
+  donorId,
+  { expiresInHours = 2 } = {}
+) {
+  if (!donorId) {
+    throw new Error('donorId is required to create password reset token');
+  }
+
+  const hours = Number.isFinite(expiresInHours) && expiresInHours > 0
+    ? expiresInHours
+    : 2;
+  const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+  const expiresAtIso = Number.isNaN(expiresAt.getTime())
+    ? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+    : expiresAt.toISOString();
+
+  clearDonorPasswordResetTokens(donorId);
+
+  const token = nanoid(48);
+  statements.insertPasswordResetToken.run({
+    donorId,
+    token,
+    expiresAt: expiresAtIso,
+  });
+
+  return mapPasswordResetToken(statements.getPasswordResetTokenByToken.get(token));
+}
+
+function getPasswordResetToken(token) {
+  if (!token) {
+    return null;
+  }
+  return mapPasswordResetToken(statements.getPasswordResetTokenByToken.get(token));
+}
+
+function markPasswordResetTokenUsed(tokenId) {
+  if (!tokenId) {
+    return false;
+  }
+  const result = statements.markPasswordResetTokenUsed.run({ id: tokenId });
+  return result.changes > 0;
+}
+
+function deletePasswordResetTokenById(tokenId) {
+  if (!tokenId) {
+    return false;
+  }
+  const result = statements.deletePasswordResetTokenById.run(tokenId);
+  return result.changes > 0;
+}
+
 function createDonor({
   email,
   name,
@@ -2308,6 +2408,11 @@ module.exports = {
   markDonorEmailVerified,
   resetDonorEmailVerification,
   markEmailVerificationTokenUsed,
+  createDonorPasswordResetToken,
+  getPasswordResetToken,
+  markPasswordResetTokenUsed,
+  clearDonorPasswordResetTokens,
+  deletePasswordResetTokenById,
   clearDonorEmailVerificationTokens,
   deleteEmailVerificationTokenById,
   listDonorsWithDetails,

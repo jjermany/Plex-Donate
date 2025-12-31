@@ -30,8 +30,9 @@ const {
   getDonorById,
   markDonorEmailVerified,
   createDonorEmailVerificationToken,
+  createDonorPasswordResetToken,
 } = require('../db');
-const { hashPasswordSync } = require('../utils/passwords');
+const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
 const { ensureSessionToken } = require('../utils/session-tokens');
 const settingsStore = require('../state/settings');
@@ -53,6 +54,8 @@ function resetDatabase() {
     DELETE FROM settings;
     DELETE FROM support_messages;
     DELETE FROM support_requests;
+    DELETE FROM email_verification_tokens;
+    DELETE FROM password_reset_tokens;
   `);
 }
 
@@ -272,6 +275,99 @@ test(
     assert.equal(refreshed.lastPaymentAt, '2024-01-15T12:34:56Z');
   }
 );
+
+test('password reset request sends email for verified donor', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.test',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const donor = createDonor({
+    email: 'reset-request@example.com',
+    name: 'Reset Request',
+    status: 'active',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync('ExistingPass123!'));
+  markDonorEmailVerified(donor.id);
+
+  await withTestServer(async (client) => {
+    const response = await client.post('/customer/password/reset/request', {
+      body: { email: donor.email },
+    });
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.success, true);
+    assert.match(payload.message, /reset link/i);
+  });
+
+  const tokenRow = db
+    .prepare('SELECT COUNT(*) AS count FROM password_reset_tokens WHERE donor_id = ?')
+    .get(donor.id);
+  assert.equal(tokenRow.count, 1);
+  assert.equal(sentMessages.length, 1);
+  assert.match(sentMessages[0].subject || '', /reset/i);
+  assert.match(sentMessages[0].html || '', /reset=/i);
+});
+
+test('password reset updates password and signs donor in', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const donor = createDonor({
+    email: 'reset-complete@example.com',
+    name: 'Reset Complete',
+    status: 'active',
+  });
+  const originalHash = hashPasswordSync('OldPass123!');
+  updateDonorPassword(donor.id, originalHash);
+  markDonorEmailVerified(donor.id);
+  const tokenRecord = createDonorPasswordResetToken(donor.id, {
+    expiresInHours: 4,
+  });
+
+  await withTestServer(async (client) => {
+    const response = await client.post('/customer/password/reset', {
+      body: {
+        token: tokenRecord.token,
+        password: 'BrandNew123!',
+        confirmPassword: 'BrandNew123!',
+      },
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.authenticated, true);
+    assert.ok(payload.donor);
+    assert.equal(payload.donor.id, donor.id);
+  });
+
+  const updatedRow = db
+    .prepare('SELECT password_hash FROM donors WHERE id = ?')
+    .get(donor.id);
+  assert.ok(updatedRow.password_hash && updatedRow.password_hash.startsWith('pbkdf2$'));
+  assert.notEqual(updatedRow.password_hash, originalHash);
+  assert.ok(verifyPasswordSync('BrandNew123!', updatedRow.password_hash));
+  const remainingTokens = db
+    .prepare('SELECT COUNT(*) AS count FROM password_reset_tokens WHERE donor_id = ?')
+    .get(donor.id);
+  assert.equal(remainingTokens.count, 0);
+});
 
 test('email verification is required before login', async (t) => {
   resetDatabase();

@@ -10,6 +10,7 @@ const {
   createOrUpdateShareLink,
   logEvent,
   updateDonorContact,
+  updateDonorPassword,
   getDonorAuthByEmail,
   updateDonorSubscriptionId,
   updateDonorPlexIdentity,
@@ -22,6 +23,11 @@ const {
   markDonorEmailVerified,
   markEmailVerificationTokenUsed,
   clearDonorEmailVerificationTokens,
+  createDonorPasswordResetToken,
+  getPasswordResetToken,
+  markPasswordResetTokenUsed,
+  clearDonorPasswordResetTokens,
+  deletePasswordResetTokenById,
   createSupportRequest,
   addSupportMessageToRequest,
   listSupportRequests,
@@ -32,7 +38,12 @@ const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
 const logger = require('../utils/logger');
-const { verifyPassword } = require('../utils/passwords');
+const {
+  hashPassword,
+  verifyPassword,
+  isPasswordStrong,
+  MIN_PASSWORD_LENGTH,
+} = require('../utils/passwords');
 const {
   getSubscriptionCheckoutUrl,
   getPaypalEnvironment,
@@ -66,6 +77,8 @@ const ANNOUNCEMENT_TONES = new Set([
   'danger',
   'neutral',
 ]);
+const PASSWORD_RESET_SUCCESS_MESSAGE =
+  'If we find an account for that email, we will send a reset link shortly.';
 
 function resolveSupportDisplayName(donor, preferred) {
   const trimmedPreferred = typeof preferred === 'string' ? preferred.trim() : '';
@@ -670,6 +683,234 @@ router.post(
         return res
           .status(500)
           .json({ error: 'Failed to sign in. Please try again shortly.' });
+      }
+    });
+  })
+);
+
+router.post(
+  '/password/reset/request',
+  emailVerificationLimiter,
+  asyncHandler(async (req, res) => {
+    const email = normalizeEmail(req.body && req.body.email);
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        error: 'Enter a valid email to reset your password.',
+      });
+    }
+
+    const authRecord = getDonorAuthByEmail(email);
+    const genericResponse = {
+      success: true,
+      message: PASSWORD_RESET_SUCCESS_MESSAGE,
+    };
+
+    if (!authRecord || !authRecord.donor || !authRecord.passwordHash) {
+      return res.json(genericResponse);
+    }
+
+    if (!authRecord.donor.emailVerified) {
+      return res.json(genericResponse);
+    }
+
+    let tokenRecord;
+    try {
+      tokenRecord = createDonorPasswordResetToken(authRecord.donor.id, {
+        expiresInHours: 2,
+      });
+    } catch (err) {
+      logger.error('Failed to create password reset token', {
+        donorId: authRecord.donor.id,
+        error: err && err.message,
+      });
+      return res.status(500).json({
+        error: 'Unable to start password reset. Try again shortly.',
+      });
+    }
+
+    const origin = resolvePublicBaseUrl(req);
+    const resetUrl = `${origin}/dashboard?reset=${encodeURIComponent(tokenRecord.token)}`;
+    const loginUrl = `${origin}/dashboard`;
+
+    try {
+      await emailService.sendPasswordResetEmail({
+        to: authRecord.donor.email,
+        name: authRecord.donor.name,
+        resetUrl,
+        loginUrl,
+      });
+      logEvent('customer.password_reset.requested', {
+        donorId: authRecord.donor.id,
+      });
+    } catch (err) {
+      logger.error('Failed to send password reset email', {
+        donorId: authRecord.donor.id,
+        error: err && err.message,
+      });
+      return res.status(500).json({
+        error: 'Unable to send password reset email. Try again shortly.',
+      });
+    }
+
+    return res.json(genericResponse);
+  })
+);
+
+router.post(
+  '/password/reset',
+  asyncHandler(async (req, res) => {
+    const token =
+      req.body && typeof req.body.token === 'string'
+        ? req.body.token.trim()
+        : '';
+    const password =
+      req.body && typeof req.body.password === 'string' ? req.body.password : '';
+    const confirmPassword =
+      req.body && typeof req.body.confirmPassword === 'string'
+        ? req.body.confirmPassword
+        : '';
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'A password reset token is required to continue.',
+      });
+    }
+
+    if (!password || !confirmPassword) {
+      return res.status(400).json({
+        error: 'Enter and confirm your new password to continue.',
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        error: 'New password and confirmation must match.',
+      });
+    }
+
+    if (!isPasswordStrong(password)) {
+      return res.status(400).json({
+        error: `Choose a password with at least ${MIN_PASSWORD_LENGTH} characters.`,
+      });
+    }
+
+    const tokenRecord = getPasswordResetToken(token);
+    if (!tokenRecord) {
+      return res.status(400).json({
+        error: 'This reset link is invalid or has expired.',
+      });
+    }
+
+    if (tokenRecord.usedAt) {
+      return res.status(410).json({
+        error: 'This reset link has already been used.',
+      });
+    }
+
+    if (tokenRecord.expiresAt) {
+      const expiresAtMs = Date.parse(tokenRecord.expiresAt);
+      if (Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now()) {
+        deletePasswordResetTokenById(tokenRecord.id);
+        return res.status(410).json({
+          error: 'This reset link has expired. Request a new one to continue.',
+        });
+      }
+    }
+
+    const donor = getDonorById(tokenRecord.donorId);
+    if (!donor) {
+      deletePasswordResetTokenById(tokenRecord.id);
+      return res.status(404).json({
+        error: 'Account not found for this reset link.',
+      });
+    }
+
+    const existingPlexLink =
+      req.session && req.session.plexLink && req.session.plexLink.donorId === donor.id
+        ? { ...req.session.plexLink }
+        : null;
+
+    let hashedPassword = '';
+    try {
+      hashedPassword = await hashPassword(password);
+    } catch (err) {
+      logger.error('Failed to hash reset password', {
+        donorId: donor.id,
+        error: err && err.message,
+      });
+      return res
+        .status(500)
+        .json({ error: 'Failed to update your password. Please try again shortly.' });
+    }
+
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      logger.error('Session is not available for password reset regeneration');
+      return res
+        .status(500)
+        .json({ error: 'Failed to update your password. Please try again shortly.' });
+    }
+
+    return req.session.regenerate(async (err) => {
+      if (err) {
+        logger.error('Failed to regenerate session for password reset', err);
+        return res.status(500).json({
+          error: 'Failed to update your password. Please try again shortly.',
+        });
+      }
+
+      try {
+        if (existingPlexLink) {
+          req.session.plexLink = existingPlexLink;
+        }
+
+        let updatedDonor = updateDonorPassword(donor.id, hashedPassword);
+        markPasswordResetTokenUsed(tokenRecord.id);
+        clearDonorPasswordResetTokens(updatedDonor.id);
+
+        let subscriptionRefreshError = '';
+        if (needsSubscriptionRefresh(updatedDonor, false)) {
+          const donorForRefresh = updatedDonor;
+          const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+            donorForRefresh,
+            {
+              onError: (refreshErr) =>
+                logger.warn('Failed to refresh PayPal subscription during reset', {
+                  donorId: donorForRefresh.id,
+                  subscriptionId: donorForRefresh.subscriptionId,
+                  error: refreshErr && refreshErr.message,
+                }),
+            }
+          );
+          if (refreshedDonor) {
+            updatedDonor = refreshedDonor;
+          }
+          subscriptionRefreshError = error || '';
+        }
+
+        req.session.customerId = updatedDonor.id;
+        logger.info('Customer reset password and signed in', { donorId: updatedDonor.id });
+        logEvent('customer.password_reset.completed', { donorId: updatedDonor.id });
+
+        res.locals.sessionToken = ensureSessionToken(req);
+
+        const { activeInvite: invite, inviteLimitReached, nextInviteAvailableAt } =
+          getInviteState(updatedDonor.id);
+        const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
+        return res.json(
+          buildDashboardResponse({
+            donor: updatedDonor,
+            invite,
+            pendingPlexLink,
+            inviteLimitReached,
+            nextInviteAvailableAt,
+            paypalError: subscriptionRefreshError,
+          })
+        );
+      } catch (handlerErr) {
+        logger.error('Failed to finalize password reset', handlerErr);
+        return res.status(500).json({
+          error: 'Failed to update your password. Please try again shortly.',
+        });
       }
     });
   })

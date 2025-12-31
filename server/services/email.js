@@ -500,6 +500,66 @@ async function sendAccountWelcomeEmail(
   });
 }
 
+async function sendPasswordResetEmail(
+  { to, name, resetUrl, loginUrl },
+  overrideSettings
+) {
+  if (!resetUrl) {
+    throw new Error('resetUrl is required to send password reset email');
+  }
+
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const recipientName = name || 'there';
+  const subject = 'Reset your Plex Donate password';
+  const dashboardUrl = resolveDashboardUrl({
+    loginUrl,
+    fallbackUrls: [resetUrl],
+  });
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+  const safeResetUrl = escapeHtml(resetUrl);
+
+  const textLines = [
+    `Hi ${recipientName},`,
+    '',
+    'We received a request to reset your Plex Donate dashboard password.',
+    'Use the link below to set a new password:',
+    '',
+    resetUrl,
+    '',
+    'If you did not request this, you can safely ignore this email.',
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const text = textLines.join('\n');
+
+  const html = `
+  <p>Hi ${escapeHtml(recipientName)},</p>
+  <p>We received a request to reset your Plex Donate dashboard password. Use the button below to choose a new password.</p>
+  <p style="text-align:center;margin:24px 0;">
+    <a href="${safeResetUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Reset password</a>
+  </p>
+  <p style="font-size:14px;color:#4b5563;">If you did not request this, you can safely ignore this email.</p>
+  ${dashboardHtml}
+  `;
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function sendCancellationEmail(
   { to, name, subscriptionId, paidThrough },
   overrideSettings
@@ -744,6 +804,7 @@ async function verifyConnection(overrideSettings) {
 module.exports = {
   sendInviteEmail,
   sendAccountWelcomeEmail,
+  sendPasswordResetEmail,
   sendCancellationEmail,
   sendAnnouncementEmail,
   getSmtpConfig,
