@@ -2509,6 +2509,18 @@
             type="button"
             class="dashboard-legend-button"
             role="tab"
+            id="dashboard-tab-notifications"
+            data-dashboard-target="notifications"
+            aria-controls="dashboard-view-notifications"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Notifications
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
             id="dashboard-tab-donors"
             data-dashboard-target="donors"
             aria-controls="dashboard-view-donors"
@@ -2700,6 +2712,58 @@
                     Send announcement email
                   </button>
                   <button type="submit" class="secondary">Save announcement</button>
+                </div>
+              </form>
+            </section>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-notifications"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-notifications"
+            data-dashboard-view="notifications"
+            hidden
+          >
+            <section class="panel" id="notification-settings-panel">
+              <h2 style="margin-top:0;">Admin notifications</h2>
+              <p class="muted-text" style="margin:0 0 16px;">
+                Choose which events should trigger an email to the admin team.
+              </p>
+              <form class="settings-form" data-group="notifications">
+                <label>
+                  Notification email
+                  <input
+                    name="adminEmail"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="alerts@example.com"
+                  />
+                  <span class="help">Defaults to your SMTP support email if left blank.</span>
+                </label>
+                <div class="field-grid">
+                  <label class="checkbox-row">
+                    <input name="onDonorCreated" type="checkbox" />
+                    New donor account created
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onTrialStarted" type="checkbox" />
+                    Trial started for a donor
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onSubscriptionStarted" type="checkbox" />
+                    Subscription activated
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onPlexRevoked" type="checkbox" />
+                    Plex access revoked
+                  </label>
+                </div>
+                <p class="muted-text subtle-text" style="margin:8px 0 0;">
+                  Notifications use the Plex Donate email theme and include helpful context about the event.
+                </p>
+                <p class="form-status" data-status-for="notifications"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save notification settings</button>
                 </div>
               </form>
             </section>
@@ -3527,6 +3591,7 @@
       const DASHBOARD_VIEW_DEFAULT = 'account';
       const DASHBOARD_VIEW_ORDER = [
         'account',
+        'notifications',
         'donors',
         'support',
         'integration',

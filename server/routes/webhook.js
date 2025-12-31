@@ -18,6 +18,7 @@ const {
 } = require('../db');
 const plexService = require('../services/plex');
 const emailService = require('../services/email');
+const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -361,6 +362,15 @@ async function revokeDonorAccess(donor) {
           email: donor.email,
           plexAccountId: donor.plexAccountId,
         });
+        adminNotifications
+          .notifyPlexRevoked({
+            donor,
+            reason: 'subscription_cancelled',
+            context: 'paypal-webhook',
+          })
+          .catch((err) =>
+            logger.warn('Failed to send admin Plex revocation notification', err.message)
+          );
       }
     } catch (err) {
       logger.warn('Failed to revoke Plex access automatically', err.message);
@@ -420,6 +430,7 @@ async function handlePaymentEvent(event) {
   }
 
   let donor = getDonorBySubscriptionId(subscriptionId);
+  const donorWasMissing = !donor;
   if (!donor) {
     try {
       const subscription = await paypalService.getSubscription(subscriptionId);
@@ -445,11 +456,24 @@ async function handlePaymentEvent(event) {
     return;
   }
 
+  if (donorWasMissing) {
+    adminNotifications
+      .notifyDonorCreated({
+        donor,
+        source: 'PayPal payment webhook',
+      })
+      .catch((err) =>
+        logger.warn('Failed to send admin donor created notification', err.message)
+      );
+  }
+
   const amount =
     resource.amount && (resource.amount.total || resource.amount.value);
   const currency =
     resource.amount && (resource.amount.currency || resource.amount.currency_code);
   const paidAt = resource.create_time || new Date().toISOString();
+
+  const previousStatus = (donor.status || '').toLowerCase();
 
   recordPayment({
     donorId: donor.id,
@@ -471,6 +495,8 @@ async function handlePaymentEvent(event) {
     donor = clearedDonor;
   }
 
+  const becameActive = previousStatus !== 'active' && donor.status === 'active';
+
   // Clear pre-existing access flag on first successful payment
   // User is now managed by plex-donate subscription system
   if (donor.hadPreexistingAccess) {
@@ -490,6 +516,21 @@ async function handlePaymentEvent(event) {
     amount,
     currency,
   });
+
+  if (becameActive) {
+    adminNotifications
+      .notifySubscriptionStarted({
+        donor,
+        subscriptionId,
+        amount,
+        currency,
+        paidAt,
+        source: 'PayPal payment webhook',
+      })
+      .catch((err) =>
+        logger.warn('Failed to send admin subscription notification', err.message)
+      );
+  }
 
   try {
     await ensureInviteForActiveDonor(donor, {

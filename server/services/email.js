@@ -847,6 +847,119 @@ async function sendSupportResponseNotification(
   });
 }
 
+function formatAdminFactsHtml(facts) {
+  if (!Array.isArray(facts) || facts.length === 0) {
+    return '';
+  }
+
+  const items = facts
+    .filter((fact) => fact && fact.label)
+    .map((fact) => {
+      const label = escapeHtml(fact.label);
+      const value = escapeHtml(
+        fact.value == null ? 'Not provided' : String(fact.value)
+      );
+      return `
+        <li style="margin-bottom:6px;font-size:15px;color:#0f172a;">
+          <strong style="color:#111827;">${label}:</strong>
+          <span style="color:#111827;">${value}</span>
+        </li>
+      `;
+    })
+    .join('');
+
+  return `
+    <ul style="list-style:none;padding:0;margin:12px 0 0;">${items}</ul>
+  `;
+}
+
+function formatAdminFactsText(facts) {
+  if (!Array.isArray(facts) || facts.length === 0) {
+    return '';
+  }
+
+  return facts
+    .filter((fact) => fact && fact.label)
+    .map((fact) => {
+      const label = fact.label || '';
+      const value = fact.value == null ? 'Not provided' : String(fact.value);
+      return `- ${label}: ${value}`;
+    })
+    .join('\n');
+}
+
+function formatAdminNotificationEmail({
+  heading,
+  intro,
+  facts = [],
+  dashboardUrl,
+}) {
+  const safeHeading = escapeHtml(heading || 'Admin notification');
+  const safeIntro = escapeHtml(intro || 'A new event occurred in Plex Donate.');
+  const factsHtml = formatAdminFactsHtml(facts);
+  const factsText = formatAdminFactsText(facts);
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardText = buildDashboardAccessText(dashboardUrl);
+
+  const textLines = [safeHeading, '', intro || 'A new event occurred.'];
+  if (factsText) {
+    textLines.push('');
+    textLines.push(factsText);
+  }
+  if (dashboardText) {
+    textLines.push('');
+    textLines.push(dashboardText);
+  }
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;padding:20px;">
+    <div style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 18px 50px -24px rgba(79,70,229,0.45);">
+      <div style="background:linear-gradient(135deg,#111827 0%,#0b1224 100%);color:#e5e7eb;padding:20px 24px;">
+        <p style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:#a5b4fc;">Plex Donate</p>
+        <h2 style="margin:0;font-size:22px;line-height:1.3;color:#ffffff;">${safeHeading}</h2>
+      </div>
+      <div style="padding:22px 24px;color:#0f172a;">
+        <p style="margin:0 0 12px;font-size:16px;">${safeIntro}</p>
+        ${factsHtml}
+        ${dashboardHtml}
+        <p style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
+      </div>
+    </div>
+  </div>
+  `;
+
+  return { html, text: textLines.join('\n') };
+}
+
+async function sendAdminNotificationEmail(
+  { to, subject, heading, intro, facts, dashboardUrl },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const recipient = to || smtp.supportNotificationEmail || smtp.from;
+  if (!recipient) {
+    throw new Error('Admin recipient email is required to send notification');
+  }
+  const title = subject || heading || 'Admin notification';
+  const { html, text } = formatAdminNotificationEmail({
+    heading: heading || title,
+    intro,
+    facts,
+    dashboardUrl,
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to: recipient,
+    subject: title,
+    text,
+    html,
+  });
+}
+
 async function verifyConnection(overrideSettings) {
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
@@ -868,4 +981,5 @@ module.exports = {
   sendSupportRequestNotification,
   sendSupportResponseNotification,
   resolveDashboardUrl,
+  sendAdminNotificationEmail,
 };
