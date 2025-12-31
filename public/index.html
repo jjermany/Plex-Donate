@@ -2497,13 +2497,37 @@
             type="button"
             class="dashboard-legend-button"
             role="tab"
-            id="dashboard-tab-account"
-            data-dashboard-target="account"
-            aria-controls="dashboard-view-account"
+            id="dashboard-tab-donors"
+            data-dashboard-target="donors"
+            aria-controls="dashboard-view-donors"
             aria-selected="true"
             tabindex="0"
           >
+            Donors
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-account"
+            data-dashboard-target="account"
+            aria-controls="dashboard-view-account"
+            aria-selected="false"
+            tabindex="-1"
+          >
             Account
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-integration"
+            data-dashboard-target="integration"
+            aria-controls="dashboard-view-integration"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Integrations
           </button>
           <button
             type="button"
@@ -2521,18 +2545,6 @@
             type="button"
             class="dashboard-legend-button"
             role="tab"
-            id="dashboard-tab-donors"
-            data-dashboard-target="donors"
-            aria-controls="dashboard-view-donors"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Donors
-          </button>
-          <button
-            type="button"
-            class="dashboard-legend-button"
-            role="tab"
             id="dashboard-tab-support"
             data-dashboard-target="support"
             aria-controls="dashboard-view-support"
@@ -2540,18 +2552,6 @@
             tabindex="-1"
           >
             Support requests
-          </button>
-          <button
-            type="button"
-            class="dashboard-legend-button"
-            role="tab"
-            id="dashboard-tab-integration"
-            data-dashboard-target="integration"
-            aria-controls="dashboard-view-integration"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Integrations
           </button>
           <button
             type="button"
@@ -2573,6 +2573,7 @@
             role="tabpanel"
             aria-labelledby="dashboard-tab-account"
             data-dashboard-view="account"
+            hidden
           >
             <section class="panel" id="admin-account-panel">
               <h2 style="margin-top:0;">Admin account</h2>
@@ -2774,7 +2775,6 @@
             role="tabpanel"
             aria-labelledby="dashboard-tab-donors"
             data-dashboard-view="donors"
-            hidden
           >
             <section class="panel" id="prospect-share-panel">
               <h2 style="margin-top:0;">Invite a new supporter</h2>
@@ -3588,16 +3588,19 @@
       );
       const DASHBOARD_VIEW_STORAGE_KEY = 'plexDonateDashboardView';
       const DASHBOARD_VIEW_HASH_PREFIX = 'view-';
-      const DASHBOARD_VIEW_DEFAULT = 'account';
+      const DASHBOARD_VIEW_DEFAULT = 'donors';
       const DASHBOARD_VIEW_ORDER = [
-        'account',
-        'notifications',
         'donors',
-        'support',
+        'account',
         'integration',
+        'notifications',
+        'support',
         'logs',
       ];
       const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
+      const hasDashboardPreference = Boolean(
+        parseDashboardViewFromHash() || getStoredDashboardView()
+      );
 
       if (prospectShareCopy) {
         prospectShareCopy.disabled = true;
@@ -3614,6 +3617,50 @@
       let openSubscriberActionMenu = null;
 
       let activeDashboardView = DASHBOARD_VIEW_DEFAULT;
+      let dashboardViewPreferenceLocked = hasDashboardPreference;
+
+      function hasNonEmptyValue(value) {
+        return value !== undefined && value !== null && String(value).trim() !== '';
+      }
+
+      function isIntegrationConfigured(settings) {
+        if (!settings) {
+          return false;
+        }
+        const paypal = settings.paypal || {};
+        const smtp = settings.smtp || {};
+        const plex = settings.plex || {};
+
+        const paypalConfigured = [
+          paypal.clientId,
+          paypal.clientSecret,
+          paypal.webhookId,
+          paypal.planId,
+        ].some(hasNonEmptyValue);
+
+        const smtpConfigured = [smtp.host, smtp.user, smtp.pass, smtp.from].some(
+          hasNonEmptyValue
+        );
+
+        const plexConfigured = [
+          plex.baseUrl,
+          plex.token,
+          plex.serverIdentifier,
+        ].some(hasNonEmptyValue);
+
+        return paypalConfigured || smtpConfigured || plexConfigured;
+      }
+
+      function maybeDefaultToIntegrationLanding() {
+        if (dashboardViewPreferenceLocked) {
+          return;
+        }
+        if (!state.settings || isIntegrationConfigured(state.settings)) {
+          return;
+        }
+        dashboardViewPreferenceLocked = true;
+        setActiveDashboardView('integration', { persist: true, updateHash: true });
+      }
 
       function normalizeDashboardView(view) {
         if (!view) {
@@ -3741,6 +3788,7 @@
 
         dashboardLegendButtons.forEach((button) => {
           button.addEventListener('click', () => {
+            dashboardViewPreferenceLocked = true;
             const target = button.getAttribute('data-dashboard-target');
             setActiveDashboardView(target);
           });
@@ -5658,6 +5706,7 @@
           }
           plexLibraryOptionsDirty = true;
           settingsForms.forEach((form) => setFormStatus(form, ''));
+          maybeDefaultToIntegrationLanding();
         } catch (err) {
           console.error(err);
         }
