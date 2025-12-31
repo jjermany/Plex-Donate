@@ -156,6 +156,9 @@ async function notifySubscriptionStarted({
 }
 
 async function notifyPlexRevoked({ donor, reason, context }) {
+  if (context === 'admin-dashboard') {
+    return;
+  }
   const donorLabel = formatDonorLabel(donor);
   await sendNotification({
     enabledKey: 'onPlexRevoked',
