@@ -981,6 +981,34 @@
         gap: 4px;
       }
 
+      .donor-card-meta-item.trial-countdown {
+        background: rgba(59, 130, 246, 0.08);
+        border-radius: 8px;
+        padding: 4px 8px;
+        color: #1d4ed8;
+        font-weight: 700;
+      }
+
+      :root[data-theme='dark'] .donor-card-meta-item.trial-countdown {
+        background: rgba(96, 165, 250, 0.16);
+        color: #bfdbfe;
+      }
+
+      .badge-trial {
+        background: rgba(59, 130, 246, 0.18);
+        color: #1d4ed8;
+      }
+
+      :root[data-theme='dark'] .badge-trial {
+        background: rgba(96, 165, 250, 0.28);
+        color: #c7d2fe;
+      }
+
+      .trial-countdown-date {
+        color: var(--text-muted);
+        font-weight: 600;
+      }
+
       .donor-card-icon {
         width: 14px;
         height: 14px;
@@ -4038,6 +4066,43 @@
         return date.toLocaleString();
       }
 
+      function formatTrialCountdown(accessExpiresAt) {
+        if (!accessExpiresAt) {
+          return null;
+        }
+
+        const expires = new Date(accessExpiresAt);
+        if (Number.isNaN(expires.getTime())) {
+          return null;
+        }
+
+        const now = new Date();
+        const diffMs = expires.getTime() - now.getTime();
+        const expired = diffMs <= 0;
+        const clampedDiff = Math.max(diffMs, 0);
+        const days = Math.floor(clampedDiff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor(
+          (clampedDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+        );
+        const minutes = Math.floor((clampedDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+        let remainingShort;
+        if (expired) {
+          remainingShort = 'Expired';
+        } else if (days > 0) {
+          remainingShort = `${days}d ${hours}h`;
+        } else if (hours > 0) {
+          remainingShort = `${hours}h ${minutes}m`;
+        } else {
+          remainingShort = `${minutes}m`;
+        }
+
+        const expiresOn = formatDateTime(expires);
+        const label = expired ? 'Trial expired' : `${remainingShort} left`;
+
+        return { remainingShort, expiresOn, expired, label };
+      }
+
       function getPublicBaseUrl() {
         if (!state.settings || !state.settings.app) {
           return '';
@@ -5647,6 +5712,7 @@
           const statusEl = clone.querySelector('.donor-card-status');
           const paymentEl = clone.querySelector('.donor-card-payment');
           const plexStatusEl = clone.querySelector('.donor-card-plex-status');
+          const metaEl = clone.querySelector('.donor-card-meta');
 
           nameEl.textContent = donor.name || donor.email || 'Unknown';
           emailEl.textContent = donor.email || '—';
@@ -5682,6 +5748,19 @@
               plexIcon = '<i data-lucide="mail" class="donor-card-icon"></i>Invite';
             }
             plexStatusEl.innerHTML = plexIcon;
+          }
+
+          if (metaEl && status === 'trial') {
+            const countdown = formatTrialCountdown(donor.accessExpiresAt);
+            if (countdown) {
+              const trialBadge = document.createElement('span');
+              trialBadge.className = 'donor-card-meta-item trial-countdown';
+              trialBadge.innerHTML = `
+                <span class="badge badge-trial"><i data-lucide="hourglass" class="donor-card-icon"></i>${escapeHtml(countdown.remainingShort)}</span>
+                <span class="trial-countdown-date">Ends ${escapeHtml(countdown.expiresOn)}${countdown.expired ? ' (expired)' : ''}</span>
+              `;
+              metaEl.appendChild(trialBadge);
+            }
           }
 
           if (selectedDonorId && String(donor.id) === String(selectedDonorId)) {
@@ -5725,6 +5804,18 @@
                 <span class="donor-card-tooltip-value">${plexLabel}</span>
               </div>
             `);
+          }
+
+          if (status === 'trial' && donor.accessExpiresAt) {
+            const countdown = formatTrialCountdown(donor.accessExpiresAt);
+            if (countdown) {
+              tooltipRows.push(`
+                <div class="donor-card-tooltip-row">
+                  <span class="donor-card-tooltip-label">Trial ends:</span>
+                  <span class="donor-card-tooltip-value">${escapeHtml(countdown.expiresOn)}${countdown.expired ? ' (expired)' : ''}</span>
+                </div>
+              `);
+            }
           }
 
           tooltip.innerHTML = tooltipRows.join('');
