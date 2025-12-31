@@ -5,6 +5,13 @@ const DEFAULT_SETTINGS = {
     publicBaseUrl: '',
     overseerrBaseUrl: '',
   },
+  notifications: {
+    adminEmail: '',
+    onDonorCreated: true,
+    onTrialStarted: true,
+    onSubscriptionStarted: true,
+    onPlexRevoked: true,
+  },
   announcements: {
     bannerEnabled: false,
     bannerTitle: '',
@@ -196,6 +203,10 @@ function getAnnouncementSettings(overrides) {
   };
 }
 
+function getNotificationSettings() {
+  return getGroup('notifications');
+}
+
 function getPaypalSettings() {
   return getGroup('paypal');
 }
@@ -223,4 +234,5 @@ module.exports = {
   getSmtpSettings,
   getPlexSettings,
   getAnnouncementSettings,
+  getNotificationSettings,
 };

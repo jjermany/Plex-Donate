@@ -47,6 +47,7 @@ const {
   buildSubscriberDetails,
   mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
+const adminNotifications = require('../services/admin-notifications');
 
 const router = express.Router();
 const { annotateDonorWithPlex, loadPlexContext } = require('../utils/plex');
@@ -833,6 +834,16 @@ router.post(
       accessExpiresAt: trialDonor.accessExpiresAt,
     });
 
+    adminNotifications
+      .notifyTrialStarted({
+        donor: trialDonor,
+        route: 'share',
+        accessExpiresAt: trialDonor.accessExpiresAt,
+      })
+      .catch((err) =>
+        logger.warn('Failed to send admin trial notification', err && err.message)
+      );
+
     const {
       activeInvite,
       latestInvite,
@@ -1326,6 +1337,20 @@ router.post(
       shareLinkId: updatedLink.id,
       prospectId: prospect ? prospect.id : null,
     });
+
+    adminNotifications
+      .notifyDonorCreated({
+        donor: activeDonor,
+        source: 'Share invite',
+        shareLinkId: updatedLink.id,
+        prospectId: prospect ? prospect.id : null,
+      })
+      .catch((err) =>
+        logger.warn(
+          'Failed to send admin donor created notification',
+          err && err.message
+        )
+      );
 
     const { response } = await createShareResponse(
       {

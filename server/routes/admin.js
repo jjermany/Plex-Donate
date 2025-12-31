@@ -35,6 +35,7 @@ const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
 const plexService = require('../services/plex');
+const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const settingsStore = require('../state/settings');
 const {
@@ -215,6 +216,19 @@ async function revokePlexAccessForDonor(donor, context) {
         inviteId: inviteForPlex ? inviteForPlex.id : null,
         reason: 'admin_manual_revoke',
       });
+
+      adminNotifications
+        .notifyPlexRevoked({
+          donor,
+          reason: 'admin_manual_revoke',
+          context: 'admin-dashboard',
+        })
+        .catch((err) =>
+          logger.warn(
+            'Failed to send admin Plex revocation notification',
+            err && err.message
+          )
+        );
     }
 
     return { ...result, success };
@@ -1592,6 +1606,18 @@ router.delete(
             plexAccountId: donor.plexAccountId,
             reason: 'admin_removed_user',
           });
+          adminNotifications
+            .notifyPlexRevoked({
+              donor,
+              reason: 'admin_removed_user',
+              context: 'admin-dashboard',
+            })
+            .catch((err) =>
+              logger.warn(
+                'Failed to send admin Plex revocation notification',
+                err && err.message
+              )
+            );
         } else {
           logger.warn('Failed to revoke Plex access for removed user', {
             donorId: donor.id,

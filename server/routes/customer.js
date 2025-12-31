@@ -37,6 +37,7 @@ const {
 const settingsStore = require('../state/settings');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
+const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const {
   hashPassword,
@@ -1824,6 +1825,16 @@ router.post(
       route: 'customer',
       accessExpiresAt: trialDonor.accessExpiresAt,
     });
+
+    adminNotifications
+      .notifyTrialStarted({
+        donor: trialDonor,
+        route: 'customer',
+        accessExpiresAt: trialDonor.accessExpiresAt,
+      })
+      .catch((err) =>
+        logger.warn('Failed to send admin trial notification', err && err.message)
+      );
 
     // Attempt to automatically create and email a Plex invite for the trial.
     let inviteError = null;
