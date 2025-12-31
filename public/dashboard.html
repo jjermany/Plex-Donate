@@ -804,11 +804,22 @@
         gap: 16px;
         text-align: left;
       }
+      .stacked-form {
+        display: grid;
+        gap: 12px;
+      }
       .cta-actions {
         display: flex;
         gap: 12px;
         flex-wrap: wrap;
         align-items: center;
+      }
+      .forgot-password-panel {
+        display: grid;
+        gap: 12px;
+      }
+      .forgot-password-actions {
+        justify-content: flex-start;
       }
       .subscription-cta {
         margin-top: 18px;
@@ -961,57 +972,150 @@
         </section>
 
         <section id="login-panel" class="surface login-card">
-          <div>
-            <span class="section-title">Customer sign-in</span>
-            <p class="muted small">
-              Use the same credentials you saved on the invite page. If you're
-              just getting started, head back to your share link to complete
-              step one.
-            </p>
-          </div>
-          <form id="login-form">
-            <label>
-              <span>Email on file</span>
-              <input
-                id="login-email"
-                type="email"
-                placeholder="you@example.com"
-                autocomplete="email"
-                required
-              />
-            </label>
-            <label>
-              <span>Password</span>
-              <input
-                id="login-password"
-                type="password"
-                placeholder="••••••••"
-                autocomplete="current-password"
-                required
-              />
-            </label>
-            <div class="cta-actions">
-              <button id="login-button" type="submit" class="button-primary">
-                Sign in
-              </button>
-              <p id="login-status" class="status-text"></p>
+          <div id="login-card-content">
+            <div>
+              <span class="section-title">Customer sign-in</span>
+              <p class="muted small">
+                Use the same credentials you saved on the invite page. If you're
+                just getting started, head back to your share link to complete
+                step one.
+              </p>
             </div>
-          </form>
-          <p class="muted small login-footnote">
-            <a
-              id="forgot-password-link"
-              class="link-inline"
-              href="#"
-              aria-controls="forgot-password-help"
-              aria-expanded="false"
-              >Forgot your password?</a
+            <form id="login-form">
+              <label>
+                <span>Email on file</span>
+                <input
+                  id="login-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                  required
+                />
+              </label>
+              <label>
+                <span>Password</span>
+                <input
+                  id="login-password"
+                  type="password"
+                  placeholder="••••••••"
+                  autocomplete="current-password"
+                  required
+                />
+              </label>
+              <div class="cta-actions">
+                <button id="login-button" type="submit" class="button-primary">
+                  Sign in
+                </button>
+                <p id="login-status" class="status-text"></p>
+              </div>
+            </form>
+            <p class="muted small login-footnote">
+              <a
+                id="forgot-password-link"
+                class="link-inline"
+                href="#"
+                aria-controls="forgot-password-panel"
+                aria-expanded="false"
+                >Forgot your password?</a
+              >
+            </p>
+            <div
+              id="forgot-password-panel"
+              class="muted small hidden helper-text forgot-password-panel"
             >
-          </p>
-          <p id="forgot-password-help" class="muted small hidden helper-text">
-            Donor accounts can request a fresh invite email from your share link
-            to set a new password. Need a hand? Reach out to the server admin
-            and they'll help you get back to streaming in no time.
-          </p>
+              <p>
+                Enter the email you use for Plex Donate and we'll send a reset
+                link you can use right away.
+              </p>
+              <form id="forgot-password-form" class="stacked-form">
+                <label>
+                  <span>Account email</span>
+                  <input
+                    id="forgot-password-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    autocomplete="email"
+                    required
+                  />
+                </label>
+                <div class="cta-actions forgot-password-actions">
+                  <button
+                    id="forgot-password-submit"
+                    type="submit"
+                    class="button-secondary"
+                  >
+                    Email reset link
+                  </button>
+                  <button
+                    id="forgot-password-cancel"
+                    type="button"
+                    class="button-secondary"
+                  >
+                    Back to sign-in
+                  </button>
+                </div>
+                <p
+                  id="forgot-password-status"
+                  class="status-text small"
+                  aria-live="polite"
+                ></p>
+              </form>
+              <p class="muted small">
+                If you don't see the message in a few minutes, check your spam
+                folder or request a fresh link.
+              </p>
+            </div>
+          </div>
+
+          <div id="reset-card-content" class="hidden">
+            <div>
+              <span class="section-title">Create a new password</span>
+              <p class="muted small">
+                Paste the reset link from your email, then choose a new password
+                to continue.
+              </p>
+            </div>
+            <form id="password-reset-form">
+              <input id="password-reset-token" type="hidden" />
+              <label>
+                <span>New password</span>
+                <input
+                  id="password-reset-password"
+                  type="password"
+                  placeholder="Strong new password"
+                  autocomplete="new-password"
+                  required
+                />
+              </label>
+              <label>
+                <span>Confirm password</span>
+                <input
+                  id="password-reset-confirm"
+                  type="password"
+                  placeholder="Repeat new password"
+                  autocomplete="new-password"
+                  required
+                />
+              </label>
+              <div class="cta-actions">
+                <button
+                  id="password-reset-submit"
+                  type="submit"
+                  class="button-primary"
+                >
+                  Save new password
+                </button>
+                <button
+                  id="password-reset-cancel"
+                  type="button"
+                  class="button-secondary"
+                >
+                  Back to sign-in
+                </button>
+              </div>
+              <p id="password-reset-status" class="status-text" aria-live="polite"></p>
+            </form>
+          </div>
         </section>
 
         <section id="dashboard-panel" class="dashboard-tabs hidden">
@@ -1569,11 +1673,28 @@
       const loginStatus = document.getElementById('login-status');
       const loginPassword = document.getElementById('login-password');
       const loginEmail = document.getElementById('login-email');
+      const loginCardContent = document.getElementById('login-card-content');
+      const resetCardContent = document.getElementById('reset-card-content');
+      const passwordResetForm = document.getElementById('password-reset-form');
+      const passwordResetTokenInput = document.getElementById('password-reset-token');
+      const passwordResetPassword = document.getElementById('password-reset-password');
+      const passwordResetConfirm = document.getElementById('password-reset-confirm');
+      const passwordResetStatus = document.getElementById('password-reset-status');
+      const passwordResetSubmit = document.getElementById('password-reset-submit');
+      const passwordResetCancel = document.getElementById('password-reset-cancel');
       const forgotPasswordLink = document.getElementById('forgot-password-link');
-      const forgotPasswordHelp = document.getElementById('forgot-password-help');
+      const forgotPasswordPanel = document.getElementById('forgot-password-panel');
+      const forgotPasswordForm = document.getElementById('forgot-password-form');
+      const forgotPasswordEmail = document.getElementById('forgot-password-email');
+      const forgotPasswordStatus = document.getElementById('forgot-password-status');
+      const forgotPasswordSubmit = document.getElementById('forgot-password-submit');
+      const forgotPasswordCancel = document.getElementById('forgot-password-cancel');
       const defaultForgotPasswordLinkText = forgotPasswordLink
         ? forgotPasswordLink.textContent
         : 'Forgot your password?';
+      let activePasswordResetToken = null;
+      const PASSWORD_RESET_SUCCESS_MESSAGE =
+        'If we find an account for that email, we will send a reset link shortly.';
       const announcementBanner = document.getElementById('announcement-banner');
       const announcementChip = document.getElementById('announcement-chip');
       const announcementTitle = document.getElementById('announcement-title');
@@ -1683,8 +1804,10 @@
 
       const SESSION_TOKEN_QUERY_PARAM = 'session';
       const VERIFICATION_TOKEN_QUERY_PARAM = 'token';
+      const RESET_TOKEN_QUERY_PARAM = 'reset';
       let sessionToken = null;
       let initialVerificationToken = null;
+      let initialPasswordResetToken = null;
       let verificationInFlight = false;
 
       const ANNOUNCEMENT_TONE_LABELS = {
@@ -1773,6 +1896,23 @@
       }
 
       initialVerificationToken = extractVerificationTokenFromUrl();
+      function extractPasswordResetTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const tokenValue = url.searchParams.get(RESET_TOKEN_QUERY_PARAM);
+          if (!tokenValue) {
+            return null;
+          }
+          url.searchParams.delete(RESET_TOKEN_QUERY_PARAM);
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+          return tokenValue;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      initialPasswordResetToken = extractPasswordResetTokenFromUrl();
 
       function withSessionToken(path) {
         if (!sessionToken) {
@@ -1793,6 +1933,67 @@
         }
         if (Object.prototype.hasOwnProperty.call(data, 'sessionToken')) {
           setSessionToken(data.sessionToken);
+        }
+      }
+
+      function setActivePasswordResetToken(token) {
+        const normalized = typeof token === 'string' ? token.trim() : '';
+        activePasswordResetToken = normalized || null;
+        if (passwordResetTokenInput) {
+          passwordResetTokenInput.value = activePasswordResetToken || '';
+        }
+      }
+
+      function showPasswordResetForm(token) {
+        if (token) {
+          setActivePasswordResetToken(token);
+        }
+        if (passwordResetPassword) {
+          passwordResetPassword.value = '';
+        }
+        if (passwordResetConfirm) {
+          passwordResetConfirm.value = '';
+        }
+        if (passwordResetStatus) {
+          setStatusText(passwordResetStatus, '');
+        }
+        if (forgotPasswordStatus) {
+          setStatusText(forgotPasswordStatus, '');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.add('hidden');
+        }
+        if (resetCardContent) {
+          resetCardContent.classList.remove('hidden');
+        }
+      }
+
+      function showLoginForm() {
+        setActivePasswordResetToken(null);
+        if (passwordResetStatus) {
+          setStatusText(passwordResetStatus, '');
+        }
+        if (passwordResetPassword) {
+          passwordResetPassword.value = '';
+        }
+        if (passwordResetConfirm) {
+          passwordResetConfirm.value = '';
+        }
+        if (forgotPasswordStatus) {
+          setStatusText(forgotPasswordStatus, '');
+        }
+        if (forgotPasswordPanel) {
+          forgotPasswordPanel.classList.add('hidden');
+        }
+        if (forgotPasswordLink) {
+          forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+          forgotPasswordLink.setAttribute('aria-expanded', 'false');
+        }
+        if (resetCardContent) {
+          resetCardContent.classList.add('hidden');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.remove('hidden');
         }
       }
 
@@ -3295,12 +3496,9 @@
           if (plexLinkPinExpiry) {
             plexLinkPinExpiry.textContent = '';
           }
-          if (forgotPasswordHelp) {
-            forgotPasswordHelp.classList.add('hidden');
-          }
-          if (forgotPasswordLink) {
-            forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
-            forgotPasswordLink.setAttribute('aria-expanded', 'false');
+          showLoginForm();
+          if (initialPasswordResetToken) {
+            showPasswordResetForm(initialPasswordResetToken);
           }
           if (onboardingPanel) {
             setElementVisibility(onboardingPanel, false);
@@ -3892,18 +4090,176 @@
       if (forgotPasswordLink) {
         forgotPasswordLink.addEventListener('click', (event) => {
           event.preventDefault();
-          if (!forgotPasswordHelp) {
+          if (!forgotPasswordPanel) {
             return;
           }
-          const isHidden = forgotPasswordHelp.classList.contains('hidden');
+          const isHidden = forgotPasswordPanel.classList.contains('hidden');
           if (isHidden) {
-            forgotPasswordHelp.classList.remove('hidden');
+            forgotPasswordPanel.classList.remove('hidden');
             forgotPasswordLink.setAttribute('aria-expanded', 'true');
-            forgotPasswordLink.textContent = 'Hide password help';
+            forgotPasswordLink.textContent = 'Hide reset options';
+            if (forgotPasswordEmail && loginEmail && loginEmail.value) {
+              forgotPasswordEmail.value = loginEmail.value;
+            }
+            try {
+              if (forgotPasswordEmail) {
+                forgotPasswordEmail.focus();
+              }
+            } catch (err) {
+              // Ignore focus errors.
+            }
           } else {
-            forgotPasswordHelp.classList.add('hidden');
+            forgotPasswordPanel.classList.add('hidden');
             forgotPasswordLink.setAttribute('aria-expanded', 'false');
             forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+            if (forgotPasswordStatus) {
+              setStatusText(forgotPasswordStatus, '');
+            }
+          }
+        });
+      }
+
+      if (forgotPasswordCancel) {
+        forgotPasswordCancel.addEventListener('click', () => {
+          showLoginForm();
+        });
+      }
+
+      if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const emailValue =
+            (forgotPasswordEmail && forgotPasswordEmail.value.trim()) ||
+            (loginEmail && loginEmail.value.trim()) ||
+            '';
+          if (!emailValue) {
+            setStatusText(
+              forgotPasswordStatus,
+              'Enter the email associated with your dashboard account.',
+              'error'
+            );
+            return;
+          }
+
+          setStatusText(forgotPasswordStatus, 'Sending reset link…', 'info');
+          if (forgotPasswordSubmit) {
+            forgotPasswordSubmit.disabled = true;
+          }
+
+          try {
+            const response = await fetch('/api/customer/password/reset/request', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: emailValue }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                (payload && payload.error) ||
+                  'Unable to send a reset link right now. Try again shortly.'
+              );
+            }
+
+            setStatusText(
+              forgotPasswordStatus,
+              (payload && payload.message) || PASSWORD_RESET_SUCCESS_MESSAGE,
+              'success'
+            );
+          } catch (err) {
+            setStatusText(
+              forgotPasswordStatus,
+              err && err.message
+                ? err.message
+                : 'Unable to send a reset link right now. Try again shortly.',
+              'error'
+            );
+          } finally {
+            if (forgotPasswordSubmit) {
+              forgotPasswordSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (passwordResetCancel) {
+        passwordResetCancel.addEventListener('click', () => {
+          initialPasswordResetToken = null;
+          showLoginForm();
+        });
+      }
+
+      if (passwordResetForm) {
+        passwordResetForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const token =
+            (passwordResetTokenInput && passwordResetTokenInput.value.trim()) ||
+            activePasswordResetToken ||
+            '';
+          if (!token) {
+            setStatusText(
+              passwordResetStatus,
+              'Paste your reset link from the email to continue.',
+              'error'
+            );
+            return;
+          }
+
+          const newPassword = passwordResetPassword ? passwordResetPassword.value : '';
+          const confirmPassword = passwordResetConfirm ? passwordResetConfirm.value : '';
+          if (!newPassword || !confirmPassword) {
+            setStatusText(
+              passwordResetStatus,
+              'Enter and confirm your new password to continue.',
+              'error'
+            );
+            return;
+          }
+
+          setStatusText(passwordResetStatus, 'Updating password…', 'info');
+          if (passwordResetSubmit) {
+            passwordResetSubmit.disabled = true;
+          }
+
+          try {
+            const response = await fetch('/api/customer/password/reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token,
+                password: newPassword,
+                confirmPassword,
+              }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                (payload && payload.error) ||
+                  'Unable to update your password right now. Try again shortly.'
+              );
+            }
+
+            setStatusText(
+              passwordResetStatus,
+              'Password updated! Signing you in…',
+              'success'
+            );
+            initialPasswordResetToken = null;
+            setActivePasswordResetToken(null);
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(
+              passwordResetStatus,
+              err && err.message
+                ? err.message
+                : 'Unable to update your password right now. Try again shortly.',
+              'error'
+            );
+          } finally {
+            if (passwordResetSubmit) {
+              passwordResetSubmit.disabled = false;
+            }
           }
         });
       }
@@ -4487,6 +4843,10 @@
           }
         }
       });
+
+      if (initialPasswordResetToken) {
+        showPasswordResetForm(initialPasswordResetToken);
+      }
 
       if (initialVerificationToken) {
         submitVerificationToken(initialVerificationToken);
