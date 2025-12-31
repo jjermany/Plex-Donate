@@ -1620,8 +1620,8 @@
             throw new Error(payload.error || 'Failed to create referral invite');
           }
           render(payload);
-          actionStatus.textContent =
-            'Referral invite created! Share the link below with your recipient or follow it yourself if you're restoring access.';
+            actionStatus.textContent =
+              "Referral invite created! Share the link below with your recipient or follow it yourself if you're restoring access.";
           actionStatus.className = 'status-text success';
         } catch (err) {
           actionStatus.textContent = err.message;
