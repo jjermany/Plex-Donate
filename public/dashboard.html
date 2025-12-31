@@ -3093,6 +3093,13 @@
             } else {
               message = 'Your subscription is active. Share referral invites below to welcome someone new, and only regenerate your own link if you have lost access.';
             }
+            if (
+              donor &&
+              donor.needsPlexInvite === true &&
+              donor.plexShared === false
+            ) {
+              message = `${message} Check your email (and spam folder) for the Plex library invite. If it never arrived, you can resend the invite below or update your email and try again.`;
+            }
             break;
           case 'trial':
             tone = 'info';
