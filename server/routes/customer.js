@@ -50,6 +50,7 @@ const {
   isSubscriptionCheckoutConfigured,
   buildSubscriberDetails,
 } = require('../utils/paypal');
+const config = require('../config');
 const plexOAuth = require('../services/plex-oauth');
 const plexService = require('../services/plex');
 const {
@@ -69,6 +70,8 @@ const {
 
 const router = express.Router();
 
+const SESSION_COOKIE_NAME = 'plex-donate.sid';
+
 const PLEX_LINK_EXPIRY_GRACE_MS = 60 * 1000;
 const ANNOUNCEMENT_TONES = new Set([
   'info',
@@ -79,6 +82,25 @@ const ANNOUNCEMENT_TONES = new Set([
 ]);
 const PASSWORD_RESET_SUCCESS_MESSAGE =
   'If we find an account for that email, we will send a reset link shortly.';
+
+function getSessionCookieOptions(req) {
+  const cookie = (req.session && req.session.cookie) || {};
+
+  const sameSite = cookie.sameSite === undefined ? 'lax' : cookie.sameSite;
+  const secure =
+    cookie.secure === undefined
+      ? config.sessionCookieSecure
+        ? 'auto'
+        : false
+      : cookie.secure;
+
+  return {
+    httpOnly: true,
+    sameSite,
+    secure,
+    path: cookie.path || '/',
+  };
+}
 
 function resolveSupportDisplayName(donor, preferred) {
   const trimmedPreferred = typeof preferred === 'string' ? preferred.trim() : '';
@@ -1056,11 +1078,26 @@ router.post(
 router.post(
   '/logout',
   asyncHandler(async (req, res) => {
-    if (req.session) {
-      delete req.session.customerId;
-    }
     res.locals.sessionToken = null;
-    res.json({ success: true });
+
+    const clearOptions = getSessionCookieOptions(req);
+
+    const destroyError = await new Promise((resolve) => {
+      if (req.session && typeof req.session.destroy === 'function') {
+        req.session.destroy((err) => resolve(err));
+      } else {
+        resolve(null);
+      }
+    });
+
+    res.clearCookie(SESSION_COOKIE_NAME, clearOptions);
+
+    if (destroyError) {
+      logger.warn('Failed to destroy customer session on logout', destroyError);
+      return res.status(500).json({ error: 'Failed to log out' });
+    }
+
+    return res.json({ success: true });
   })
 );
 

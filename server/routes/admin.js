@@ -43,6 +43,7 @@ const {
   updateAdminCredentials,
 } = require('../state/admin-credentials');
 const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
+const config = require('../config');
 const {
   normalizeValue,
   collectDonorEmailCandidates,
@@ -50,6 +51,7 @@ const {
   annotateDonorWithPlex,
   loadPlexContext,
 } = require('../utils/plex');
+const SESSION_COOKIE_NAME = 'plex-donate.sid';
 
 function notifyDonorOfSupportReply(thread) {
   if (!thread || !thread.request || !Array.isArray(thread.messages)) {
@@ -130,6 +132,25 @@ function resolveEnvironmentTimezone() {
   }
 
   return null;
+}
+
+function getSessionCookieOptions(req) {
+  const cookie = (req.session && req.session.cookie) || {};
+
+  const sameSite = cookie.sameSite === undefined ? 'lax' : cookie.sameSite;
+  const secure =
+    cookie.secure === undefined
+      ? config.sessionCookieSecure
+        ? 'auto'
+        : false
+      : cookie.secure;
+
+  return {
+    httpOnly: true,
+    sameSite,
+    secure,
+    path: cookie.path || '/',
+  };
 }
 
 async function buildDonorListWithPlex() {
@@ -368,9 +389,25 @@ router.post(
   requireAdmin,
   asyncHandler(async (req, res) => {
     res.locals.sessionToken = null;
-    req.session.destroy(() => {
-      res.json({ success: true, csrfToken: res.locals.csrfToken });
+
+    const clearOptions = getSessionCookieOptions(req);
+
+    const destroyError = await new Promise((resolve) => {
+      if (req.session && typeof req.session.destroy === 'function') {
+        req.session.destroy((err) => resolve(err));
+      } else {
+        resolve(null);
+      }
     });
+
+    res.clearCookie(SESSION_COOKIE_NAME, clearOptions);
+
+    if (destroyError) {
+      logger.warn('Failed to destroy admin session on logout', destroyError);
+      return res.status(500).json({ error: 'Failed to log out' });
+    }
+
+    return res.json({ success: true, csrfToken: res.locals.csrfToken });
   })
 );
 
