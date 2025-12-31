@@ -10,6 +10,7 @@ const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
 const { refreshDonorSubscription } = require('./utils/donor-subscriptions');
+const emailService = require('./services/email');
 const SqliteSessionStore = require('./session-store');
 const { initializeAdminCredentials } = require('./state/admin-credentials');
 const { clearSessionToken } = require('./utils/session-tokens');
@@ -18,8 +19,10 @@ const {
   db,
   listDonorsWithExpiredAccess,
   listDonorsWithSubscriptionId,
+  listTrialDonorsNeedingReminder,
   setDonorAccessExpirationById,
   setDonorStatusById,
+  markTrialReminderSent,
   logEvent,
 } = require('./db');
 
@@ -29,6 +32,7 @@ const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const SESSION_TTL_MS = 1000 * 60 * 15;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 const SUBSCRIPTION_REFRESH_INTERVAL_MS = 1000 * 60 * 5;
+const TRIAL_REMINDER_CHECK_INTERVAL_MS = 1000 * 60 * 30;
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 
@@ -150,12 +154,14 @@ app.use((err, req, res, next) => {
 
 let isProcessingAccessExpirations = false;
 let isProcessingSubscriptionRefreshes = false;
+let isProcessingTrialReminders = false;
 const activeSubscriptionRefreshes = new Set();
 
 // Store server and interval references for graceful shutdown
 let server = null;
 let accessExpirationInterval = null;
 let subscriptionRefreshInterval = null;
+let trialReminderInterval = null;
 
 function getSubscriptionRefreshKey(donor) {
   if (!donor) {
@@ -301,6 +307,57 @@ function scheduleSubscriptionRefreshJob() {
   subscriptionRefreshInterval = setInterval(run, SUBSCRIPTION_REFRESH_INTERVAL_MS);
 }
 
+async function processTrialEndingReminders() {
+  if (isProcessingTrialReminders) {
+    return;
+  }
+
+  isProcessingTrialReminders = true;
+  try {
+    const donors = listTrialDonorsNeedingReminder();
+    if (!Array.isArray(donors) || donors.length === 0) {
+      return;
+    }
+
+    for (const donor of donors) {
+      try {
+        await emailService.sendTrialEndingReminderEmail({
+          to: donor.email,
+          name: donor.name,
+          accessExpiresAt: donor.accessExpiresAt,
+        });
+
+        markTrialReminderSent(donor.id);
+        logEvent('donor.trial.reminder.sent', {
+          donorId: donor.id,
+          accessExpiresAt: donor.accessExpiresAt,
+          source: 'scheduled-job',
+        });
+      } catch (err) {
+        logger.warn('Failed to send trial ending reminder', {
+          donorId: donor.id,
+          message: err && err.message,
+        });
+      }
+    }
+  } catch (err) {
+    logger.error('Trial ending reminder sweep failed', err);
+  } finally {
+    isProcessingTrialReminders = false;
+  }
+}
+
+function scheduleTrialReminderJob() {
+  const run = () => {
+    processTrialEndingReminders().catch((err) => {
+      logger.error('Unhandled error while processing trial reminders', err);
+    });
+  };
+
+  run();
+  trialReminderInterval = setInterval(run, TRIAL_REMINDER_CHECK_INTERVAL_MS);
+}
+
 /**
  * Graceful shutdown handler
  * Cleans up resources and closes connections properly
@@ -326,6 +383,11 @@ async function gracefulShutdown(signal) {
     logger.info('Subscription refresh job stopped');
   }
 
+  if (trialReminderInterval) {
+    clearInterval(trialReminderInterval);
+    logger.info('Trial reminder job stopped');
+  }
+
   // Wait for ongoing operations to complete (with timeout)
   const shutdownTimeout = setTimeout(() => {
     logger.warn('Shutdown timeout reached, forcing exit');
@@ -340,6 +402,7 @@ async function gracefulShutdown(signal) {
     while (
       (isProcessingAccessExpirations ||
         isProcessingSubscriptionRefreshes ||
+        isProcessingTrialReminders ||
         activeSubscriptionRefreshes.size > 0) &&
       waitCount < maxWaits
     ) {
@@ -372,6 +435,7 @@ async function gracefulShutdown(signal) {
 if (config.env !== 'test') {
   scheduleAccessExpirationJob();
   scheduleSubscriptionRefreshJob();
+  scheduleTrialReminderJob();
 
   server = app.listen(config.port, () => {
     logger.info(`Plex Donate server listening on port ${config.port}`);
@@ -398,3 +462,4 @@ if (config.env !== 'test') {
 module.exports = app;
 module.exports.processAccessExpirations = processAccessExpirations;
 module.exports.processSubscriptionRefreshes = processSubscriptionRefreshes;
+module.exports.processTrialEndingReminders = processTrialEndingReminders;

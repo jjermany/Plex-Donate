@@ -624,6 +624,61 @@ async function sendCancellationEmail(
   });
 }
 
+async function sendTrialEndingReminderEmail(
+  { to, name, accessExpiresAt },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+
+  const displayDate = formatAccessEndDate(accessExpiresAt);
+  const subject = 'Your Plex trial ends soon';
+
+  const dashboardUrl = resolveDashboardUrl();
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const accessText = displayDate
+    ? `Your Plex trial access will end around ${displayDate}.`
+    : 'Your Plex trial access will end soon.';
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    `${accessText} Continue watching by starting a subscription before your trial expires.`,
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push('If you have questions or need help subscribing, just reply to this email.');
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const text = textLines.join('\n');
+
+  const safeAccessText = escapeHtml(accessText);
+  const html = `
+  <p>Hi ${escapeHtml(name || 'there')},</p>
+  <p>${safeAccessText}</p>
+  <p>Keep your Plex access going by starting a subscription before your trial ends.</p>
+  ${dashboardHtml}
+  <p style="font-size:14px;color:#4b5563;">If you need help subscribing, just reply to this email.</p>
+  <p style="margin-top:24px;">— Plex Donate</p>
+  `;
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 function formatSupportEmailHtml({
   heading,
   subject,
@@ -806,6 +861,7 @@ module.exports = {
   sendAccountWelcomeEmail,
   sendPasswordResetEmail,
   sendCancellationEmail,
+  sendTrialEndingReminderEmail,
   sendAnnouncementEmail,
   getSmtpConfig,
   verifyConnection,
