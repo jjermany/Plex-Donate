@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS donors (
   status TEXT NOT NULL DEFAULT 'pending',
   last_payment_at TEXT,
   access_expires_at TEXT,
+  trial_reminder_sent_at TEXT,
   password_hash TEXT,
   plex_account_id TEXT,
   plex_email TEXT,
@@ -533,6 +534,21 @@ function ensurePreexistingAccessColumn() {
   }
 }
 
+function ensureTrialReminderColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasTrialReminderSentAt = columns.some(
+    (column) => column.name === 'trial_reminder_sent_at'
+  );
+
+  if (!hasTrialReminderSentAt) {
+    db.exec('ALTER TABLE donors ADD COLUMN trial_reminder_sent_at TEXT');
+  }
+}
+
 ensureInviteRecipientColumn();
 ensureProspectsTableColumns();
 ensureDonorPasswordColumn();
@@ -543,6 +559,7 @@ ensureDonorSubscriptionOptional();
 ensureStripePaymentColumns();
 ensureStripePaymentIdColumn();
 ensurePreexistingAccessColumn();
+ensureTrialReminderColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
 ensureInviteLinkExpirationColumns();
@@ -710,6 +727,12 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  updateTrialReminderSentAt: db.prepare(
+    `UPDATE donors
+     SET trial_reminder_sent_at = @sentAt,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   listDonorsWithSubscriptionId: db.prepare(
     `SELECT *
        FROM donors
@@ -724,6 +747,16 @@ const statements = {
        AND access_expires_at IS NOT NULL
        AND DATETIME(access_expires_at) <= DATETIME('now')
      ORDER BY access_expires_at ASC`
+  ),
+  listTrialDonorsNeedingReminder: db.prepare(
+    `SELECT *
+       FROM donors
+      WHERE lower(status) = 'trial'
+        AND access_expires_at IS NOT NULL
+        AND DATETIME(access_expires_at) > DATETIME('now')
+        AND DATETIME(access_expires_at) <= DATETIME('now', '+24 hours')
+        AND (trial_reminder_sent_at IS NULL OR TRIM(trial_reminder_sent_at) = '')
+      ORDER BY access_expires_at ASC`
   ),
   listInvitesForDonor: db.prepare(
     'SELECT * FROM invites WHERE donor_id = ? ORDER BY created_at DESC'
@@ -1090,6 +1123,7 @@ function mapDonor(row) {
     status: row.status,
     lastPaymentAt: row.last_payment_at,
     accessExpiresAt: row.access_expires_at,
+    trialReminderSentAt: row.trial_reminder_sent_at,
     hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
@@ -1835,6 +1869,10 @@ const startDonorTrialTransaction = db.transaction((donorId, accessExpiresAt) => 
     id: donorId,
     accessExpiresAt,
   });
+  statements.updateTrialReminderSentAt.run({
+    id: donorId,
+    sentAt: null,
+  });
 
   return mapDonor(statements.getDonorById.get(donorId));
 });
@@ -1857,6 +1895,10 @@ function startDonorTrial(donorId, { durationMs } = {}) {
 
 function listDonorsWithExpiredAccess() {
   return statements.listDonorsWithExpiredAccess.all().map(mapDonor);
+}
+
+function listTrialDonorsNeedingReminder() {
+  return statements.listTrialDonorsNeedingReminder.all().map(mapDonor);
 }
 
 function createProspect({ email, name, note } = {}) {
@@ -2381,6 +2423,24 @@ function setDonorPreexistingAccess(donorId, hadPreexistingAccess = false) {
   return mapDonor(statements.getDonorById.get(donorId));
 }
 
+function markTrialReminderSent(donorId, sentAt = new Date().toISOString()) {
+  if (!donorId) {
+    throw new Error('donorId is required to mark trial reminder state');
+  }
+
+  const timestamp =
+    sentAt === null
+      ? null
+      : normalizeAccessExpiresAt(sentAt) || new Date().toISOString();
+
+  statements.updateTrialReminderSentAt.run({
+    id: donorId,
+    sentAt: timestamp,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
 module.exports = {
   db,
   upsertDonor,
@@ -2441,6 +2501,8 @@ module.exports = {
   setDonorAccessExpirationBySubscription,
   setDonorAccessExpirationById,
   setDonorPreexistingAccess,
+  listTrialDonorsNeedingReminder,
+  markTrialReminderSent,
   startDonorTrial,
   listDonorsWithExpiredAccess,
   getRecentEvents,
