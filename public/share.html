@@ -639,6 +639,8 @@
         normalizedStatus: 'pending',
         accessExpiresAt: null,
         plexLinked: false,
+        plexPending: false,
+        needsPlexInvite: false,
         hasSevereIssue: false,
         trialRequestPending: false,
       };
@@ -864,6 +866,8 @@
         trialCountdownLabel = '',
         trialExpiresLabel = '',
         hasSevereIssue = false,
+        needsPlexInvite = false,
+        plexPending = false,
       } = {}) {
         if (!trialCta) {
           return;
@@ -906,12 +910,20 @@
           message = 'Your 7-day trial is active.';
           buttonLabel = 'Trial in progress';
           disableButton = true;
+          statusTone = 'success';
           if (trialCountdownLabel) {
             statusMessage = `Access expires in ${trialCountdownLabel}.`;
           } else if (trialExpiresLabel) {
             statusMessage = `Access expires on ${trialExpiresLabel}.`;
           } else {
             statusMessage = 'Access expires soon.';
+          }
+          if (needsPlexInvite || plexPending) {
+            const inviteMessage =
+              'Check your email for the Plex library invite so you can start watching.';
+            statusMessage = statusMessage
+              ? `${statusMessage} ${inviteMessage}`
+              : inviteMessage;
           }
         } else if (normalizedStatus === 'trial_expired') {
           message = 'Your free trial has ended. Start a PayPal subscription to keep streaming.';
@@ -956,6 +968,8 @@
           trialCountdownLabel: getTrialCountdownLabel(accessExpiresAt),
           trialExpiresLabel: formatDateTime(accessExpiresAt),
           hasSevereIssue: Boolean(state.hasSevereIssue),
+          needsPlexInvite: Boolean(state.needsPlexInvite),
+          plexPending: Boolean(state.plexPending),
         });
       }
 
