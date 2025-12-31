@@ -34,6 +34,23 @@ const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 const SUBSCRIPTION_REFRESH_INTERVAL_MS = 1000 * 60 * 5;
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = 1000 * 60 * 30;
 
+function isRequestSecure(req) {
+  if (!config.sessionCookieSecure) {
+    return false;
+  }
+
+  if (req.secure) {
+    return true;
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (typeof forwardedProto === 'string') {
+    return forwardedProto.split(',')[0].trim() === 'https';
+  }
+
+  return false;
+}
+
 fs.mkdirSync(config.dataDir, { recursive: true });
 
 try {
@@ -58,10 +75,11 @@ app.use(
     saveUninitialized: false,
     store: sessionStore,
     rolling: true,
+    proxy: true,
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: config.sessionCookieSecure,
+      secure: config.sessionCookieSecure ? 'auto' : false,
       maxAge: SESSION_TTL_MS,
     },
   })
@@ -141,7 +159,7 @@ app.use((err, req, res, next) => {
     res.clearCookie(SESSION_COOKIE_NAME, {
       httpOnly: true,
       sameSite: 'lax',
-      secure: config.sessionCookieSecure,
+      secure: isRequestSecure(req),
     });
 
     return res
