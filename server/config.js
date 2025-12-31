@@ -128,20 +128,23 @@ function validateConfig(config) {
   }
 }
 
+const env = process.env.NODE_ENV || 'development';
+const isProduction = env === 'production';
+
 const config = {
-  env: process.env.NODE_ENV || 'development',
+  env,
   port: Number.parseInt(process.env.PORT || '3000', 10),
   sessionSecret: getOrCreateSessionSecret(),
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.env.DATABASE_FILE)
     : path.join(dataDir, 'plex-donate.db'),
-  sessionCookieSecure: parseBoolean(process.env.SESSION_COOKIE_SECURE, false),
-  logLevel: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  sessionCookieSecure: parseBoolean(process.env.SESSION_COOKIE_SECURE, isProduction),
+  logLevel: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
   logDir: process.env.LOG_DIR || path.join(rootDir, 'logs'),
 };
 
-config.isProduction = config.env === 'production';
+config.isProduction = isProduction;
 config.dataDir = dataDir;
 
 // Validate configuration on load
