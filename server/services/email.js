@@ -953,20 +953,59 @@ function formatAdminNotificationEmail({
   textLines.push('— Plex Donate');
 
   const html = `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;padding:20px;">
-    <div style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 18px 50px -24px rgba(79,70,229,0.45);">
-      <div style="background:linear-gradient(135deg,#111827 0%,#0b1224 100%);color:#e5e7eb;padding:20px 24px;">
-        <p style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:#a5b4fc;">Plex Donate</p>
-        <h2 style="margin:0;font-size:22px;line-height:1.3;color:#ffffff;">${safeHeading}</h2>
+  <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="color-scheme" content="light dark">
+      <meta name="supported-color-schemes" content="light dark">
+      <style>
+        @media (prefers-color-scheme: dark) {
+          body,
+          .email-shell {
+            background-color: #0f172a !important;
+          }
+          .email-card {
+            background-color: #111827 !important;
+            border-color: #1f2937 !important;
+          }
+          .email-header {
+            background-color: #111827 !important;
+          }
+          .email-body,
+          .email-body p,
+          .email-body li,
+          .email-body span {
+            color: #f8fafc !important;
+          }
+          .email-body a {
+            color: #a5b4fc !important;
+          }
+          .email-kicker {
+            color: #a5b4fc !important;
+          }
+          .email-footer {
+            color: #cbd5f5 !important;
+          }
+        }
+      </style>
+    </head>
+    <body style="margin:0;padding:0;">
+      <div class="email-shell" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;padding:20px;">
+        <div class="email-card" style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 18px 50px -24px rgba(79,70,229,0.45);">
+          <div class="email-header" style="background:#111827;color:#e5e7eb;padding:20px 24px;">
+            <p class="email-kicker" style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:#a5b4fc;">Plex Donate</p>
+            <h2 style="margin:0;font-size:22px;line-height:1.3;color:#f8fafc;background-color:#111827;">${safeHeading}</h2>
+          </div>
+          <div class="email-body" style="padding:22px 24px;color:#0f172a;">
+            <p style="margin:0 0 12px;font-size:16px;color:#0f172a;background-color:#ffffff;">${safeIntro}</p>
+            ${factsHtml}
+            ${dashboardHtml}
+            <p class="email-footer" style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
+          </div>
+        </div>
       </div>
-      <div style="padding:22px 24px;color:#0f172a;">
-        <p style="margin:0 0 12px;font-size:16px;">${safeIntro}</p>
-        ${factsHtml}
-        ${dashboardHtml}
-        <p style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
-      </div>
-    </div>
-  </div>
+    </body>
+  </html>
   `;
 
   return { html, text: textLines.join('\n') };
