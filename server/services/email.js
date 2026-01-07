@@ -18,6 +18,28 @@ function stripTrailingSlash(value) {
   return String(value).replace(/\/+$/, '');
 }
 
+function tryBuildAdminBaseUrl(base) {
+  if (!base) {
+    return '';
+  }
+
+  const trimmed = String(base).trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return stripTrailingSlash(parsed.origin);
+  } catch (err) {
+    if (/^https?:\/\//i.test(trimmed)) {
+      return stripTrailingSlash(trimmed);
+    }
+  }
+
+  return '';
+}
+
 function tryBuildDashboardUrl(base) {
   if (!base) {
     return '';
@@ -91,6 +113,23 @@ function resolveDashboardUrl({ loginUrl, fallbackUrls } = {}) {
   }
 
   return '';
+}
+
+function resolveAdminDashboardUrl() {
+  let baseFromSettings = '';
+  try {
+    const appSettings = settingsState.getAppSettings
+      ? settingsState.getAppSettings()
+      : null;
+    baseFromSettings =
+      appSettings && appSettings.publicBaseUrl
+        ? String(appSettings.publicBaseUrl).trim()
+        : '';
+  } catch (err) {
+    baseFromSettings = '';
+  }
+
+  return tryBuildAdminBaseUrl(baseFromSettings);
 }
 
 function buildDashboardAccessHtml(dashboardUrl) {
@@ -981,5 +1020,6 @@ module.exports = {
   sendSupportRequestNotification,
   sendSupportResponseNotification,
   resolveDashboardUrl,
+  resolveAdminDashboardUrl,
   sendAdminNotificationEmail,
 };

@@ -25,6 +25,30 @@ test('resolveDashboardUrl falls back to the origin of a reference URL when no lo
   assert.equal(resolved, 'https://demo.example.com/dashboard');
 });
 
+test('resolveDashboardUrl builds a dashboard link from publicBaseUrl', async (t) => {
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({ publicBaseUrl: 'https://dash.example.com/app' });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  const resolved = emailService.resolveDashboardUrl();
+
+  assert.equal(resolved, 'https://dash.example.com/dashboard');
+});
+
+test('resolveAdminDashboardUrl returns the root URL from publicBaseUrl', async (t) => {
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({ publicBaseUrl: 'https://dash.example.com/app' });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  const resolved = emailService.resolveAdminDashboardUrl();
+
+  assert.equal(resolved, 'https://dash.example.com');
+});
+
 test('sendInviteEmail includes the dashboard button and text link', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;
