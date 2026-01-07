@@ -50,10 +50,14 @@ test('access expiration sweep transitions trials to expired and revokes access',
   await processAccessExpirations();
 
   assert.equal(revokeMock.mock.callCount(), 1);
-  const [revokedDonor] = revokeMock.mock.calls[0].arguments;
+  const [revokedDonor, revokeOptions] = revokeMock.mock.calls[0].arguments;
   assert.ok(revokedDonor);
   assert.equal(revokedDonor.id, donor.id);
   assert.equal(revokedDonor.status, 'trial_expired');
+  assert.deepEqual(revokeOptions, {
+    context: 'trial-expiration',
+    reason: 'trial_expired',
+  });
 
   const updated = getDonorById(donor.id);
   assert.equal(updated.status, 'trial_expired');

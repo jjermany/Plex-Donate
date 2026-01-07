@@ -160,6 +160,8 @@ async function notifyPlexRevoked({ donor, reason, context }) {
     return;
   }
   const donorLabel = formatDonorLabel(donor);
+  const donorEmail = donor && donor.email;
+  const includesEmail = donorEmail && donorLabel.includes(donorEmail);
   await sendNotification({
     enabledKey: 'onPlexRevoked',
     subject: `[Admin] Plex access revoked: ${donorLabel}`,
@@ -167,7 +169,7 @@ async function notifyPlexRevoked({ donor, reason, context }) {
     intro: `${donorLabel} no longer has Plex access.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      { label: 'Email', value: donor && donor.email },
+      ...(includesEmail ? [] : [{ label: 'Email', value: donorEmail }]),
       { label: 'Reason', value: reason || 'revoked' },
       { label: 'Context', value: context || 'system' },
       { label: 'Plex Account ID', value: donor && donor.plexAccountId },

@@ -219,7 +219,9 @@ async function processAccessExpirations() {
         let donorForRevocation = donor;
         let statusForEvent = donor.status;
 
-        if ((donor.status || '').toLowerCase() === 'trial') {
+        const isTrial = (donor.status || '').toLowerCase() === 'trial';
+
+        if (isTrial) {
           const updatedDonor = setDonorStatusById(donor.id, 'trial_expired');
           if (updatedDonor) {
             donorForRevocation = updatedDonor;
@@ -229,7 +231,10 @@ async function processAccessExpirations() {
           }
         }
 
-        await webhookRouter.revokeDonorAccess(donorForRevocation);
+        await webhookRouter.revokeDonorAccess(donorForRevocation, {
+          context: isTrial ? 'trial-expiration' : 'scheduled-job',
+          reason: isTrial ? 'trial_expired' : 'access_expired',
+        });
         setDonorAccessExpirationById(donor.id, null);
         logEvent('donor.access.expiration.reached', {
           donorId: donor.id,
