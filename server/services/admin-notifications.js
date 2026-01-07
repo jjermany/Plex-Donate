@@ -108,7 +108,7 @@ async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
       { label: 'Share link ID', value: shareLinkId },
       { label: 'Prospect ID', value: prospectId },
     ],
-    dashboardUrl: emailService.resolveDashboardUrl({ fallbackUrls: [] }),
+    dashboardUrl: emailService.resolveAdminDashboardUrl(),
   });
 }
 
@@ -125,7 +125,7 @@ async function notifyTrialStarted({ donor, route, accessExpiresAt }) {
       { label: 'Route', value: route || 'share' },
       { label: 'Trial ends', value: formatTimestamp(accessExpiresAt) },
     ],
-    dashboardUrl: emailService.resolveDashboardUrl({ fallbackUrls: [] }),
+    dashboardUrl: emailService.resolveAdminDashboardUrl(),
   });
 }
 
@@ -151,7 +151,7 @@ async function notifySubscriptionStarted({
       { label: 'Payment at', value: formatTimestamp(paidAt) },
       { label: 'Source', value: source || 'PayPal webhook' },
     ],
-    dashboardUrl: emailService.resolveDashboardUrl({ fallbackUrls: [] }),
+    dashboardUrl: emailService.resolveAdminDashboardUrl(),
   });
 }
 
@@ -174,7 +174,7 @@ async function notifyPlexRevoked({ donor, reason, context }) {
       { label: 'Context', value: context || 'system' },
       { label: 'Plex Account ID', value: donor && donor.plexAccountId },
     ],
-    dashboardUrl: emailService.resolveDashboardUrl({ fallbackUrls: [] }),
+    dashboardUrl: emailService.resolveAdminDashboardUrl(),
   });
 }
 
