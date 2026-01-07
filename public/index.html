@@ -6184,6 +6184,10 @@
         }
       }
 
+      function isRevokedStatus(status) {
+        return ['trial_expired', 'cancelled', 'expired', 'suspended'].includes(status);
+      }
+
       function renderDonorActions(donor) {
         if (!donorDetailActions) return;
 
@@ -6268,7 +6272,10 @@
         donorDetailActions.appendChild(revokeBtn);
 
         const canRevokePlex = Boolean(
-          plexState && plexState.configured !== false && (donor.plexShared || donor.plexPending)
+          plexState &&
+            plexState.configured !== false &&
+            (donor.plexShared || donor.plexPending) &&
+            !isRevokedStatus(status)
         );
         const revokePlexBtn = document.createElement('button');
         revokePlexBtn.className = 'danger secondary';
@@ -6278,6 +6285,8 @@
         revokePlexBtn.dataset.donorId = donor.id;
         revokePlexBtn.title = canRevokePlex
           ? 'Revoke Plex access for this user'
+          : isRevokedStatus(status)
+          ? 'Plex access is already revoked or expired for this user'
           : 'Revoke is available only for users with Plex access or pending share';
         donorDetailActions.appendChild(revokePlexBtn);
 
@@ -6574,11 +6583,16 @@
 
           if (revokePlexButton) {
             const canRevokePlex = Boolean(
-              plexState && plexState.configured !== false && (donor.plexShared || donor.plexPending)
+              plexState &&
+                plexState.configured !== false &&
+                (donor.plexShared || donor.plexPending) &&
+                !isRevokedStatus(status)
             );
             revokePlexButton.disabled = !canRevokePlex;
             revokePlexButton.title = canRevokePlex
               ? 'Revoke Plex access for this user'
+              : isRevokedStatus(status)
+              ? 'Plex access is already revoked or expired for this user'
               : 'Revoke is available only for users with Plex access or pending share';
           }
 
