@@ -314,7 +314,10 @@ async function handleCancellation(
     return donor;
   }
 
-  await revokeDonorAccess(donor);
+  await revokeDonorAccess(donor, {
+    context: 'paypal-webhook',
+    reason: 'subscription_cancelled',
+  });
   setDonorAccessExpirationBySubscription(subscriptionId, null);
   logEvent('donor.access.expiration.reached', {
     donorId: donor.id,
@@ -326,7 +329,7 @@ async function handleCancellation(
   return donor;
 }
 
-async function revokeDonorAccess(donor) {
+async function revokeDonorAccess(donor, options = {}) {
   if (!donor.email && !donor.plexAccountId) {
     return;
   }
@@ -365,8 +368,8 @@ async function revokeDonorAccess(donor) {
         adminNotifications
           .notifyPlexRevoked({
             donor,
-            reason: 'subscription_cancelled',
-            context: 'paypal-webhook',
+            reason: options.reason,
+            context: options.context,
           })
           .catch((err) =>
             logger.warn('Failed to send admin Plex revocation notification', err.message)
