@@ -146,16 +146,20 @@ function annotateDonorWithPlex(donor, context) {
   const hasActiveInvite = invites.some(
     (invite) => invite && !invite.revokedAt && (invite.plexInviteId || invite.inviteUrl)
   );
-  const plexPending = plexPendingFromUser || (!plexShared && hasActiveInvite);
   const normalizedStatus = normalizeValue((donor && donor.status) || '');
-  const statusIsRevoked = ['cancelled', 'canceled', 'expired', 'suspended'].includes(
-    normalizedStatus
-  );
+  const statusIsRevoked = [
+    'cancelled',
+    'canceled',
+    'expired',
+    'suspended',
+    'trial_expired',
+  ].includes(normalizedStatus);
   const statusIsActive = normalizedStatus === 'active';
+  const statusAllowsAccess = statusIsActive && !statusIsRevoked;
+  const plexPending =
+    statusAllowsAccess && (plexPendingFromUser || (!plexShared && hasActiveInvite));
   const hasEmail = emailSet.size > 0 && normalizeValue((donor && donor.email) || '') !== '';
-  const canInvite = Boolean(
-    context && context.configured && hasEmail && !statusIsRevoked && statusIsActive
-  );
+  const canInvite = Boolean(context && context.configured && hasEmail && statusAllowsAccess);
   const needsPlexInvite = canInvite && !plexShared && !plexPending && !hasActiveInvite;
   const plexShareState = plexShared ? 'shared' : plexPending ? 'pending' : 'not_shared';
 
