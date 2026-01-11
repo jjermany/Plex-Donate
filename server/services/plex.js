@@ -3071,9 +3071,12 @@ async function createInvite(
 
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
 
-  const normalizedInvitedId =
-    invitedId === undefined || invitedId === null ? '' : String(invitedId).trim();
-  const hasResolvedInvitedId = Boolean(normalizedInvitedId);
+  let resolvedInvitedId = invitedId === undefined || invitedId === null
+    ? ''
+    : String(invitedId).trim();
+  if (!resolvedInvitedId) {
+    resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
+  }
 
   // Use Plex Web's private API endpoint (the one that actually works)
   const serverId = await resolveServerId(plex);
@@ -3082,11 +3085,7 @@ async function createInvite(
   // Build form-encoded body with FLAT fields (not nested JSON)
   const formData = new URLSearchParams();
   formData.append('machineIdentifier', serverId);
-  if (hasResolvedInvitedId) {
-    formData.append('invitedId', normalizedInvitedId);
-  } else {
-    formData.append('invitedEmail', normalizedEmail);
-  }
+  formData.append('invitedEmail', normalizedEmail);
 
   // Add libraries as array format: libraries[0][library_id], libraries[0][allow_sync], etc.
   finalSectionIds.forEach((libraryId, index) => {
@@ -3127,6 +3126,7 @@ async function createInvite(
     const suffix = bodyText ? `: ${bodyText}` : '';
     const inviteRequestLog = {
       machineIdentifier: serverId,
+      invitedEmail: normalizedEmail,
       librarySectionIds: finalSectionIds,
       allowSync: to01(plex?.allowSync === true || plex?.allowSync === '1'),
       allowChannels: to01(plex?.allowChannels === true || plex?.allowChannels === '1'),
@@ -3135,11 +3135,6 @@ async function createInvite(
       ),
       allowTuners: '0',
     };
-    if (hasResolvedInvitedId) {
-      inviteRequestLog.invitedId = normalizedInvitedId;
-    } else {
-      inviteRequestLog.invitedEmail = normalizedEmail;
-    }
 
     // Log the full error for debugging
     logger.error('Plex invite creation failed', {
