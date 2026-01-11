@@ -810,6 +810,16 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
 
     if (existingInviteUsable && existingInviteMatches) {
+      if (donorHasShare || donorHasPendingShare) {
+        logEvent('invite.auto.skipped', {
+          donorId: donor.id,
+          email: donor.email || null,
+          subscriptionId: donor.subscriptionId,
+          reason: donorHasPendingShare ? 'share_pending' : 'share_already_present',
+          inviteId: invite.id,
+        });
+        return;
+      }
       if (!invite.emailSentAt) {
         try {
           await emailService.sendInviteEmail({
