@@ -2894,7 +2894,7 @@ async function createInvite(
 
   const normalizedInvitedId =
     invitedId === undefined || invitedId === null ? '' : String(invitedId).trim();
-  const hasValidInvitedId = Boolean(normalizedInvitedId);
+  const hasValidInvitedId = /^\d+$/.test(normalizedInvitedId);
 
   // Use Plex Web's private API endpoint (the one that actually works)
   const serverId = await resolveServerId(plex);
