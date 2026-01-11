@@ -141,10 +141,48 @@ function annotateDonorWithPlex(donor, context) {
     return hasEmailMatch || hasIdMatch;
   });
 
+  const staleInviteDaysRaw = process.env.PLEX_INVITE_STALE_DAYS;
+  const staleInviteDays = Number.parseInt(staleInviteDaysRaw || '0', 10);
+  const staleInviteMs = Number.isFinite(staleInviteDays) && staleInviteDays > 0
+    ? staleInviteDays * 24 * 60 * 60 * 1000
+    : 0;
+
+  const resolveInviteTimestamp = (invite) => {
+    if (!invite) {
+      return null;
+    }
+    const candidates = [invite.plexInvitedAt, invite.invitedAt, invite.createdAt];
+    for (const value of candidates) {
+      if (!value) {
+        continue;
+      }
+      const parsed = Date.parse(value);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  };
+
+  const isInviteStale = (invite) => {
+    if (!staleInviteMs) {
+      return false;
+    }
+    const timestamp = resolveInviteTimestamp(invite);
+    if (!timestamp) {
+      return false;
+    }
+    return Date.now() - timestamp > staleInviteMs;
+  };
+
   const plexShared = Boolean(matchedEntry && !matchedEntry.pending);
   const plexPendingFromUser = Boolean(matchedEntry && matchedEntry.pending);
   const hasActiveInvite = invites.some(
-    (invite) => invite && !invite.revokedAt && (invite.plexInviteId || invite.inviteUrl)
+    (invite) =>
+      invite &&
+      !invite.revokedAt &&
+      (invite.plexInviteId || invite.inviteUrl) &&
+      !isInviteStale(invite)
   );
   const normalizedStatus = normalizeValue((donor && donor.status) || '');
   const statusIsRevoked = [
@@ -156,8 +194,7 @@ function annotateDonorWithPlex(donor, context) {
   ].includes(normalizedStatus);
   const statusIsActive = normalizedStatus === 'active';
   const statusAllowsAccess = statusIsActive && !statusIsRevoked;
-  const plexPending =
-    statusAllowsAccess && (plexPendingFromUser || (!plexShared && hasActiveInvite));
+  const plexPending = statusAllowsAccess && plexPendingFromUser;
   const hasEmail = emailSet.size > 0 && normalizeValue((donor && donor.email) || '') !== '';
   const canInvite = Boolean(context && context.configured && hasEmail && statusAllowsAccess);
   const needsPlexInvite = canInvite && !plexShared && !plexPending && !hasActiveInvite;
