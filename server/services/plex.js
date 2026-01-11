@@ -2894,6 +2894,7 @@ async function createInvite(
 
   const normalizedInvitedId =
     invitedId === undefined || invitedId === null ? '' : String(invitedId).trim();
+  const hasValidInvitedId = Boolean(normalizedInvitedId);
 
   // Use Plex Web's private API endpoint (the one that actually works)
   const serverId = await resolveServerId(plex);
@@ -2902,9 +2903,10 @@ async function createInvite(
   // Build form-encoded body with FLAT fields (not nested JSON)
   const formData = new URLSearchParams();
   formData.append('machineIdentifier', serverId);
-  formData.append('invitedEmail', normalizedEmail);
-  if (normalizedInvitedId) {
+  if (hasValidInvitedId) {
     formData.append('invitedId', normalizedInvitedId);
+  } else {
+    formData.append('invitedEmail', normalizedEmail);
   }
 
   // Add libraries as array format: libraries[0][library_id], libraries[0][allow_sync], etc.
@@ -2946,16 +2948,19 @@ async function createInvite(
     const suffix = bodyText ? `: ${bodyText}` : '';
     const inviteRequestLog = {
       machineIdentifier: serverId,
-      invitedEmail: normalizedEmail,
       librarySectionIds: finalSectionIds,
       allowSync: to01(plex?.allowSync === true || plex?.allowSync === '1'),
       allowChannels: to01(plex?.allowChannels === true || plex?.allowChannels === '1'),
       allowCameraUpload: to01(
         plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1'
       ),
-      invitedId: normalizedInvitedId || undefined,
       allowTuners: '0',
     };
+    if (hasValidInvitedId) {
+      inviteRequestLog.invitedId = normalizedInvitedId;
+    } else {
+      inviteRequestLog.invitedEmail = normalizedEmail;
+    }
 
     // Log the full error for debugging
     logger.error('Plex invite creation failed', {

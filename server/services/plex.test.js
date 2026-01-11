@@ -362,6 +362,7 @@ test('plexService.createInvite uses provided invitedId when supplied', async () 
     if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
       const body = new URLSearchParams(options.body);
       assert.equal(body.get('invitedId'), 'INVITED-2001');
+      assert.equal(body.get('invitedEmail'), null);
       return {
         ok: true,
         status: 200,
