@@ -6,6 +6,7 @@ const {
   updateDonorStatus,
   getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
+  getLatestInviteForDonor,
   createInvite: createInviteRecord,
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
@@ -635,8 +636,24 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
             subscriptionId: donor.subscriptionId,
             reason: 'already_on_server',
           });
-          // Mark this donor as having pre-existing access so we don't revoke it on cancellation
-          if (!donor.hadPreexistingAccess) {
+          const latestInvite =
+            getLatestActiveInviteForDonor(donor.id) ||
+            getLatestInviteForDonor(donor.id);
+          const inviteNote = latestInvite && latestInvite.note ? latestInvite.note : '';
+          const inviteIndicatesTrial = inviteNote
+            .toLowerCase()
+            .includes('auto-generated for trial');
+
+          if (latestInvite) {
+            logEvent('donor.access.granted_by_invite', {
+              donorId: donor.id,
+              email: donor.email,
+              plexAccountId: donor.plexAccountId,
+              inviteId: latestInvite.id,
+              reason: inviteIndicatesTrial ? 'trial_invite' : 'invite_recorded',
+            });
+          } else if (!donor.hadPreexistingAccess) {
+            // Mark this donor as having pre-existing access so we don't revoke it on cancellation
             setDonorPreexistingAccess(donor.id, true);
             logEvent('donor.preexisting_access.detected', {
               donorId: donor.id,
