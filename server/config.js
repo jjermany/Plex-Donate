@@ -8,6 +8,7 @@ dotenv.config();
 const rootDir = path.resolve(__dirname, '..');
 const dataDir = path.resolve(rootDir, 'data');
 const secretsFile = path.join(dataDir, '.secrets');
+const DEFAULT_SESSION_TTL_HOURS = 8;
 
 const parseBoolean = (value, defaultValue = false) => {
   if (value === undefined) {
@@ -113,6 +114,12 @@ function validateConfig(config) {
     }
   }
 
+  if (!Number.isFinite(config.sessionTtlMs) || config.sessionTtlMs <= 0) {
+    errors.push(
+      `Invalid SESSION_TTL_HOURS: ${config.sessionTtlHours}. Must be a positive number.`
+    );
+  }
+
   // Log warnings and errors
   if (warnings.length > 0) {
     console.warn('\n⚠️  Configuration Warnings:');
@@ -130,12 +137,17 @@ function validateConfig(config) {
 
 const env = process.env.NODE_ENV || 'development';
 const isProduction = env === 'production';
+const sessionTtlHours = Number.parseFloat(
+  process.env.SESSION_TTL_HOURS || String(DEFAULT_SESSION_TTL_HOURS)
+);
 
 const config = {
   env,
   port: Number.parseInt(process.env.PORT || '3000', 10),
   sessionSecret: getOrCreateSessionSecret(),
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
+  sessionTtlHours,
+  sessionTtlMs: Math.round(sessionTtlHours * 60 * 60 * 1000),
   databaseFile: process.env.DATABASE_FILE
     ? path.resolve(process.env.DATABASE_FILE)
     : path.join(dataDir, 'plex-donate.db'),
