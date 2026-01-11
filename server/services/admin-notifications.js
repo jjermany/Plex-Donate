@@ -114,6 +114,8 @@ async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
 
 async function notifyTrialStarted({ donor, route, accessExpiresAt }) {
   const donorLabel = formatDonorLabel(donor);
+  const donorEmail = donor && donor.email;
+  const includesEmail = donorEmail && donorLabel.includes(donorEmail);
   await sendNotification({
     enabledKey: 'onTrialStarted',
     subject: `[Admin] Trial started: ${donorLabel}`,
@@ -121,7 +123,7 @@ async function notifyTrialStarted({ donor, route, accessExpiresAt }) {
     intro: `${donorLabel} started a Plex trial.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      { label: 'Email', value: donor && donor.email },
+      ...(includesEmail ? [] : [{ label: 'Email', value: donorEmail }]),
       { label: 'Route', value: route || 'share' },
       { label: 'Trial ends', value: formatTimestamp(accessExpiresAt) },
     ],
