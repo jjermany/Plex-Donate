@@ -3073,11 +3073,7 @@ async function createInvite(
 
   const normalizedInvitedId =
     invitedId === undefined || invitedId === null ? '' : String(invitedId).trim();
-  const hasValidInvitedId = Boolean(normalizedInvitedId);
-  const resolvedInvitedId = hasValidInvitedId
-    ? normalizedInvitedId
-    : await resolveInvitedIdByEmail(plex, normalizedEmail);
-  const hasResolvedInvitedId = Boolean(resolvedInvitedId);
+  const hasResolvedInvitedId = Boolean(normalizedInvitedId);
 
   // Use Plex Web's private API endpoint (the one that actually works)
   const serverId = await resolveServerId(plex);
@@ -3087,7 +3083,7 @@ async function createInvite(
   const formData = new URLSearchParams();
   formData.append('machineIdentifier', serverId);
   if (hasResolvedInvitedId) {
-    formData.append('invitedId', resolvedInvitedId);
+    formData.append('invitedId', normalizedInvitedId);
   } else {
     formData.append('invitedEmail', normalizedEmail);
   }
@@ -3140,7 +3136,7 @@ async function createInvite(
       allowTuners: '0',
     };
     if (hasResolvedInvitedId) {
-      inviteRequestLog.invitedId = resolvedInvitedId;
+      inviteRequestLog.invitedId = normalizedInvitedId;
     } else {
       inviteRequestLog.invitedEmail = normalizedEmail;
     }
