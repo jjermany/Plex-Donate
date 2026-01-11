@@ -3166,17 +3166,24 @@ async function createInvite(
     const bodyText = await response.text().catch(() => '');
     const statusText = response.statusText || 'Error';
     const suffix = bodyText ? `: ${bodyText}` : '';
+    const inviteRequestLog = {
+      machineIdentifier: serverId,
+      invitedEmail: normalizedEmail,
+      librarySectionIds: finalSectionIds,
+      allowSync: to01(plex?.allowSync === true || plex?.allowSync === '1'),
+      allowChannels: to01(plex?.allowChannels === true || plex?.allowChannels === '1'),
+      allowCameraUpload: to01(
+        plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1'
+      ),
+      allowTuners: '0',
+    };
 
     // Log the full error for debugging
     logger.error('Plex invite creation failed', {
       status: response.status,
       statusText,
       body: bodyText,
-      requestBody: {
-        machineIdentifier: requestBody.machineIdentifier,
-        invitedEmail: requestBody.invitedEmail,
-        libraryCount: requestBody.shared_server.libraries.length,
-      },
+      requestBody: inviteRequestLog,
     });
 
     // Provide helpful error messages for common scenarios
