@@ -2369,93 +2369,6 @@ function resolveSectionSelectionId(rawValue, availableIdsSet, keyToIdMap = {}) {
   return null;
 }
 
-async function resolveInvitedIdByEmail(plex, email) {
-  const normalizedEmail = email ? String(email).trim() : '';
-  if (!normalizedEmail) {
-    return null;
-  }
-
-  const params = new URLSearchParams({ invitedEmail: normalizedEmail });
-  const url = buildPlexTvUrl(`/api/home/users?${params.toString()}`, plex);
-
-  let response;
-  try {
-    response = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
-  } catch (err) {
-    throw new Error(
-      `Failed to resolve Plex invitedId via /api/home/users: ${err.message}`
-    );
-  }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('Plex rejected the provided token.');
-  }
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  if (!response.ok) {
-    const statusText = response.statusText || 'Error';
-    const details = await extractErrorMessage(response);
-    const suffix = details ? `: ${details}` : '';
-    throw new Error(
-      `Failed to resolve Plex invitedId via /api/home/users: ${response.status} (${statusText})${suffix}`
-    );
-  }
-
-  const payload = await response.text();
-  const invitedId = parseInvitedIdFromHomeUsersPayload(payload, normalizedEmail);
-  if (invitedId) {
-    return invitedId;
-  }
-
-  try {
-    const { users } = await fetchUsersList(plex);
-    const normalized = normalize(normalizedEmail);
-    for (const user of coerceArray(users)) {
-      if (!user || typeof user !== 'object') {
-        continue;
-      }
-
-      const candidates = [user];
-      if (user.account && typeof user.account === 'object') {
-        candidates.push(user.account);
-      }
-
-      const hasMatch = candidates.some((entry) =>
-        matchesEmail(entry, normalizedEmail) ||
-        normalize(getCaseInsensitive(entry, 'email')) === normalized
-      );
-
-      if (!hasMatch) {
-        continue;
-      }
-
-      for (const entry of candidates) {
-        const id = extractIdFromCandidate(entry);
-        if (id) {
-          return id;
-        }
-      }
-
-      const fallbackId = extractIdFromCandidate(user);
-      if (fallbackId) {
-        return fallbackId;
-      }
-    }
-  } catch (err) {
-    throw new Error(
-      `Unable to determine Plex invitedId for ${normalizedEmail}: ${err.message}`
-    );
-  }
-
-  return null;
-}
-
 function getCaseInsensitive(obj, key) {
   if (!obj || typeof obj !== 'object') {
     return undefined;
@@ -2474,151 +2387,6 @@ function getCaseInsensitive(obj, key) {
   }
 
   return undefined;
-}
-
-function extractIdFromCandidate(candidate) {
-  if (!candidate || typeof candidate !== 'object') {
-    return null;
-  }
-
-  for (const key of HOME_USER_ID_KEYS) {
-    const value = getCaseInsensitive(candidate, key);
-    if (value !== undefined && value !== null) {
-      const normalized = String(value).trim();
-      if (normalized) {
-        return normalized;
-      }
-    }
-  }
-
-  return null;
-}
-
-function collectHomeUserCandidates(node, accumulator, seen = new Set()) {
-  if (!node || typeof node !== 'object' || seen.has(node)) {
-    return;
-  }
-
-  seen.add(node);
-
-  if (Array.isArray(node)) {
-    node.forEach((entry) => collectHomeUserCandidates(entry, accumulator, seen));
-    return;
-  }
-
-  const keys = Object.keys(node).map((entry) => String(entry || '').toLowerCase());
-  const looksLikeUser = keys.some((entry) =>
-    entry.includes('user') || entry.includes('account') || entry.includes('email')
-  );
-
-  if (looksLikeUser) {
-    accumulator.add(node);
-  }
-
-  for (const value of Object.values(node)) {
-    if (value && typeof value === 'object') {
-      collectHomeUserCandidates(value, accumulator, seen);
-    }
-  }
-}
-
-function parseInvitedIdFromHomeUsersPayload(payload, email) {
-  if (!payload) {
-    return null;
-  }
-
-  const candidateSet = new Set();
-  try {
-    const data = JSON.parse(payload);
-    collectHomeUserCandidates(data, candidateSet);
-  } catch (err) {
-    // Ignore JSON parsing errors and fall back to regex/XML parsing below.
-  }
-
-  const candidates = Array.from(candidateSet);
-  for (const candidate of candidates) {
-    if (!candidate || typeof candidate !== 'object') {
-      continue;
-    }
-
-    const relatedCandidates = [candidate];
-    const account = getCaseInsensitive(candidate, 'account');
-    if (account && typeof account === 'object') {
-      relatedCandidates.push(account);
-    }
-    const user = getCaseInsensitive(candidate, 'user');
-    if (user && typeof user === 'object') {
-      relatedCandidates.push(user);
-    }
-
-    const matches = relatedCandidates.some((entry) => matchesEmail(entry, email));
-    const invitedEmailCandidate = getCaseInsensitive(candidate, 'invitedEmail');
-    const invitedEmailMatch =
-      invitedEmailCandidate && normalize(invitedEmailCandidate) === normalize(email);
-
-    if (!matches && !invitedEmailMatch) {
-      continue;
-    }
-
-    for (const entry of relatedCandidates) {
-      const id = extractIdFromCandidate(entry);
-      if (id) {
-        return id;
-      }
-    }
-
-    const fallbackId = extractIdFromCandidate(candidate);
-    if (fallbackId) {
-      return fallbackId;
-    }
-  }
-
-  const jsonRegexes = [
-    /"invited(?:Id|_id)"\s*:\s*"([^"]+)"/i,
-    /"invited(?:Id|_id)"\s*:\s*([\w:-]+)/i,
-  ];
-
-  for (const regex of jsonRegexes) {
-    const match = regex.exec(payload);
-    if (match && match[1]) {
-      const normalized = String(match[1]).trim();
-      if (normalized) {
-        return normalized;
-      }
-    }
-  }
-
-  const pattern = /<(?:User|HomeUser)\b[^>]*>/gi;
-  let match;
-  while ((match = pattern.exec(payload))) {
-    const tag = match[0];
-    const attributes = {};
-    tag.replace(/([\w:-]+)="([^"]*)"/g, (_, attribute, value) => {
-      attributes[String(attribute || '').toLowerCase()] = value;
-      return '';
-    });
-
-    const emails = HOME_USER_EMAIL_KEYS.map((key) => attributes[key]).filter(Boolean);
-    const emailMatch =
-      emails.some((entry) => normalize(entry) === normalize(email)) ||
-      normalize(attributes.email) === normalize(email);
-
-    if (!emailMatch) {
-      continue;
-    }
-
-    for (const key of HOME_USER_ID_KEYS) {
-      const value = attributes[key];
-      if (value !== undefined && value !== null) {
-        const normalized = String(value).trim();
-        if (normalized) {
-          return normalized;
-        }
-      }
-    }
-  }
-
-  return null;
 }
 
 async function fetchLibrarySections(plex) {
@@ -3124,12 +2892,8 @@ async function createInvite(
 
   const normalizedFriendlyName = friendlyName ? String(friendlyName).trim() : '';
 
-  let resolvedInvitedId = invitedId === undefined || invitedId === null
-    ? ''
-    : String(invitedId).trim();
-  if (!resolvedInvitedId) {
-    resolvedInvitedId = await resolveInvitedIdByEmail(plex, normalizedEmail);
-  }
+  const normalizedInvitedId =
+    invitedId === undefined || invitedId === null ? '' : String(invitedId).trim();
 
   // Use Plex Web's private API endpoint (the one that actually works)
   const serverId = await resolveServerId(plex);
@@ -3139,6 +2903,9 @@ async function createInvite(
   const formData = new URLSearchParams();
   formData.append('machineIdentifier', serverId);
   formData.append('invitedEmail', normalizedEmail);
+  if (normalizedInvitedId) {
+    formData.append('invitedId', normalizedInvitedId);
+  }
 
   // Add libraries as array format: libraries[0][library_id], libraries[0][allow_sync], etc.
   finalSectionIds.forEach((libraryId, index) => {
@@ -3186,6 +2953,7 @@ async function createInvite(
       allowCameraUpload: to01(
         plex?.allowCameraUpload === true || plex?.allowCameraUpload === '1'
       ),
+      invitedId: normalizedInvitedId || undefined,
       allowTuners: '0',
     };
 
