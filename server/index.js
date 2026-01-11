@@ -29,7 +29,7 @@ const {
 const app = express();
 
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
-const SESSION_TTL_MS = 1000 * 60 * 15;
+const SESSION_TTL_MS = config.sessionTtlMs;
 const ACCESS_REVOCATION_CHECK_INTERVAL_MS = 1000 * 60 * 5;
 const SUBSCRIPTION_REFRESH_INTERVAL_MS = 1000 * 60 * 5;
 const TRIAL_REMINDER_CHECK_INTERVAL_MS = 1000 * 60 * 30;
