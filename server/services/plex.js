@@ -85,6 +85,17 @@ const SHARED_MEMBER_NESTED_KEYS = [
 ];
 const SHARED_MEMBER_DEFAULT_STATUS = 'accepted';
 const to01 = (value) => (value ? '1' : '0');
+const sanitizePlexLogUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has('X-Plex-Token')) {
+      parsed.searchParams.set('X-Plex-Token', 'REDACTED');
+    }
+    return parsed.toString();
+  } catch (err) {
+    return url;
+  }
+};
 
 const asStringArray = (value) => {
   if (!value && value !== 0) {
@@ -3141,7 +3152,7 @@ async function createInvite(
 
   // Log the form data for debugging
   logger.info('Creating Plex invite - Form Data:', {
-    url: sharedServersUrl,
+    url: sanitizePlexLogUrl(sharedServersUrl),
     body: formData.toString()
   });
 
