@@ -1,5 +1,6 @@
 const plexService = require('../services/plex');
 const logger = require('./logger');
+const { isInviteStale } = require('./invite-stale');
 
 function normalizeValue(value) {
   if (value === undefined || value === null) {
@@ -140,40 +141,6 @@ function annotateDonorWithPlex(donor, context) {
     const hasIdMatch = !hasEmailMatch && idCandidates.some((value) => entry.ids.has(value));
     return hasEmailMatch || hasIdMatch;
   });
-
-  const staleInviteDaysRaw = process.env.PLEX_INVITE_STALE_DAYS;
-  const staleInviteDays = Number.parseInt(staleInviteDaysRaw || '0', 10);
-  const staleInviteMs = Number.isFinite(staleInviteDays) && staleInviteDays > 0
-    ? staleInviteDays * 24 * 60 * 60 * 1000
-    : 0;
-
-  const resolveInviteTimestamp = (invite) => {
-    if (!invite) {
-      return null;
-    }
-    const candidates = [invite.plexInvitedAt, invite.invitedAt, invite.createdAt];
-    for (const value of candidates) {
-      if (!value) {
-        continue;
-      }
-      const parsed = Date.parse(value);
-      if (!Number.isNaN(parsed)) {
-        return parsed;
-      }
-    }
-    return null;
-  };
-
-  const isInviteStale = (invite) => {
-    if (!staleInviteMs) {
-      return false;
-    }
-    const timestamp = resolveInviteTimestamp(invite);
-    if (!timestamp) {
-      return false;
-    }
-    return Date.now() - timestamp > staleInviteMs;
-  };
 
   const plexShared = Boolean(matchedEntry && !matchedEntry.pending);
   const plexPendingFromUser = Boolean(matchedEntry && matchedEntry.pending);

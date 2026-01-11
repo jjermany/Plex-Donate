@@ -20,10 +20,7 @@ const plexService = require('../services/plex');
 const emailService = require('../services/email');
 const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
-const {
-  INVITE_COOLDOWN_MS,
-  getInviteCreatedAtMs,
-} = require('../utils/invite-cooldown');
+const { isInviteStale } = require('../utils/invite-stale');
 
 const router = express.Router();
 
@@ -714,10 +711,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
 
     if (!donorHasShare && !donorHasPendingShare) {
-      const createdAtMs = getInviteCreatedAtMs(invite);
-      const inviteIsStale =
-        Number.isFinite(createdAtMs) &&
-        Date.now() - createdAtMs > INVITE_COOLDOWN_MS;
+      const inviteIsStale = isInviteStale(invite);
       const inviteMissingUrl = !invite.inviteUrl;
       const shouldRecreateInvite = inviteIsStale || inviteMissingUrl;
       const shouldResendEmail =
