@@ -66,27 +66,7 @@ test('plexService.createInvite uses v2 when available', async () => {
       };
     }
 
-    if (
-      url ===
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            users: [
-              {
-                id: '2001',
-                email: 'friend@example.com',
-                invitedId: 'INVITED-2001',
-              },
-            ],
-          }),
-      };
-    }
-
-    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -119,7 +99,7 @@ test('plexService.createInvite uses v2 when available', async () => {
       }
     );
 
-    assert.equal(calls.length, 5);
+    assert.equal(calls.length, 4);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -128,22 +108,25 @@ test('plexService.createInvite uses v2 when available', async () => {
     assert.equal(calls[2].url, 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123');
     assert.equal(
       calls[3].url,
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123'
     );
-    assert.equal(calls[4].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
-    const v2Payload = JSON.parse(calls[4].options.body);
-    assert.deepEqual(v2Payload, {
-      machineIdentifier: 'd4e2machine',
-      librarySectionIds: ['10', '12'],
-      invitedId: 'INVITED-2001',
-      settings: { allowSync: '1', allowCameraUpload: '0', allowChannels: '1' },
-    });
+    const v2Payload = new URLSearchParams(calls[3].options.body);
+    assert.equal(v2Payload.get('machineIdentifier'), 'd4e2machine');
+    assert.equal(v2Payload.get('invitedEmail'), 'friend@example.com');
+    assert.equal(v2Payload.get('allow_channels'), '1');
+    assert.equal(v2Payload.get('allow_camera_upload'), '0');
+    assert.equal(v2Payload.get('allow_tuners'), '0');
+    assert.equal(v2Payload.get('libraries[0][library_id]'), '10');
+    assert.equal(v2Payload.get('libraries[0][allow_sync]'), '1');
+    assert.equal(v2Payload.get('libraries[1][library_id]'), '12');
+    assert.equal(v2Payload.get('libraries[1][allow_sync]'), '1');
+    assert.equal(v2Payload.get('invitedId'), null);
 
     assert.equal(result.inviteId, 'INV-100');
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-100');
     assert.equal(result.status, 'pending');
     assert.equal(
-      calls[4].options.headers['X-Plex-Client-Identifier'],
+      calls[3].options.headers['X-Plex-Client-Identifier'],
       'plex-donate-d4e2machine'
     );
   });
@@ -192,27 +175,7 @@ test('plexService.createInvite extracts invite url from nested links arrays', as
       };
     }
 
-    if (
-      url ===
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            users: [
-              {
-                id: '2001',
-                email: 'friend@example.com',
-                invitedId: 'INVITED-2001',
-              },
-            ],
-          }),
-      };
-    }
-
-    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -253,7 +216,10 @@ test('plexService.createInvite extracts invite url from nested links arrays', as
       }
     );
 
-    assert.equal(calls[calls.length - 1].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
+    assert.equal(
+      calls[calls.length - 1].url,
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123'
+    );
     assert.equal(result.inviteId, 'INV-200');
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-200');
   });
@@ -302,27 +268,7 @@ test('plexService.createInvite translates legacy configured section indices', as
       };
     }
 
-    if (
-      url ===
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            users: [
-              {
-                id: '2001',
-                email: 'friend@example.com',
-                invitedId: 'INVITED-2001',
-              },
-            ],
-          }),
-      };
-    }
-
-    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
       return {
         ok: true,
         status: 200,
@@ -352,7 +298,7 @@ test('plexService.createInvite translates legacy configured section indices', as
       }
     );
 
-    assert.equal(calls.length, 5);
+    assert.equal(calls.length, 4);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -361,83 +307,15 @@ test('plexService.createInvite translates legacy configured section indices', as
     assert.equal(calls[2].url, 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123');
     assert.equal(
       calls[3].url,
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
+      'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123'
     );
-    assert.equal(calls[4].url, 'https://plex.tv/api/v2/friends?X-Plex-Token=token123');
-    const v2Payload = JSON.parse(calls[4].options.body);
-    assert.deepEqual(v2Payload.librarySectionIds, ['10', '12']);
+    const v2Payload = new URLSearchParams(calls[3].options.body);
+    assert.equal(v2Payload.get('libraries[0][library_id]'), '10');
+    assert.equal(v2Payload.get('libraries[1][library_id]'), '12');
 
     assert.equal(result.inviteId, 'INV-101');
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-101');
     assert.equal(result.status, 'pending');
-  });
-});
-
-test('plexService.createInvite throws when invitedId lookup fails', async () => {
-  await withMockedFetch(async (url) => {
-    if (
-      url ===
-      'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify([
-            {
-              name: 'UnraidNAS',
-              provides: 'server',
-              clientIdentifier: 'd4e2machine',
-              owned: '1',
-              connections: [{ uri: 'https://example.com:32400' }],
-            },
-          ]),
-      };
-    }
-
-    if (url === 'https://plex.tv/api/servers?X-Plex-Token=token123') {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          '<MediaContainer><Server machineIdentifier="d4e2machine" owned="1"/></MediaContainer>',
-      };
-    }
-
-    if (url === 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123') {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          '<MediaContainer><Server machineIdentifier="d4e2machine"><Section id="10" key="/library/sections/1" title="Movies"/></Server></MediaContainer>',
-      };
-    }
-
-    if (
-      url ===
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () => JSON.stringify({ users: [] }),
-      };
-    }
-
-    throw new Error(`Unexpected URL: ${url}`);
-  }, async (plexService) => {
-    await assert.rejects(
-      () =>
-        plexService.createInvite(
-          { email: 'friend@example.com' },
-          {
-            baseUrl: 'https://plex.local',
-            token: 'token123',
-            serverIdentifier: 'd4e2machine',
-          }
-        ),
-      /invitedId/
-    );
   });
 });
 
@@ -481,13 +359,9 @@ test('plexService.createInvite uses provided invitedId when supplied', async () 
       };
     }
 
-    if (url.includes('/api/home/users')) {
-      throw new Error('home users endpoint should not be called');
-    }
-
-    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
-      const body = JSON.parse(options.body);
-      assert.equal(body.invitedId, 'INVITED-2001');
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+      const body = new URLSearchParams(options.body);
+      assert.equal(body.get('invitedId'), 'INVITED-2001');
       return {
         ok: true,
         status: 200,
@@ -558,23 +432,7 @@ test('plexService.createInvite surfaces Plex errors from v2 endpoint', async () 
       };
     }
 
-    if (
-      url ===
-      'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-    ) {
-      return {
-        ok: true,
-        status: 200,
-        text: async () =>
-          JSON.stringify({
-            users: [
-              { id: '2001', email: 'friend@example.com', invitedId: 'INVITED-2001' },
-            ],
-          }),
-      };
-    }
-
-    if (url === 'https://plex.tv/api/v2/friends?X-Plex-Token=token123') {
+    if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
       return {
         ok: false,
         status: 422,
@@ -992,22 +850,8 @@ test('plexService.createInvite throws when Plex omits invite id', async () => {
 
       if (
         url ===
-        'https://plex.tv/api/home/users?invitedEmail=friend%40example.com&X-Plex-Token=token123'
-      ) {
-        return {
-          ok: true,
-          status: 200,
-          text: async () =>
-            JSON.stringify({
-              users: [
-                { id: '2001', email: 'friend@example.com', invitedId: 'INVITED-2001' },
-              ],
-            }),
-        };
-      }
-
-      return {
-        ok: true,
+    return {
+      ok: true,
         status: 200,
         json: async () => ({}),
       };
@@ -1749,4 +1593,3 @@ test(
     }
   }
 );
-
