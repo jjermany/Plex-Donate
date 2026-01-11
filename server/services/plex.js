@@ -2568,6 +2568,185 @@ function matchesEmail(user, email) {
   return candidates.some((candidate) => normalize(candidate) === normalized);
 }
 
+function extractIdFromCandidate(candidate) {
+  if (!candidate || typeof candidate !== 'object') {
+    return null;
+  }
+
+  for (const key of HOME_USER_ID_KEYS) {
+    const value = getCaseInsensitive(candidate, key);
+    if (value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+
+  return null;
+}
+
+function collectHomeUserCandidates(payload) {
+  const results = [];
+  const visited = new Set();
+  const indicatorKeys = [...HOME_USER_EMAIL_KEYS, ...HOME_USER_ID_KEYS];
+
+  const visit = (value) => {
+    if (!value) {
+      return;
+    }
+
+    if (visited.has(value)) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.forEach((entry) => visit(entry));
+      return;
+    }
+
+    if (typeof value !== 'object') {
+      return;
+    }
+
+    visited.add(value);
+
+    const hasIndicators = indicatorKeys.some(
+      (key) => getCaseInsensitive(value, key) !== undefined
+    );
+    if (hasIndicators) {
+      results.push(value);
+    }
+
+    const nested = [];
+
+    const container =
+      getCaseInsensitive(value, 'MediaContainer') ||
+      getCaseInsensitive(value, 'mediaContainer') ||
+      getCaseInsensitive(value, 'container') ||
+      getCaseInsensitive(value, 'Container');
+    if (container) {
+      nested.push(container);
+    }
+
+    ['users', 'user', 'Users', 'User', 'homeUsers', 'homeUser', 'HomeUsers', 'HomeUser'].forEach(
+      (key) => {
+        const entry = getCaseInsensitive(value, key);
+        if (entry) {
+          nested.push(entry);
+        }
+      }
+    );
+
+    coerceArray(nested).forEach((entry) => visit(entry));
+
+    Object.values(value).forEach((child) => {
+      if (child && typeof child === 'object') {
+        visit(child);
+      }
+    });
+  };
+
+  visit(payload);
+
+  return results;
+}
+
+function parseInvitedIdFromHomeUsersPayload(payload, email) {
+  const normalizedEmail = normalize(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  let candidates = [];
+  if (payload && typeof payload === 'object') {
+    candidates = collectHomeUserCandidates(payload);
+  } else if (payload) {
+    const text = String(payload);
+    try {
+      const parsed = JSON.parse(text);
+      candidates = collectHomeUserCandidates(parsed);
+    } catch (err) {
+      const indicatorKeys = [...HOME_USER_EMAIL_KEYS, ...HOME_USER_ID_KEYS];
+      const tagPattern = /<[^>]+>/g;
+      let match;
+      while ((match = tagPattern.exec(text))) {
+        const attributes = {};
+        match[0].replace(/([\w:-]+)="([^"]*)"/g, (_, key, value) => {
+          attributes[key] = value;
+          return '';
+        });
+
+        const hasIndicators = indicatorKeys.some(
+          (key) => getCaseInsensitive(attributes, key) !== undefined
+        );
+        if (hasIndicators) {
+          candidates.push(attributes);
+        }
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    const invitedEmail =
+      getCaseInsensitive(candidate, 'invitedEmail') ||
+      getCaseInsensitive(candidate, 'invited_email') ||
+      null;
+
+    if (invitedEmail && normalize(invitedEmail) !== normalizedEmail) {
+      continue;
+    }
+
+    const emailMatches = invitedEmail
+      ? normalize(invitedEmail) === normalizedEmail
+      : matchesEmail(candidate, normalizedEmail);
+
+    if (!emailMatches) {
+      continue;
+    }
+
+    const invitedId = extractIdFromCandidate(candidate);
+    if (invitedId) {
+      return invitedId;
+    }
+  }
+
+  return null;
+}
+
+async function resolveInvitedIdByEmail(plex, email) {
+  const normalizedEmail = normalize(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  const { users } = await fetchUsersList(plex);
+  const candidates = collectHomeUserCandidates(coerceArray(users));
+
+  for (const candidate of candidates) {
+    const invitedEmail =
+      getCaseInsensitive(candidate, 'invitedEmail') ||
+      getCaseInsensitive(candidate, 'invited_email') ||
+      null;
+
+    if (invitedEmail && normalize(invitedEmail) !== normalizedEmail) {
+      continue;
+    }
+
+    const emailMatches = invitedEmail
+      ? normalize(invitedEmail) === normalizedEmail
+      : matchesEmail(candidate, normalizedEmail);
+
+    if (!emailMatches) {
+      continue;
+    }
+
+    const invitedId = extractIdFromCandidate(candidate);
+    if (invitedId) {
+      return invitedId;
+    }
+  }
+
+  return null;
+}
+
 async function revokeUser({ plexAccountId, email }) {
   if (!isConfigured()) {
     return { skipped: true, reason: 'Plex integration disabled' };
