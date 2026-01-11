@@ -4030,7 +4030,7 @@
         }
       }
 
-      const AUTO_REFRESH_INTERVAL_MS = 30 * 1000;
+      const AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
       let autoRefreshTimerId = null;
       let dashboardDataPromise = null;
       let isSessionExpiring = false;
@@ -4477,14 +4477,19 @@
         if (response.status === 429) {
           stopDashboardAutoRefresh();
           // Preserve the server's specific error message which includes timing details
-          const error = data.error || 'Too many requests. Please wait before trying again.';
-          console.warn('Rate limit exceeded:', error);
-          throw new Error(error);
+          const errorMessage =
+            data.error || 'Too many requests. Please wait before trying again.';
+          console.warn('Rate limit exceeded:', errorMessage);
+          const error = new Error(errorMessage);
+          error.status = response.status;
+          throw error;
         }
 
         if (!response.ok) {
-          const error = data.error || 'Request failed';
-          throw new Error(error);
+          const errorMessage = data.error || 'Request failed';
+          const error = new Error(errorMessage);
+          error.status = response.status;
+          throw error;
         }
 
         return data;
@@ -5685,28 +5690,47 @@
         return [normalize(baseUrl), normalize(token)].join('::');
       }
 
+      function applySettingsPayload(nextSettings) {
+        const previousSettings = state.settings;
+        const previousSignature = getPlexCredentialSignature(state.settings);
+        const nextSignature = getPlexCredentialSignature(nextSettings);
+        const credentialsChanged = previousSignature !== nextSignature;
+        state.settings = nextSettings;
+        if (!previousSettings && !anySettingsFormDirty()) {
+          clearSettingsFormDirtyFlags();
+        }
+        if (credentialsChanged) {
+          state.plexLibraries = null;
+          hasCachedPlexLibraries = false;
+        }
+        plexLibraryOptionsDirty = true;
+        settingsForms.forEach((form) => setFormStatus(form, ''));
+        maybeDefaultToIntegrationLanding();
+      }
+
+      function applyPaypalPlanPayload(payload) {
+        if (!payload) {
+          state.paypalPlan = null;
+          state.paypalProduct = null;
+          state.paypalPlanManageUrl = '';
+          state.paypalPlanError = '';
+          state.paypalPlanLoading = false;
+          return;
+        }
+        state.paypalPlan = payload.plan || null;
+        state.paypalProduct = payload.product || null;
+        state.paypalPlanManageUrl = payload.manageUrl || '';
+        state.paypalPlanError = payload.error || '';
+        state.paypalPlanLoading = false;
+      }
+
       async function loadSettings() {
         if (!settingsPanel) {
           return;
         }
         try {
-          const previousSettings = state.settings;
-          const previousSignature = getPlexCredentialSignature(state.settings);
           const response = await api('/api/admin/settings');
-          const nextSettings = response.settings || {};
-          const nextSignature = getPlexCredentialSignature(nextSettings);
-          const credentialsChanged = previousSignature !== nextSignature;
-          state.settings = nextSettings;
-          if (!previousSettings && !anySettingsFormDirty()) {
-            clearSettingsFormDirtyFlags();
-          }
-          if (credentialsChanged) {
-            state.plexLibraries = null;
-            hasCachedPlexLibraries = false;
-          }
-          plexLibraryOptionsDirty = true;
-          settingsForms.forEach((form) => setFormStatus(form, ''));
-          maybeDefaultToIntegrationLanding();
+          applySettingsPayload(response.settings || {});
         } catch (err) {
           console.error(err);
         }
@@ -5736,16 +5760,19 @@
 
         try {
           const response = await api('/api/admin/settings/paypal/plan');
-          state.paypalPlan = response.plan || null;
-          state.paypalProduct = response.product || null;
-          state.paypalPlanManageUrl = response.manageUrl || '';
-          state.paypalPlanError = response.error || '';
+          applyPaypalPlanPayload({
+            plan: response.plan || null,
+            product: response.product || null,
+            manageUrl: response.manageUrl || '',
+            error: response.error || '',
+          });
         } catch (err) {
-          state.paypalPlan = null;
-          state.paypalProduct = null;
-          state.paypalPlanManageUrl = '';
-          state.paypalPlanError =
-            err.message || 'Unable to load PayPal plan details.';
+          applyPaypalPlanPayload({
+            plan: null,
+            product: null,
+            manageUrl: '',
+            error: err.message || 'Unable to load PayPal plan details.',
+          });
         } finally {
           state.paypalPlanLoading = false;
           renderPaypalPlan();
@@ -6719,12 +6746,15 @@
 
       dashboardDataPromise = (async () => {
         try {
-          await loadAdminAccount();
           if (!state.authenticated) {
             return;
           }
           try {
-            const donorsResponse = await api('/api/admin/subscribers');
+            const query = state.support.includeResolved ? '?includeResolved=1' : '';
+            const response = await api(`/api/admin/dashboard${query}`);
+            if (response.adminUsername) {
+              state.adminUsername = response.adminUsername;
+            }
             const previousErrors = new Map(
               (Array.isArray(state.donors) ? state.donors : []).map((existing) => [
                 String(existing.id),
@@ -6733,8 +6763,8 @@
                   : '',
               ])
             );
-            const donorsFromApi = Array.isArray(donorsResponse.donors)
-              ? donorsResponse.donors.map((donor) => {
+            const donorsFromApi = Array.isArray(response.donors)
+              ? response.donors.map((donor) => {
                   const normalizedError =
                     typeof donor.paypalRefreshError === 'string'
                       ? donor.paypalRefreshError
@@ -6753,43 +6783,54 @@
                 })
               : [];
             state.donors = donorsFromApi;
-            state.plex = donorsResponse.plex || null;
+            state.plex = response.plex || null;
+            state.events = response.events || [];
+            applySettingsPayload(response.settings || {});
+            applyPaypalPlanPayload(response.paypalPlan || null);
+            state.shareLinks = response.shareLinks || [];
+            const support = response.support || {};
+            const threads = Array.isArray(support.threads) ? support.threads : [];
+            state.support.threads = threads;
+            if (
+              !threads.some(
+                (thread) =>
+                  thread.request && thread.request.id === state.support.activeThreadId
+              )
+            ) {
+              state.support.activeThreadId =
+                threads.length > 0 ? threads[0].request.id : null;
+            }
+            state.support.error = '';
+            state.support.loaded = true;
           } catch (err) {
-            console.error(err);
+            console.error('Failed to load dashboard data', err);
+            if (err && err.status === 429) {
+              showDashboardToast(
+                err.message || 'Too many requests. Please wait before trying again.',
+                'error',
+                6000
+              );
+              return;
+            }
             state.donors = [];
             state.plex = null;
-            if (!state.authenticated) {
-              return;
-            }
+            state.events = [];
+            state.shareLinks = [];
+            state.settings = null;
+            clearSettingsFormDirtyFlags();
+            state.paypalPlan = null;
+            state.paypalProduct = null;
+            state.paypalPlanError = '';
+            state.paypalPlanManageUrl = '';
+            state.paypalPlanLoading = false;
+            state.support = {
+              threads: [],
+              activeThreadId: null,
+              includeResolved: state.support.includeResolved,
+              error: '',
+              loaded: false,
+            };
           }
-          if (!state.authenticated) {
-            return;
-          }
-          try {
-            const eventsResponse = await api('/api/admin/events');
-            state.events = eventsResponse.events || [];
-          } catch (err) {
-            console.error(err);
-            if (!state.authenticated) {
-              return;
-            }
-          }
-          if (!state.authenticated) {
-            return;
-          }
-          await loadSettings();
-          if (!state.authenticated) {
-            return;
-          }
-          await loadPaypalPlan();
-          if (!state.authenticated) {
-            return;
-          }
-          await refreshShareLinks();
-          if (!state.authenticated) {
-            return;
-          }
-          await loadSupportRequests({ silent: true });
         } finally {
           try {
             render();

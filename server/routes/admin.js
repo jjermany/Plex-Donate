@@ -161,6 +161,70 @@ async function buildDonorListWithPlex() {
   return { donors: annotatedDonors, plexContext };
 }
 
+async function buildPaypalPlanPayload(options = {}) {
+  const { allowErrors = false } = options;
+  const paypalSettings = settingsStore.getPaypalSettings();
+  if (!paypalSettings.planId) {
+    return {
+      plan: null,
+      product: null,
+      manageUrl: '',
+      error: '',
+    };
+  }
+
+  try {
+    const plan = await paypalService.getPlan(paypalSettings.planId, paypalSettings);
+    let product = null;
+    if (plan && plan.product_id) {
+      try {
+        product = await paypalService.getProduct(plan.product_id, paypalSettings);
+      } catch (err) {
+        if (!err || err.status !== 404) {
+          throw err;
+        }
+      }
+    }
+
+    const manageUrl = paypalService.getPlanManagementUrl(
+      paypalSettings.planId,
+      paypalSettings
+    );
+
+    return {
+      plan,
+      product,
+      manageUrl,
+      error: '',
+    };
+  } catch (err) {
+    if (err && err.status === 404) {
+      return {
+        plan: null,
+        product: null,
+        manageUrl: '',
+        error: 'PayPal could not find the configured billing plan. Generate a new plan to continue.',
+      };
+    }
+    if (allowErrors) {
+      return {
+        plan: null,
+        product: null,
+        manageUrl: '',
+        error: err && err.message ? err.message : 'Failed to load PayPal plan details.',
+      };
+    }
+    throw err;
+  }
+}
+
+function buildSupportThreads(includeResolved) {
+  const requests = listSupportRequests({ includeResolved });
+  return requests
+    .map((request) => getSupportThreadById(request.id))
+    .filter(Boolean);
+}
+
 function buildPlexRevocationContext(donor) {
   const invites = listInvitesForDonor(donor.id);
   const activeInvite = invites.find((invite) => invite && !invite.revokedAt) || null;
@@ -422,6 +486,47 @@ router.post(
     }
 
     return res.json({ success: true, csrfToken: res.locals.csrfToken });
+  })
+);
+
+router.get(
+  '/dashboard',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.locals.sessionToken = ensureSessionToken(req);
+    const includeResolvedParam = String(req.query.includeResolved || '').trim();
+    const includeResolved = includeResolvedParam
+      ? !['0', 'false', 'no'].includes(includeResolvedParam.toLowerCase())
+      : true;
+
+    const [{ donors, plexContext }, paypalPlan] = await Promise.all([
+      buildDonorListWithPlex(),
+      buildPaypalPlanPayload({ allowErrors: true }),
+    ]);
+
+    const events = getRecentEvents(100);
+    const settings = settingsStore.getSettings();
+    const shareLinks = listShareLinks();
+    const threads = buildSupportThreads(includeResolved);
+    const account = getAdminAccount();
+
+    res.json({
+      donors,
+      plex: {
+        configured: plexContext.configured,
+        error: plexContext.error,
+      },
+      events,
+      settings,
+      shareLinks,
+      support: {
+        threads,
+        includeResolved,
+      },
+      paypalPlan,
+      adminUsername: account.username,
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 
@@ -770,55 +875,21 @@ router.get(
   '/settings/paypal/plan',
   requireAdmin,
   asyncHandler(async (req, res) => {
-    const paypalSettings = settingsStore.getPaypalSettings();
-    if (!paypalSettings.planId) {
-      return res.json({
-        plan: null,
-        product: null,
-        manageUrl: '',
-        csrfToken: res.locals.csrfToken,
-      });
-    }
-
     try {
-      const plan = await paypalService.getPlan(paypalSettings.planId, paypalSettings);
-      let product = null;
-      if (plan && plan.product_id) {
-        try {
-          product = await paypalService.getProduct(plan.product_id, paypalSettings);
-        } catch (err) {
-          if (!err || err.status !== 404) {
-            throw err;
-          }
-        }
-      }
-
-      const manageUrl = paypalService.getPlanManagementUrl(
-        paypalSettings.planId,
-        paypalSettings
-      );
-
+      const payload = await buildPaypalPlanPayload();
       res.json({
-        plan,
-        product,
-        manageUrl,
+        plan: payload.plan,
+        product: payload.product,
+        manageUrl: payload.manageUrl,
+        error: payload.error,
         csrfToken: res.locals.csrfToken,
       });
     } catch (err) {
+      const paypalSettings = settingsStore.getPaypalSettings();
       logger.warn(
         `Failed to load PayPal plan ${paypalSettings.planId}`,
         err.message
       );
-
-      if (err && err.status === 404) {
-        return res.json({
-          plan: null,
-          product: null,
-          manageUrl: '',
-          error: 'PayPal could not find the configured billing plan. Generate a new plan to continue.',
-          csrfToken: res.locals.csrfToken,
-        });
-      }
 
       res.status(400).json({
         error: err.message,
@@ -1129,10 +1200,7 @@ router.get(
     const includeResolved = includeResolvedParam
       ? !['0', 'false', 'no'].includes(includeResolvedParam.toLowerCase())
       : true;
-    const requests = listSupportRequests({ includeResolved });
-    const threads = requests
-      .map((request) => getSupportThreadById(request.id))
-      .filter(Boolean);
+    const threads = buildSupportThreads(includeResolved);
     res.json({ threads });
   })
 );
