@@ -558,12 +558,24 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     logger.info('Skipping automatic invite: donor email missing', {
       donorId: donor.id,
     });
+    logEvent('invite.auto.skipped', {
+      donorId: donor.id,
+      email: donor.email || null,
+      subscriptionId: donor.subscriptionId,
+      reason: 'missing_email',
+    });
     return;
   }
 
   if (!hasPlexLink(donor)) {
     logger.info('Skipping automatic invite: Plex account not linked', {
       donorId: donor.id,
+    });
+    logEvent('invite.auto.skipped', {
+      donorId: donor.id,
+      email: donor.email || null,
+      subscriptionId: donor.subscriptionId,
+      reason: 'plex_not_linked',
     });
     return;
   }
@@ -619,6 +631,12 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         if (donorHasAccess) {
           logger.info('Skipping automatic invite: donor already present on Plex server', {
             donorId: donor.id,
+          });
+          logEvent('invite.auto.skipped', {
+            donorId: donor.id,
+            email: donor.email || null,
+            subscriptionId: donor.subscriptionId,
+            reason: 'already_on_server',
           });
           // Mark this donor as having pre-existing access so we don't revoke it on cancellation
           if (!donor.hadPreexistingAccess) {
@@ -809,6 +827,14 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         } catch (err) {
           logger.warn('Automatic invite email failed', err.message);
         }
+      } else {
+        logEvent('invite.auto.skipped', {
+          donorId: donor.id,
+          email: donor.email || null,
+          subscriptionId: donor.subscriptionId,
+          reason: 'existing_invite_reused',
+          inviteId: invite.id,
+        });
       }
       return;
     }
