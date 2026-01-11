@@ -150,9 +150,9 @@ async function fetchIdentity({ authToken, clientIdentifier }) {
   const user = data.user || data || {};
 
   const plexAccountId =
-    user.uuid ||
     user.id ||
     user.userID ||
+    user.uuid ||
     (user.account ? user.account.id : null) ||
     null;
 
