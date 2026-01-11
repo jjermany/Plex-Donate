@@ -20,6 +20,10 @@ const plexService = require('../services/plex');
 const emailService = require('../services/email');
 const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
+const {
+  INVITE_COOLDOWN_MS,
+  getInviteCreatedAtMs,
+} = require('../utils/invite-cooldown');
 
 const router = express.Router();
 
@@ -577,6 +581,8 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     .toString()
     .trim()
     .toLowerCase();
+  let donorHasShare = false;
+  let donorHasPendingShare = false;
 
   if (plexService.isConfigured()) {
     try {
@@ -629,6 +635,43 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     } catch (err) {
       logger.warn('Unable to verify existing Plex users before inviting', err.message);
     }
+
+    try {
+      const shareState = await plexService.getCurrentPlexShares();
+      if (shareState.success && Array.isArray(shareState.shares)) {
+        shareState.shares.forEach((share) => {
+          if (!share) {
+            return;
+          }
+          const emails = Array.isArray(share.emails) ? share.emails : [];
+          const ids = Array.isArray(share.userIds) ? share.userIds : [];
+          const matchesEmail =
+            normalizedEmail &&
+            emails.some((value) => normalizeEmail(value) === normalizedEmail);
+          const matchesId =
+            normalizedAccountId &&
+            ids.some(
+              (value) =>
+                String(value || '')
+                  .trim()
+                  .toLowerCase() === normalizedAccountId
+            );
+          if (!matchesEmail && !matchesId) {
+            return;
+          }
+
+          const statusValue = (share.status || '').toString().toLowerCase();
+          const pending = Boolean(share.pending) || statusValue.includes('pending');
+          if (pending) {
+            donorHasPendingShare = true;
+          } else {
+            donorHasShare = true;
+          }
+        });
+      }
+    } catch (err) {
+      logger.warn('Unable to verify Plex share status before inviting', err.message);
+    }
   }
 
   const existingInvite = getLatestActiveInviteForDonor(donor.id);
@@ -638,7 +681,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     existingInviteUsable &&
     normalizeEmail(existingInvite.recipientEmail) === normalizedEmail;
 
-  if (existingInviteUsable && existingInviteMatches) {
+  if (existingInvite) {
     let invite = existingInvite;
     if (
       donor.plexAccountId &&
@@ -651,25 +694,124 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         plexEmail: donor.plexEmail,
       });
     }
-    if (!invite.emailSentAt) {
-      try {
-        await emailService.sendInviteEmail({
-          to: email,
-          inviteUrl: invite.inviteUrl,
-          name: donor.name,
-          subscriptionId: donor.subscriptionId,
-        });
-        invite = markInviteEmailSent(invite.id);
-        logEvent('invite.auto.email_sent', {
-          donorId: donor.id,
-          inviteId: invite.id,
-          source: 'payment-webhook',
-        });
-      } catch (err) {
-        logger.warn('Automatic invite email failed', err.message);
+
+    if (!donorHasShare && !donorHasPendingShare) {
+      const createdAtMs = getInviteCreatedAtMs(invite);
+      const inviteIsStale =
+        Number.isFinite(createdAtMs) &&
+        Date.now() - createdAtMs > INVITE_COOLDOWN_MS;
+      const inviteMissingUrl = !invite.inviteUrl;
+      const shouldRecreateInvite = inviteIsStale || inviteMissingUrl;
+      const shouldResendEmail =
+        Boolean(invite.emailSentAt) && !inviteIsStale && !inviteMissingUrl;
+
+      if (shouldRecreateInvite || shouldResendEmail) {
+        let recreatedInvite = invite;
+        let reinviteAction = null;
+        let reinviteReason = null;
+
+        if (shouldRecreateInvite) {
+          reinviteAction = 'recreate_invite';
+          reinviteReason = inviteMissingUrl ? 'missing_invite_url' : 'stale_invite';
+
+          if (!plexService.isConfigured()) {
+            logger.warn('Plex service not configured - cannot recreate invite');
+          } else {
+            try {
+              const inviteData = await plexService.createInvite({
+                email,
+                friendlyName: donor.name || undefined,
+                invitedId: donor.plexAccountId || undefined,
+              });
+
+              recreatedInvite = updateInvitePlexDetails(invite.id, {
+                plexInviteId: inviteData.inviteId,
+                plexInviteUrl: inviteData.inviteUrl || '',
+                plexInviteStatus: inviteData.status || null,
+                plexInvitedAt: inviteData.invitedAt || new Date().toISOString(),
+                plexSharedLibraries: Array.isArray(inviteData.sharedLibraries)
+                  ? inviteData.sharedLibraries
+                  : undefined,
+                plexAccountId: donor.plexAccountId,
+                plexEmail: donor.plexEmail,
+              });
+            } catch (err) {
+              logger.warn('Failed to recreate Plex invite automatically', err.message);
+            }
+          }
+        } else if (shouldResendEmail) {
+          reinviteAction = 'resend_email';
+          reinviteReason = 'email_already_sent';
+        }
+
+        if (reinviteAction) {
+          logEvent('invite.auto.reinvited', {
+            donorId: donor.id,
+            inviteId: recreatedInvite.id,
+            action: reinviteAction,
+            reason: reinviteReason,
+            plexInviteId: recreatedInvite.plexInviteId || null,
+            source: 'payment-webhook',
+          });
+        }
+
+        if (recreatedInvite.inviteUrl) {
+          try {
+            await emailService.sendInviteEmail({
+              to: email,
+              inviteUrl: recreatedInvite.inviteUrl,
+              name: donor.name,
+              subscriptionId: donor.subscriptionId,
+            });
+            recreatedInvite = markInviteEmailSent(recreatedInvite.id);
+            logEvent('invite.auto.email_sent', {
+              donorId: donor.id,
+              inviteId: recreatedInvite.id,
+              source: 'payment-webhook',
+            });
+          } catch (err) {
+            logger.warn('Automatic invite email failed', err.message);
+            if (
+              reinviteAction === 'recreate_invite' &&
+              recreatedInvite.plexInviteId
+            ) {
+              try {
+                await plexService.cancelInvite(recreatedInvite.plexInviteId);
+              } catch (cancelErr) {
+                logger.warn(
+                  'Failed to cancel Plex invite after email failure',
+                  cancelErr.message
+                );
+              }
+            }
+          }
+        }
+
+        return;
       }
     }
-    return;
+
+    if (existingInviteUsable && existingInviteMatches) {
+      if (!invite.emailSentAt) {
+        try {
+          await emailService.sendInviteEmail({
+            to: email,
+            inviteUrl: invite.inviteUrl,
+            name: donor.name,
+            subscriptionId: donor.subscriptionId,
+          });
+          invite = markInviteEmailSent(invite.id);
+          logEvent('invite.auto.email_sent', {
+            donorId: donor.id,
+            inviteId: invite.id,
+            source: 'payment-webhook',
+          });
+        } catch (err) {
+          logger.warn('Automatic invite email failed', err.message);
+        }
+      }
+      return;
+    }
   }
 
   try {
