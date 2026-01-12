@@ -88,6 +88,36 @@
       [hidden] {
         display: none !important;
       }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.72);
+        backdrop-filter: blur(6px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 5;
+      }
+      .modal-panel {
+        width: min(460px, 100%);
+        background: rgba(15, 23, 42, 0.96);
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.7);
+        display: grid;
+        gap: 16px;
+        text-align: left;
+      }
+      .modal-panel h3 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
       .panel {
         width: min(780px, 100%);
         background: rgba(15, 23, 42, 0.82);
@@ -1617,6 +1647,26 @@
         </section>
       </main>
     </div>
+    <div
+      id="invite-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invite-modal-title"
+      aria-describedby="invite-modal-message"
+    >
+      <div class="modal-panel">
+        <h3 id="invite-modal-title">Invite sent</h3>
+        <p id="invite-modal-message">
+          Your Plex invite was just sent. Check your email (and spam folder) to accept it.
+        </p>
+        <div class="modal-actions">
+          <button id="invite-modal-ok" class="button-primary" type="button">
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
 
     <script>
       const state = {
@@ -1625,6 +1675,7 @@
         nextInviteAvailableAt: null,
         pendingPlexLink: null,
         announcement: null,
+        lastInviteId: null,
         support: {
           threads: [],
           activeThreadId: null,
@@ -1632,6 +1683,8 @@
           replyDrafts: {},
         },
       };
+      const INVITE_MODAL_COPY =
+        'Your Plex invite was just sent. Check your email (and spam folder) to accept it.';
       let inviteCooldownTimer = null;
       let inviteCooldownTimerType = null;
       let plexLinkPollTimer = null;
@@ -1642,6 +1695,12 @@
       let supportPanelOpen = false;
       let supportLoading = false;
       let supportThreadsRequest = null;
+      const INVITE_SEEN_KEY = 'plexDonateLastInviteId';
+      try {
+        state.lastInviteId = window.sessionStorage.getItem(INVITE_SEEN_KEY);
+      } catch (err) {
+        state.lastInviteId = null;
+      }
 
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
@@ -1695,6 +1754,9 @@
       const announcementBody = document.getElementById('announcement-body');
       const announcementCta = document.getElementById('announcement-cta');
       const announcementDismissButton = document.getElementById('announcement-dismiss');
+      const inviteModal = document.getElementById('invite-modal');
+      const inviteModalMessage = document.getElementById('invite-modal-message');
+      const inviteModalOk = document.getElementById('invite-modal-ok');
 
       const logoutButton = document.getElementById('logout-button');
       const memberNameEl = document.getElementById('member-name');
@@ -2061,6 +2123,60 @@
           element.classList.add('hidden');
           element.setAttribute('hidden', '');
         }
+      }
+
+      function getInviteIdentifier(invite) {
+        if (!invite) {
+          return '';
+        }
+        if (invite.id) {
+          return String(invite.id);
+        }
+        if (invite.inviteId) {
+          return String(invite.inviteId);
+        }
+        if (invite.inviteUrl) {
+          return String(invite.inviteUrl);
+        }
+        return '';
+      }
+
+      function setLastInviteId(inviteId) {
+        const normalized = inviteId ? String(inviteId) : '';
+        state.lastInviteId = normalized || null;
+        try {
+          if (normalized) {
+            window.sessionStorage.setItem(INVITE_SEEN_KEY, normalized);
+          } else {
+            window.sessionStorage.removeItem(INVITE_SEEN_KEY);
+          }
+        } catch (err) {
+          // ignore storage errors
+        }
+      }
+
+      function showInviteModal(message, inviteId) {
+        if (!inviteModal) {
+          return;
+        }
+        if (inviteModalMessage) {
+          inviteModalMessage.textContent = message;
+        }
+        setElementVisibility(inviteModal, true);
+        if (inviteId) {
+          setLastInviteId(inviteId);
+        }
+      }
+
+      function maybeShowInviteModal(message, invite) {
+        const inviteId = getInviteIdentifier(invite);
+        if (!inviteId) {
+          return;
+        }
+        if (state.lastInviteId === inviteId) {
+          return;
+        }
+        showInviteModal(message, inviteId);
       }
 
       function isValidDashboardTab(value) {
@@ -3440,6 +3556,8 @@
       }
 
       function renderDashboard(data) {
+        const previousInvite = state.data && state.data.invite ? state.data.invite : null;
+        const previousInviteId = getInviteIdentifier(previousInvite);
         const previouslyAuthenticated = Boolean(
           state.data && state.data.authenticated
         );
@@ -3906,6 +4024,11 @@
         renderInvite(data.invite, limitReached, nextInviteAvailableAt, {
           emailVerified,
         });
+        const currentInvite = data && data.invite ? data.invite : null;
+        const currentInviteId = getInviteIdentifier(currentInvite);
+        if (currentInviteId && currentInviteId !== previousInviteId) {
+          maybeShowInviteModal(INVITE_MODAL_COPY, currentInvite);
+        }
 
         const inviteBlocked = !emailVerified || normalizedStatus !== 'active' || limitReached;
         if (inviteSubmit) {
@@ -4353,6 +4476,12 @@
         }
       });
 
+      if (inviteModalOk) {
+        inviteModalOk.addEventListener('click', () => {
+          setElementVisibility(inviteModal, false);
+        });
+      }
+
       if (subscriptionButton) {
         subscriptionButton.addEventListener('click', async (event) => {
           event.preventDefault();
@@ -4407,6 +4536,7 @@
                   'Trial activated! Check your email for the Plex invite.',
                   'success'
                 );
+                maybeShowInviteModal(INVITE_MODAL_COPY, payload.invite);
               }
               trialStatus.classList.add('small');
             }
