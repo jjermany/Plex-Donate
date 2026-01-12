@@ -20,6 +20,7 @@ const { db, createDonor, listDonorsWithDetails } = require('../db');
 const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const emailService = require('../services/email');
+const adminNotifications = require('../services/admin-notifications');
 const nodemailer = require('nodemailer');
 
 function startServer(app) {
@@ -232,6 +233,79 @@ test('capture payments are recorded for admin view', { concurrency: false }, asy
       '15.25 USD',
       'admin view should display captured payment amount'
     );
+  } finally {
+    await server.close();
+  }
+});
+
+test('activation payment triggers subscription thank-you email', { concurrency: false }, async (t) => {
+  resetDatabase();
+
+  const originalVerifySignature = paypalService.verifyWebhookSignature;
+  paypalService.verifyWebhookSignature = async () => ({ verified: true });
+  t.after(() => {
+    paypalService.verifyWebhookSignature = originalVerifySignature;
+  });
+
+  const originalNotifySubscriptionStarted = adminNotifications.notifySubscriptionStarted;
+  adminNotifications.notifySubscriptionStarted = async () => {};
+  t.after(() => {
+    adminNotifications.notifySubscriptionStarted = originalNotifySubscriptionStarted;
+  });
+
+  const thankYouCalls = [];
+  const originalSendThankYou = emailService.sendSubscriptionThankYouEmail;
+  emailService.sendSubscriptionThankYouEmail = async (details) => {
+    thankYouCalls.push(details);
+  };
+  t.after(() => {
+    emailService.sendSubscriptionThankYouEmail = originalSendThankYou;
+  });
+
+  createDonor({
+    email: 'new-supporter@example.com',
+    name: 'New Supporter',
+    subscriptionId: 'I-THANKS',
+    status: 'pending',
+  });
+
+  const app = express();
+  app.use('/', webhookRouter);
+  const server = await startServer(app);
+
+  try {
+    const paymentEvent = {
+      id: 'WH-THANKYOU',
+      event_type: 'PAYMENT.CAPTURE.COMPLETED',
+      resource: {
+        id: 'PAYMENT-THANKYOU',
+        status: 'COMPLETED',
+        amount: {
+          value: '9.99',
+          currency_code: 'USD',
+        },
+        create_time: '2024-03-01T12:00:00Z',
+        supplementary_data: {
+          related_ids: {
+            subscription_id: 'I-THANKS',
+          },
+        },
+      },
+    };
+
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(paymentEvent),
+    });
+
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.deepEqual(payload, { received: true });
+
+    assert.equal(thankYouCalls.length, 1);
+    assert.equal(thankYouCalls[0].to, 'new-supporter@example.com');
+    assert.equal(thankYouCalls[0].subscriptionId, 'I-THANKS');
   } finally {
     await server.close();
   }

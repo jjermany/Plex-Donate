@@ -502,6 +502,25 @@ async function handlePaymentEvent(event) {
 
   const becameActive = previousStatus !== 'active' && donor.status === 'active';
 
+  if (becameActive && donor.email) {
+    try {
+      await emailService.sendSubscriptionThankYouEmail({
+        to: donor.email,
+        name: donor.name,
+        subscriptionId,
+        amount,
+        currency,
+        paidAt,
+      });
+      logEvent('donor.subscription.thank_you.email.sent', {
+        donorId: donor.id,
+        subscriptionId,
+      });
+    } catch (err) {
+      logger.warn('Failed to send subscription thank-you email', err.message);
+    }
+  }
+
   // Clear pre-existing access flag on first successful payment
   // User is now managed by plex-donate subscription system
   if (donor.hadPreexistingAccess) {

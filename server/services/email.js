@@ -436,6 +436,85 @@ async function sendInviteEmail(
   });
 }
 
+async function sendSubscriptionThankYouEmail(
+  { to, name, subscriptionId, amount, currency, paidAt },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+
+  const formattedAmount = amount
+    ? `${amount} ${currency || ''}`.trim()
+    : '';
+  const formattedPaidAt = formatAccessEndDate(paidAt);
+
+  const subject = 'Thank you for supporting Plex Donate';
+  const dashboardUrl = resolveDashboardUrl();
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    'Thank you for your subscription! Your support helps keep our Plex server running.',
+  ];
+
+  if (formattedAmount) {
+    textLines.push('');
+    textLines.push(`Payment received: ${formattedAmount}`);
+  }
+
+  if (formattedPaidAt) {
+    textLines.push(`Paid at: ${formattedPaidAt}`);
+  }
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push(`Subscription ID: ${subscriptionId}`);
+  textLines.push('');
+  textLines.push('If you have any questions, just reply to this email.');
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const text = textLines.join('\n');
+
+  const htmlAmount = formattedAmount
+    ? `<p style="margin:0 0 16px;">Payment received: <strong>${escapeHtml(
+        formattedAmount
+      )}</strong></p>`
+    : '';
+  const htmlPaidAt = formattedPaidAt
+    ? `<p style="margin:0 0 16px;">Paid at: <strong>${escapeHtml(
+        formattedPaidAt
+      )}</strong></p>`
+    : '';
+
+  const html = `
+  <p>Hi ${escapeHtml(name || 'there')},</p>
+  <p>Thank you for your subscription! Your support helps keep our Plex server running.</p>
+  ${htmlAmount}
+  ${htmlPaidAt}
+  ${dashboardHtml}
+  <p style="font-size:14px;color:#4b5563;">Subscription ID: ${escapeHtml(
+    subscriptionId
+  )}</p>
+  <p>If you have any questions, just reply to this email.</p>
+  <p style="margin-top:24px;">— Plex Donate</p>
+  `;
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function sendAccountWelcomeEmail(
   { to, name, loginUrl, verificationUrl },
   overrideSettings
@@ -1049,6 +1128,7 @@ async function verifyConnection(overrideSettings) {
 
 module.exports = {
   sendInviteEmail,
+  sendSubscriptionThankYouEmail,
   sendAccountWelcomeEmail,
   sendPasswordResetEmail,
   sendCancellationEmail,
