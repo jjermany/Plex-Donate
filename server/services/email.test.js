@@ -85,6 +85,49 @@ test('sendInviteEmail includes the dashboard button and text link', async (t) =>
   assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
 });
 
+test('sendSubscriptionThankYouEmail includes payment and subscription details', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({ publicBaseUrl: 'https://plex.example.com' });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  await emailService.sendSubscriptionThankYouEmail(
+    {
+      to: 'supporter@example.com',
+      name: 'Plex Supporter',
+      subscriptionId: 'SUB-THANKS',
+      amount: '12.00',
+      currency: 'USD',
+      paidAt: '2024-02-02T10:00:00Z',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.ok(message);
+  assert.equal(message.subject, 'Thank you for supporting Plex Donate');
+  assert.match(message.text, /Thank you for your subscription!/);
+  assert.match(message.text, /Payment received: 12\.00 USD/);
+  assert.match(message.text, /Paid at: Fri, 02 Feb 2024 10:00:00 GMT/);
+  assert.match(message.text, /Subscription ID: SUB-THANKS/);
+  assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
+  assert.match(message.html, /Thank you for your subscription!/);
+  assert.match(message.html, /Payment received:/);
+});
+
 test('sendSupportRequestNotification renders dashboard access details', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;
