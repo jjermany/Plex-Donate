@@ -62,7 +62,7 @@ Only the core application settings live in `.env` now:
 | `ADMIN_USERNAME` | (Optional) Username for the admin dashboard. Defaults to `admin`. |
 | `DATABASE_FILE` | Location of the SQLite database file. |
 
-When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections.
+When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections. Ensure your proxy forwards `X-Forwarded-Proto=https` so the app can confirm the request is secure when `SESSION_COOKIE_SECURE=true`.
 
 After signing in you can manage the admin username and password directly from the dashboard using the **Admin account** panel. Password updates require at least 12 characters.
 
