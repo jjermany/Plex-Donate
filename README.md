@@ -64,7 +64,7 @@ Only the core application settings live in `.env` now:
 
 When running in production, you must set `SESSION_SECRET` or persist `data/.secrets` on a durable volume so the session key survives restarts and shared instances can validate the same login cookies. Without one of those options, admin logins will break after a restart or when multiple instances are deployed.
 
-When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections. Ensure your proxy forwards `X-Forwarded-Proto=https` so the app can confirm the request is secure when `SESSION_COOKIE_SECURE=true`.
+When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections. Secure cookies require HTTPS requests; if you terminate TLS at a proxy, it must forward `X-Forwarded-Proto=https` so the app can confirm the request is secure when `SESSION_COOKIE_SECURE=true`.
 
 After signing in you can manage the admin username and password directly from the dashboard using the **Admin account** panel. Password updates require at least 12 characters.
 
