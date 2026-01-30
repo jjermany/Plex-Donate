@@ -5,7 +5,7 @@ const path = require('path');
  * Sensitive data patterns to redact from logs
  */
 const SENSITIVE_PATTERNS = [
-  /password["\s:=]+([^",\s}]+)/gi,
+  /(?:"password"\s*[:=]|\bpassword\s*=)\s*([^",\s}]+)/gi,
   /token["\s:=]+([^",\s}]+)/gi,
   /secret["\s:=]+([^",\s}]+)/gi,
   /authorization["\s:]+bearer\s+([^\s"]+)/gi,
