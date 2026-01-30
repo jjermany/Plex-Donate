@@ -28,6 +28,49 @@ const parseBoolean = (value, defaultValue = false) => {
   return defaultValue;
 };
 
+const ensurePersistedSecretsAccessible = () => {
+  if (!fs.existsSync(secretsFile)) {
+    return {
+      ok: false,
+      message: `SESSION_SECRET is not set and no persisted secret exists at ${secretsFile}.`,
+    };
+  }
+
+  try {
+    fs.accessSync(secretsFile, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Persisted session secret at ${secretsFile} must be readable and writable by the app user.`,
+    };
+  }
+
+  return { ok: true };
+};
+
+const loadPersistedSessionSecret = () => {
+  const accessCheck = ensurePersistedSecretsAccessible();
+
+  if (!accessCheck.ok) {
+    throw new Error(accessCheck.message);
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(secretsFile, 'utf8'));
+    if (data.sessionSecret) {
+      return data.sessionSecret;
+    }
+  } catch (err) {
+    throw new Error(
+      `Persisted session secret at ${secretsFile} is unreadable or corrupted.`
+    );
+  }
+
+  throw new Error(
+    `Persisted session secret at ${secretsFile} does not contain a sessionSecret value.`
+  );
+};
+
 /**
  * Generate or load persisted session secret
  * @returns {string} Session secret
@@ -38,16 +81,18 @@ function getOrCreateSessionSecret() {
     return process.env.SESSION_SECRET;
   }
 
+  const isProduction = (process.env.NODE_ENV || 'development') === 'production';
+
   // Try to load from persisted file
-  try {
-    if (fs.existsSync(secretsFile)) {
-      const data = JSON.parse(fs.readFileSync(secretsFile, 'utf8'));
-      if (data.sessionSecret) {
-        return data.sessionSecret;
-      }
+  if (fs.existsSync(secretsFile)) {
+    const persistedSecret = loadPersistedSessionSecret();
+    if (persistedSecret) {
+      return persistedSecret;
     }
-  } catch (err) {
-    // File doesn't exist or is corrupted, will create new one
+  } else if (isProduction) {
+    throw new Error(
+      `SESSION_SECRET is required in production unless ${secretsFile} already exists and is writable.`
+    );
   }
 
   // Generate new secret and persist it
@@ -96,9 +141,10 @@ function validateConfig(config) {
   // Production-specific validations
   if (config.isProduction) {
     if (!process.env.SESSION_SECRET) {
-      warnings.push(
-        'SESSION_SECRET not set in production. Using persisted secret from disk.'
-      );
+      const accessCheck = ensurePersistedSecretsAccessible();
+      if (!accessCheck.ok) {
+        errors.push(accessCheck.message);
+      }
     }
 
     if (!config.sessionCookieSecure) {
