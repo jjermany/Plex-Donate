@@ -37,6 +37,18 @@ npm run dev            # run locally with nodemon
 
 After the server is running visit `http://localhost:3000`, sign in with the admin username and password, and fill in the integration credentials directly from the dashboard. The default username is `admin`. On first start Plex Donate generates a secure temporary password and prints it to the server log so you can sign in and change it from the dashboard. When upgrading from a legacy release that stored the admin secret as a `password` value in `data/admin-credentials.json`, Plex Donate rehashes that existing password on startup instead of replacing it, so you can continue signing in with the same credential. If the legacy file also included an obsolete `passwordHash` entry, the plaintext `password` is trusted and the outdated hash is replaced automatically.
 
+If you need to reset the admin password after a crash/restart, run the helper script (it writes a new hash to `data/admin-credentials.json` and prints the new password directly to stdout):
+
+```bash
+npm run reset-admin
+```
+
+You can also set explicit values:
+
+```bash
+npm run reset-admin -- --username=admin --password="your-new-long-password"
+```
+
 ### Environment variables
 
 Only the core application settings live in `.env` now:
