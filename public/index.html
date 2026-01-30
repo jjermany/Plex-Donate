@@ -7054,6 +7054,21 @@
       }
 
       if (loginForm) {
+        const loginQueryParams = new URLSearchParams(window.location.search);
+        const urlUsername = loginQueryParams.get('username');
+        const urlPassword = loginQueryParams.get('password');
+        if ((urlUsername || urlPassword) && loginUsernameInput && loginPasswordInput) {
+          if (urlUsername) {
+            loginUsernameInput.value = urlUsername;
+          }
+          if (urlPassword) {
+            loginPasswordInput.value = urlPassword;
+          }
+          setLoginStatus('Credentials detected in URL; click Sign in to continue.');
+        } else if (urlUsername || urlPassword) {
+          setLoginStatus('Login credentials must be entered in the form.', 'error');
+        }
+
         loginForm.addEventListener('submit', async (event) => {
           event.preventDefault();
           if (!loginUsernameInput || !loginPasswordInput) {
