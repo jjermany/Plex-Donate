@@ -72,9 +72,9 @@ function requireSecureSessionCookieForLogin(req, res, next) {
       secure: req.secure,
       ip: req.ip,
     });
-    return res.status(500).json({
+    return res.status(400).json({
       error:
-        'Session cookie cannot be set; check reverse proxy X-Forwarded-Proto / HTTPS configuration.',
+        'Cannot set secure session cookie over HTTP. Check reverse proxy HTTPS configuration.',
     });
   }
 
@@ -117,6 +117,7 @@ app.use(
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.post('/api/customer/login', requireSecureSessionCookieForLogin);
+app.post('/api/admin/login', requireSecureSessionCookieForLogin);
 
 /**
  * Health check endpoint with database connectivity check
