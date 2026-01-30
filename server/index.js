@@ -51,6 +51,36 @@ function isRequestSecure(req) {
   return false;
 }
 
+function requireSecureSessionCookieForLogin(req, res, next) {
+  if (!config.sessionCookieSecure) {
+    return next();
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const forwardedProtoValue = Array.isArray(forwardedProto)
+    ? forwardedProto.join(',')
+    : forwardedProto;
+  const forwardedProtoPrimary =
+    typeof forwardedProtoValue === 'string'
+      ? forwardedProtoValue.split(',')[0].trim()
+      : '';
+  const isForwardedHttps = forwardedProtoPrimary === 'https';
+
+  if (!req.secure && !isForwardedHttps) {
+    logger.warn('Secure session cookie requested without HTTPS', {
+      'x-forwarded-proto': forwardedProtoValue,
+      secure: req.secure,
+      ip: req.ip,
+    });
+    return res.status(500).json({
+      error:
+        'Session cookie cannot be set; check reverse proxy X-Forwarded-Proto / HTTPS configuration.',
+    });
+  }
+
+  return next();
+}
+
 fs.mkdirSync(config.dataDir, { recursive: true });
 
 try {
@@ -86,6 +116,7 @@ app.use(
 );
 
 app.use(bodyParser.urlencoded({ extended: false }));
+app.post('/api/customer/login', requireSecureSessionCookieForLogin);
 
 /**
  * Health check endpoint with database connectivity check
