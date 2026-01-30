@@ -69,6 +69,39 @@ function generateRandomPassword() {
   return crypto.randomBytes(18).toString('base64url');
 }
 
+function resetAdminCredentials({ username, password } = {}) {
+  const nextUsername = normalizeUsername(username) || normalizeUsername(config.adminUsername) || 'admin';
+  const providedPassword = typeof password === 'string' ? password : '';
+  let nextPassword = providedPassword.trim();
+  let generated = false;
+
+  if (!nextPassword) {
+    nextPassword = generateRandomPassword();
+    generated = true;
+  }
+
+  if (nextPassword.length < MIN_PASSWORD_LENGTH) {
+    const err = new Error(
+      `Admin password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
+    );
+    err.code = 'PASSWORD_TOO_WEAK';
+    throw err;
+  }
+
+  const passwordHash = hashPasswordSync(nextPassword);
+  writeCredentialsFile({ username: nextUsername, passwordHash });
+  cache = {
+    username: nextUsername,
+    passwordHash,
+  };
+
+  return {
+    username: nextUsername,
+    password: nextPassword,
+    generated,
+  };
+}
+
 function ensureCache() {
   if (cache) {
     return cache;
@@ -184,4 +217,5 @@ module.exports = {
   getAdminAccount,
   verifyAdminCredentials,
   updateAdminCredentials,
+  resetAdminCredentials,
 };

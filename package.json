@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "NODE_ENV=development nodemon --watch server server/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "reset-admin": "node server/scripts/reset-admin-password.js"
   },
   "dependencies": {
     "better-sqlite3": "^9.6.0",
