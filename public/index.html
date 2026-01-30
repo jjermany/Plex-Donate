@@ -4447,12 +4447,19 @@
             loaded: false,
           };
 
-          // Reload the page to show login screen and ensure clean state
-          // Use a small delay to allow any pending operations to complete
+          setLoginStatus('Authentication required. Please sign in again.', 'error');
+          render();
+
+          const loginPanelVisible = loginPanel && !loginPanel.classList.contains('hidden');
+          const reloadDelayMs = loginPanelVisible ? 1500 : 150;
+
+          // Reload the page to ensure clean state after showing the login message
           console.log('Session expired. Reloading page...');
           setTimeout(() => {
-            window.location.reload();
-          }, 100);
+            if (!loginPanel || !loginPanel.classList.contains('hidden')) {
+              window.location.reload();
+            }
+          }, reloadDelayMs);
 
           throw new Error('Authentication required');
         }
