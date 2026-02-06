@@ -2424,9 +2424,307 @@
       #plex-status-note[data-state='error'] {
         color: var(--status-danger-color);
       }
+
+      /* ── Loading spinner ── */
+      .loading-spinner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 48px 24px;
+        color: var(--text-muted);
+      }
+
+      .loading-spinner-ring {
+        width: 36px;
+        height: 36px;
+        border: 3px solid var(--table-border);
+        border-top-color: var(--button-primary-bg);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      /* ── Toast slide animation ── */
+      .dashboard-toast {
+        transition: opacity 0.35s ease, transform 0.35s ease;
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+
+      .dashboard-toast.toast-visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .dashboard-toast.toast-exit {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+
+      /* ── Tab view transitions ── */
+      .dashboard-view {
+        animation: fadeSlideIn 0.25s ease both;
+      }
+
+      @keyframes fadeSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Confirmation modal ── */
+      .confirm-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 200;
+        animation: modalFadeIn 0.2s ease both;
+      }
+
+      @keyframes modalFadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      .confirm-panel {
+        max-width: 440px;
+        width: 100%;
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(18px);
+        display: grid;
+        gap: 16px;
+        animation: modalSlideIn 0.25s ease both;
+      }
+
+      @keyframes modalSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(12px) scale(0.97);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      .confirm-panel h3 {
+        margin: 0;
+        font-size: 1.15rem;
+      }
+
+      .confirm-panel p {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .confirm-panel-icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--status-danger-bg);
+        color: var(--status-danger-color);
+        flex-shrink: 0;
+      }
+
+      .confirm-panel-icon svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .confirm-panel-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+      }
+
+      .confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .confirm-actions button {
+        min-width: 90px;
+      }
+
+      /* ── Mobile nav: horizontal scroll ── */
+      @media (max-width: 720px) {
+        .dashboard-legend {
+          position: sticky;
+          top: 0;
+          flex-direction: row;
+          align-items: center;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          gap: 6px;
+          padding: 8px 12px;
+          z-index: 10;
+        }
+
+        .dashboard-legend::-webkit-scrollbar {
+          display: none;
+        }
+
+        .dashboard-legend button {
+          width: auto;
+          text-align: center;
+          white-space: nowrap;
+          flex-shrink: 0;
+          font-size: 0.88rem;
+          padding: 8px 14px;
+        }
+      }
+
+      /* ── Better empty states ── */
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 36px 24px;
+        color: var(--text-muted);
+        border: 2px dashed var(--table-border);
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.04);
+        text-align: center;
+      }
+
+      .empty-state-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--badge-bg);
+        color: var(--badge-color);
+      }
+
+      .empty-state-icon svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .empty-state-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+      }
+
+      .empty-state-description {
+        font-size: 0.88rem;
+        max-width: 36ch;
+        line-height: 1.5;
+      }
+
+      /* ── Subtle entry animations for panels ── */
+      .panel {
+        animation: panelFadeIn 0.3s ease both;
+      }
+
+      @keyframes panelFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Badge pulse for unread support ── */
+      .tab-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        background: var(--button-danger-bg);
+        color: #fff;
+        margin-left: 6px;
+        line-height: 1;
+        animation: badgePulse 2s ease-in-out infinite;
+      }
+
+      @keyframes badgePulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.1); }
+      }
+
+      /* ── Button loading state ── */
+      button.is-loading {
+        pointer-events: none;
+        position: relative;
+        color: transparent;
+      }
+
+      button.is-loading::after {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      button.secondary.is-loading::after {
+        border-color: rgba(0, 0, 0, 0.15);
+        border-top-color: var(--text-primary);
+      }
+
+      /* ── Skip to content (accessibility) ── */
+      .skip-link {
+        position: absolute;
+        top: -40px;
+        left: 16px;
+        background: var(--button-primary-bg);
+        color: var(--button-primary-color);
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: 600;
+        z-index: 1000;
+        transition: top 0.2s ease;
+        text-decoration: none;
+      }
+
+      .skip-link:focus {
+        top: 16px;
+      }
     </style>
   </head>
   <body>
+    <a href="#dashboard" class="skip-link">Skip to dashboard</a>
     <div class="container">
       <button id="theme-toggle" type="button" class="theme-toggle-icon secondary" aria-label="Toggle theme" title="Toggle theme">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -2965,7 +3263,15 @@
                     </div>
                   </div>
                   <div class="donors-empty-state" id="donors-empty-state">
-                    Select a donor to view details
+                    <div class="empty-state" style="border:none;background:none;">
+                      <div class="empty-state-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <span class="empty-state-title">Select a donor</span>
+                      <span class="empty-state-description">Choose someone from the list to view their details, payments, and manage their access.</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -3417,6 +3723,56 @@
     </template>
 
     <script>
+      /* ── Styled confirmation modal (replaces native confirm()) ── */
+      function showConfirmModal(title, message) {
+        return new Promise((resolve) => {
+          const backdrop = document.createElement('div');
+          backdrop.className = 'confirm-backdrop';
+          backdrop.setAttribute('role', 'alertdialog');
+          backdrop.setAttribute('aria-modal', 'true');
+          backdrop.setAttribute('aria-label', title);
+
+          backdrop.innerHTML = `
+            <div class="confirm-panel">
+              <div class="confirm-panel-header">
+                <div class="confirm-panel-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3>${title}</h3>
+                  <p>${message}</p>
+                </div>
+              </div>
+              <div class="confirm-actions">
+                <button type="button" class="secondary confirm-cancel">Cancel</button>
+                <button type="button" class="danger confirm-ok">Confirm</button>
+              </div>
+            </div>
+          `;
+
+          const cleanup = (result) => {
+            backdrop.style.opacity = '0';
+            backdrop.style.transition = 'opacity 0.15s ease';
+            setTimeout(() => backdrop.remove(), 150);
+            resolve(result);
+          };
+
+          backdrop.querySelector('.confirm-cancel').addEventListener('click', () => cleanup(false));
+          backdrop.querySelector('.confirm-ok').addEventListener('click', () => cleanup(true));
+          backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) cleanup(false);
+          });
+          backdrop.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') cleanup(false);
+          });
+
+          document.body.appendChild(backdrop);
+          backdrop.querySelector('.confirm-cancel').focus();
+        });
+      }
+
       const loginPanel = document.getElementById('login-panel');
       const loginForm = document.getElementById('login-form');
       const loginUsernameInput = document.getElementById('username');
@@ -4707,15 +5063,15 @@
 
         if (!state.support.loaded) {
           const loading = document.createElement('div');
-          loading.className = 'support-empty-state';
-          loading.textContent = 'Loading support requests…';
+          loading.className = 'loading-spinner';
+          loading.innerHTML = '<div class="loading-spinner-ring"></div><span>Loading support requests</span>';
           supportRequestList.appendChild(loading);
         } else if (threads.length === 0) {
           const empty = document.createElement('div');
-          empty.className = 'support-empty-state';
-          empty.textContent = state.support.includeResolved
-            ? 'No support requests to show.'
-            : 'All caught up! No open support requests.';
+          empty.className = 'empty-state';
+          empty.innerHTML = state.support.includeResolved
+            ? `<div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg></div><span class="empty-state-title">No support requests</span><span class="empty-state-description">There are no support requests to display.</span>`
+            : `<div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><span class="empty-state-title">All caught up</span><span class="empty-state-description">No open support requests right now. Check back later or enable "Show resolved" to view past threads.</span>`;
           supportRequestList.appendChild(empty);
         } else {
           if (
@@ -4771,6 +5127,25 @@
         }
 
         renderSupportConversation();
+        updateSupportBadge();
+      }
+
+      function updateSupportBadge() {
+        const supportTab = document.getElementById('dashboard-tab-support');
+        if (!supportTab) return;
+        let badge = supportTab.querySelector('.tab-badge');
+        const threads = Array.isArray(state.support.threads) ? state.support.threads : [];
+        const openCount = threads.filter(t => t && t.request && !t.request.resolved).length;
+        if (openCount > 0) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'tab-badge';
+            supportTab.appendChild(badge);
+          }
+          badge.textContent = openCount > 99 ? '99+' : String(openCount);
+        } else if (badge) {
+          badge.remove();
+        }
       }
 
       async function loadSupportRequests(options = {}) {
@@ -4907,9 +5282,14 @@
         }
 
         if (!message) {
-          dashboardToast.textContent = '';
-          dashboardToast.hidden = true;
-          delete dashboardToast.dataset.state;
+          dashboardToast.classList.remove('toast-visible');
+          dashboardToast.classList.add('toast-exit');
+          setTimeout(() => {
+            dashboardToast.textContent = '';
+            dashboardToast.hidden = true;
+            dashboardToast.classList.remove('toast-exit');
+            delete dashboardToast.dataset.state;
+          }, 350);
           return;
         }
 
@@ -4920,12 +5300,21 @@
           delete dashboardToast.dataset.state;
         }
         dashboardToast.hidden = false;
+        dashboardToast.classList.remove('toast-exit');
+        requestAnimationFrame(() => {
+          dashboardToast.classList.add('toast-visible');
+        });
 
         toastTimerId = setTimeout(() => {
-          dashboardToast.textContent = '';
-          dashboardToast.hidden = true;
-          delete dashboardToast.dataset.state;
-          toastTimerId = null;
+          dashboardToast.classList.remove('toast-visible');
+          dashboardToast.classList.add('toast-exit');
+          setTimeout(() => {
+            dashboardToast.textContent = '';
+            dashboardToast.hidden = true;
+            dashboardToast.classList.remove('toast-exit');
+            delete dashboardToast.dataset.state;
+            toastTimerId = null;
+          }, 350);
         }, duration);
       }
 
@@ -6671,7 +7060,12 @@
           : [];
         if (eventsToShow.length === 0) {
           const li = document.createElement('li');
-          li.textContent = 'No events yet.';
+          li.style.border = 'none';
+          li.innerHTML = `<div class="empty-state">
+            <div class="empty-state-icon"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+            <span class="empty-state-title">No activity yet</span>
+            <span class="empty-state-description">Webhook events and admin actions will appear here as they happen.</span>
+          </div>`;
           eventsList.appendChild(li);
           return;
         }
@@ -7326,8 +7720,9 @@
             setSupportError('Select a support request first.', 'error');
             return;
           }
-          const confirmed = window.confirm(
-            'Delete this support request and all messages? This cannot be undone.'
+          const confirmed = await showConfirmModal(
+            'Delete support thread',
+            'Delete this support request and all messages? This action cannot be undone.'
           );
           if (!confirmed) {
             return;
@@ -7676,8 +8071,9 @@
               return;
             }
 
-            const confirmed = window.confirm(
-              'Send this announcement email to all supporters with an email address on file?'
+            const confirmed = await showConfirmModal(
+              'Send announcement email',
+              'This will email the current announcement to all supporters with an email address on file. Continue?'
             );
             if (!confirmed) {
               return;
@@ -7829,12 +8225,12 @@
             } else if (action === 'resend') {
               await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
             } else if (action === 'revoke') {
-              if (!confirm('Revoke the latest invite for this user?')) {
+              if (!(await showConfirmModal('Revoke invite', 'Revoke the latest invite for this user? They will lose access to the Plex invite URL.'))) {
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
             } else if (action === 'revoke-plex') {
-              if (!confirm('Revoke Plex access for this user?')) {
+              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the user\'s access to your Plex server. They will need a new invite to regain access.'))) {
                 button.disabled = false;
                 return;
               }
@@ -7858,10 +8254,7 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              const confirmation = confirm(
-                'Remove this user and delete all related invites, payments, and share links?'
-              );
-              if (!confirmation) {
+              if (!(await showConfirmModal('Remove user', 'This will permanently delete this user and all related invites, payments, and share links. This action cannot be undone.'))) {
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
@@ -7938,8 +8331,9 @@
           }
 
           if (action === 'remove') {
-            const confirmation = confirm(
-              'Remove this invite link? Anyone with the URL will lose access.'
+            const confirmation = await showConfirmModal(
+              'Remove invite link',
+              'Remove this invite link? Anyone with the URL will lose access to the invite page.'
             );
             if (!confirmation) {
               return;
@@ -8102,8 +8496,7 @@
               const successMessage = (response && response.message) || 'Email resent successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke') {
-              const confirmation = confirm('Revoke this invite? The recipient will lose access to the Plex invite URL.');
-              if (!confirmation) {
+              if (!(await showConfirmModal('Revoke invite', 'Revoke this invite? The recipient will lose access to the Plex invite URL.'))) {
                 button.disabled = false;
                 return;
               }
@@ -8124,8 +8517,7 @@
               const successMessage = (response && response.message) || 'Invite revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke-plex') {
-              const confirmation = confirm('Revoke Plex access for this user?');
-              if (!confirmation) {
+              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the user\'s access to your Plex server. They will need a new invite to regain access.'))) {
                 button.disabled = false;
                 return;
               }
@@ -8149,8 +8541,7 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              const confirmation = confirm('Remove this user and all related records? This cannot be undone.');
-              if (!confirmation) {
+              if (!(await showConfirmModal('Remove user', 'Remove this user and all related records? This action cannot be undone.'))) {
                 button.disabled = false;
                 return;
               }

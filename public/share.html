@@ -394,10 +394,151 @@
           width: 100%;
         }
       }
+
+      /* ── Loading spinner ── */
+      .loading-spinner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 48px 24px;
+        color: rgba(203, 213, 225, 0.8);
+      }
+
+      .loading-spinner-ring {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(148, 163, 184, 0.25);
+        border-top-color: #818cf8;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      /* ── Content reveal animation ── */
+      #content {
+        animation: contentReveal 0.4s ease both;
+      }
+
+      @keyframes contentReveal {
+        from {
+          opacity: 0;
+          transform: translateY(12px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Surface entry stagger ── */
+      .surface {
+        animation: surfaceEntry 0.35s ease both;
+      }
+
+      .canvas > .surface:nth-child(1) { animation-delay: 0s; }
+      .canvas > .surface:nth-child(2) { animation-delay: 0.08s; }
+      .canvas > .surface:nth-child(3) { animation-delay: 0.16s; }
+      .canvas > .surface:nth-child(4) { animation-delay: 0.24s; }
+      .canvas > .surface:nth-child(5) { animation-delay: 0.32s; }
+
+      @keyframes surfaceEntry {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── Step progress connector lines ── */
+      .steps {
+        position: relative;
+      }
+
+      .step {
+        position: relative;
+      }
+
+      .step + .step {
+        margin-top: 0;
+      }
+
+      .step + .step::before {
+        content: '';
+        position: absolute;
+        top: -16px;
+        left: 38px;
+        width: 2px;
+        height: 16px;
+        background: rgba(148, 163, 184, 0.25);
+        border-radius: 1px;
+      }
+
+      .step[data-state='complete'] + .step::before {
+        background: rgba(34, 197, 94, 0.5);
+      }
+
+      .step[data-state='complete'] + .step[data-state='current']::before {
+        background: linear-gradient(180deg, rgba(34, 197, 94, 0.5), rgba(99, 102, 241, 0.5));
+      }
+
+      /* ── Button loading state ── */
+      button.is-loading,
+      .cta-button.is-loading {
+        pointer-events: none;
+        position: relative;
+        color: transparent;
+      }
+
+      button.is-loading::after,
+      .cta-button.is-loading::after {
+        content: '';
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+      }
+
+      /* ── Better focus states ── */
+      button:focus-visible,
+      .cta-button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid rgba(165, 180, 252, 0.8);
+        outline-offset: 2px;
+      }
+
+      /* ── Status text transitions ── */
+      .status-text {
+        transition: color 0.2s ease, opacity 0.2s ease;
+      }
+
+      /* ── Copy feedback animation ── */
+      .copy-success {
+        animation: copyFlash 0.6s ease;
+      }
+
+      @keyframes copyFlash {
+        0% { background-color: rgba(34, 197, 94, 0.2); }
+        100% { background-color: transparent; }
+      }
     </style>
   </head>
   <body>
-    <div id="loading" class="panel">Setting the stage for your invite…</div>
+    <div id="loading" class="panel">
+      <div class="loading-spinner">
+        <div class="loading-spinner-ring"></div>
+        <span>Setting the stage for your invite</span>
+      </div>
+    </div>
     <div id="error-panel" class="panel error hidden"></div>
     <div id="content" class="hidden">
       <main class="canvas">
