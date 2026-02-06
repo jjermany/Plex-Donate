@@ -332,7 +332,7 @@
       .login-form {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 14px;
       }
 
       .input-shell {
@@ -403,7 +403,7 @@
         display: flex;
         flex-direction: column;
         gap: 8px;
-        margin-top: 8px;
+        margin-top: 10px;
       }
 
       .login-actions button {
@@ -442,6 +442,15 @@
         box-sizing: border-box;
         background: var(--input-background);
         color: var(--text-primary);
+      }
+
+      .input-shell input[type='password'] {
+        width: auto;
+        border-radius: 0;
+        border: none;
+        padding: 14px 0;
+        background: transparent;
+        box-sizing: border-box;
       }
 
       table {
@@ -2462,7 +2471,7 @@
                 placeholder="Username"
                 required
               />
-              <span aria-hidden="true" style="width: 52px;"></span>
+              <span aria-hidden="true" style="width: 56px; flex-shrink: 0;"></span>
             </div>
             <label class="visually-hidden" for="password">Password</label>
             <div class="input-shell">
