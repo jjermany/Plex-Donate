@@ -731,11 +731,44 @@ test('customer session payload includes non-blocking relay warning', async () =>
     const sessionResponse = await client.get('/customer/session');
     assert.equal(sessionResponse.status, 200);
     const payload = await sessionResponse.json();
-    assert.match(payload.warning, /Hide My Email/i);
+    assert.match(payload.warning, /Heads up:/i);
     assert.equal(payload.authenticated, true);
   });
 });
 
+
+
+test('customer session warning prefers Plex email and adds mismatch guidance', async () => {
+  resetDatabase();
+  const donor = createDonor({
+    email: 'relay-contact@privaterelay.appleid.com',
+    name: 'Relay Contact',
+    status: 'active',
+    plexAccountId: 'plex-customer-warning',
+    plexEmail: 'plex-real@example.com',
+  });
+
+  await withTestServer(async (client) => {
+    const setupResponse = await client.post('/test/setup-session', {
+      body: { customerId: donor.id },
+    });
+    assert.equal(setupResponse.status, 200);
+
+    const initialSessionResponse = await client.get('/customer/session');
+    assert.equal(initialSessionResponse.status, 200);
+    const initialPayload = await initialSessionResponse.json();
+    assert.equal(initialPayload.warning, '');
+
+    db.prepare('UPDATE donors SET plex_email = ? WHERE id = ?')
+      .run('plex-relay@privaterelay.appleid.com', donor.id);
+
+    const relaySessionResponse = await client.get('/customer/session');
+    assert.equal(relaySessionResponse.status, 200);
+    const relayPayload = await relaySessionResponse.json();
+    assert.match(relayPayload.warning, /Heads up:/i);
+    assert.match(relayPayload.warning, /different/i);
+  });
+});
 
 test('customer trial invite event logs relay diagnostics without raw emails', async (t) => {
   resetDatabase();

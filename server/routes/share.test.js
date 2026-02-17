@@ -429,20 +429,16 @@ async function createAdminSession() {
 }
 
 
-test('share signup page keeps Apple relay advisory visible before account creation', () => {
+test('share signup page hides Apple relay advisory until needed', () => {
   const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
   const html = fs.readFileSync(shareHtmlPath, 'utf8');
   assert.match(
     html,
-    /<p id="account-relay-warning" class="status-text small relay-warning">/
-  );
-  assert.doesNotMatch(
-    html,
-    /<p id="account-relay-warning" class="[^"]*hidden[^"]*">/
+    /<p id="account-relay-warning" class="[^"]*relay-warning[^"]*hidden[^"]*">/
   );
   assert.match(
     html,
-    /<strong>Important:<\/strong> If your Plex account uses Apple ‘Hide My Email’/
+    /Heads up:/
   );
 });
 
@@ -569,6 +565,41 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.match(accountResponse.body.warning, /Hide My Email/i);
     } finally {
       welcomeMock.mock.restore();
+      await server.close();
+    }
+  });
+
+
+  await t.test('share response warning prefers Plex email and adds mismatch guidance', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'relay-contact@privaterelay.appleid.com',
+        plexAccountId: 'plex-share-warning',
+        plexEmail: 'plex-real@example.com',
+        status: 'active',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'share-warning-token',
+        sessionToken: 'share-warning-session',
+      });
+
+      const response = await requestJson(server, 'GET', `/share/${shareLink.token}`);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.warning, '');
+
+      db.prepare('UPDATE donors SET plex_email = ? WHERE id = ?')
+        .run('plex-relay@privaterelay.appleid.com', donor.id);
+
+      const relayResponse = await requestJson(server, 'GET', `/share/${shareLink.token}`);
+      assert.equal(relayResponse.status, 200);
+      assert.match(relayResponse.body.warning, /Heads up:/i);
+      assert.match(relayResponse.body.warning, /different/i);
+    } finally {
       await server.close();
     }
   });
