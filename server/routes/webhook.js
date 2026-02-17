@@ -98,6 +98,20 @@ function normalizeEmail(value) {
   return String(value).trim().toLowerCase();
 }
 
+function buildCandidateEmails(donor, inviteRecipientEmail) {
+  const seen = new Set();
+  const ordered = [];
+  [donor && donor.plexEmail, donor && donor.email, inviteRecipientEmail].forEach((value) => {
+    const normalized = normalizeEmail(value);
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    ordered.push(normalized);
+  });
+  return ordered;
+}
+
 function normalizeAccessExpirationTimestamp(value) {
   if (!value) {
     return null;
@@ -610,7 +624,11 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     });
   }
 
-  const normalizedEmail = normalizeEmail(plexInviteEmail);
+  const existingInvite = getLatestActiveInviteForDonor(donor.id);
+  const candidateEmails = buildCandidateEmails(
+    donor,
+    existingInvite && existingInvite.recipientEmail
+  );
   const normalizedAccountId = (donor.plexAccountId || '')
     .toString()
     .trim()
@@ -623,7 +641,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       const plexUsers = await plexService.listUsers();
       if (Array.isArray(plexUsers) && plexUsers.length > 0) {
         const donorHasAccess = plexUsers.some((user) => {
-          const candidateEmails = [
+          const candidateUserEmails = [
             user.email,
             user.username,
             user.title,
@@ -636,9 +654,11 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
             user.machineIdentifier,
             user.account && user.account.id,
           ];
-          const emailMatch =
-            normalizedEmail &&
-            candidateEmails.some((value) => normalizeEmail(value) === normalizedEmail);
+          const emailMatch = candidateEmails.some((candidateEmail) =>
+            candidateUserEmails.some(
+              (value) => normalizeEmail(value) === candidateEmail
+            )
+          );
           const accountMatch =
             normalizedAccountId &&
             candidateIds.some((value) => {
@@ -701,9 +721,9 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
           }
           const emails = Array.isArray(share.emails) ? share.emails : [];
           const ids = Array.isArray(share.userIds) ? share.userIds : [];
-          const matchesEmail =
-            normalizedEmail &&
-            emails.some((value) => normalizeEmail(value) === normalizedEmail);
+          const matchesEmail = candidateEmails.some((candidateEmail) =>
+            emails.some((value) => normalizeEmail(value) === candidateEmail)
+          );
           const matchesId =
             normalizedAccountId &&
             ids.some(
@@ -730,12 +750,14 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
   }
 
-  const existingInvite = getLatestActiveInviteForDonor(donor.id);
   const existingInviteUsable =
     existingInvite && existingInvite.inviteUrl && !existingInvite.revokedAt;
   const existingInviteMatches =
     existingInviteUsable &&
-    normalizeEmail(existingInvite.recipientEmail) === normalizedEmail;
+    candidateEmails.some(
+      (candidateEmail) =>
+        normalizeEmail(existingInvite.recipientEmail) === candidateEmail
+    );
 
   if (existingInvite) {
     let invite = existingInvite;
