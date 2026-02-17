@@ -418,6 +418,7 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
 
   const originalListUsers = plexService.listUsers;
   const originalListSharedMembers = plexService.listSharedServerMembers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
   plexService.listUsers = async () => [
     { email: shared.email, status: 'accepted', id: 'user-1' },
     { email: pending.email, status: 'pending', id: 'user-2' },
@@ -426,9 +427,18 @@ test('GET /api/admin/subscribers annotates Plex status for donors', async (t) =>
     { emails: [shared.email], ids: ['user-1'], pending: false, status: 'accepted' },
     { emails: [sharedOnly.email], ids: ['user-3'], pending: false, status: 'accepted' },
   ];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      { emails: [shared.email], userIds: ['user-1'], pending: false, status: 'accepted' },
+      { emails: [sharedOnly.email], userIds: ['user-3'], pending: false, status: 'accepted' },
+      { emails: [pending.email], userIds: ['user-2'], pending: true, status: 'pending' },
+    ],
+  });
   t.after(() => {
     plexService.listUsers = originalListUsers;
     plexService.listSharedServerMembers = originalListSharedMembers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
   });
 
   const response = await agent.get('/api/admin/subscribers');
@@ -527,6 +537,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   const originalCreateInvite = plexService.createInvite;
   const originalListUsers = plexService.listUsers;
   const originalListSharedMembers = plexService.listSharedServerMembers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
   let createInviteRequest = null;
   plexService.createInvite = async (payload) => {
     const plexConfig = settingsStore.getPlexSettings();
@@ -541,10 +552,22 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   };
   plexService.listUsers = async () => [];
   plexService.listSharedServerMembers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      {
+        emails: [donor.email],
+        userIds: ['plex-123'],
+        pending: true,
+        status: 'pending',
+      },
+    ],
+  });
   t.after(() => {
     plexService.createInvite = originalCreateInvite;
     plexService.listUsers = originalListUsers;
     plexService.listSharedServerMembers = originalListSharedMembers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
   });
 
   const response = await agent.post(`/api/admin/subscribers/${donor.id}/invite`, {
@@ -580,6 +603,75 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.ok(body.donor);
   assert.equal(body.donor.needsPlexInvite, false);
   assert.equal(body.donor.plexPending, true);
+});
+
+
+test('POST /api/admin/plex/sync-status-now matches donor email candidates and invite recipients', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const donor = createDonor({
+    email: 'primary-donor@example.com',
+    plexEmail: 'linked-plex@example.com',
+    plexAccountId: 'AB-CD-1234',
+    name: 'Sync Candidate',
+    status: 'active',
+  });
+
+  createInvite({
+    donorId: donor.id,
+    inviteId: 'INVITE-RECIPIENT-1',
+    recipientEmail: 'invite-recipient@example.com',
+    plexInviteId: 'INV-USER-123',
+    inviteStatus: 'pending',
+    invitedAt: new Date().toISOString(),
+  });
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-sync',
+    serverIdentifier: 'server-sync',
+    librarySectionIds: '1',
+  });
+
+  const originalListUsers = plexService.listUsers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+
+  plexService.listUsers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      {
+        id: 'share-1',
+        emails: ['invite-recipient@example.com'],
+        userIds: ['inv-user-123'],
+        status: 'accepted',
+        pending: false,
+      },
+    ],
+  });
+
+  t.after(() => {
+    plexService.listUsers = originalListUsers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const response = await agent.post('/api/admin/plex/sync-status-now', {
+    headers: { 'x-csrf-token': csrfToken },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.mismatchCount, 0);
+  assert.equal(body.donorsChecked, 1);
+
+  const syncedDonor = body.donors.find((item) => item.id === donor.id);
+  assert.ok(syncedDonor);
+  assert.equal(syncedDonor.plexShared, true);
+  assert.equal(syncedDonor.plexShareState, 'shared');
 });
 
 test('announcements settings round-trip through admin API', async (t) => {
