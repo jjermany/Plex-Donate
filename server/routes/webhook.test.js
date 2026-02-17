@@ -426,17 +426,24 @@ test('automatic webhook invite logs relay diagnostics for generated invites', { 
   const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
   const originalCreateInvite = plexService.createInvite;
   const originalSendInvite = emailService.sendInviteEmail;
+  const createInviteCalls = [];
+  const sentInviteEmails = [];
 
   plexService.isConfigured = () => true;
   plexService.listUsers = async () => [];
   plexService.getCurrentPlexShares = async () => ({ success: true, shares: [] });
-  plexService.createInvite = async () => ({
-    inviteId: 'relay-generated-1',
-    inviteUrl: 'https://plex.local/invites/relay-generated-1',
-    status: 'pending',
-    invitedAt: new Date().toISOString(),
-  });
-  emailService.sendInviteEmail = async () => {};
+  plexService.createInvite = async (payload) => {
+    createInviteCalls.push(payload);
+    return {
+      inviteId: 'relay-generated-1',
+      inviteUrl: 'https://plex.local/invites/relay-generated-1',
+      status: 'pending',
+      invitedAt: new Date().toISOString(),
+    };
+  };
+  emailService.sendInviteEmail = async (payload) => {
+    sentInviteEmails.push(payload);
+  };
 
   t.after(() => {
     plexService.isConfigured = originalIsConfigured;
@@ -486,6 +493,10 @@ test('automatic webhook invite logs relay diagnostics for generated invites', { 
     assert.equal(payload.donorEmailIsRelay, true);
     assert.equal(payload.plexEmailIsRelay, false);
     assert.equal(payload.emailsDiffer, true);
+    assert.equal(createInviteCalls.length, 1);
+    assert.equal(createInviteCalls[0].email, 'plex-user@example.com');
+    assert.equal(sentInviteEmails.length, 1);
+    assert.equal(sentInviteEmails[0].to, 'relay-user@privaterelay.appleid.com');
   } finally {
     await server.close();
   }
