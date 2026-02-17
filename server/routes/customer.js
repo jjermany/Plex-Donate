@@ -1847,7 +1847,7 @@ router.post(
         try {
           const plexUsers = await plexService.listUsers();
           if (Array.isArray(plexUsers) && plexUsers.length > 0) {
-            const normalizedEmail = normalizeEmail(trialDonor.email);
+            const normalizedEmail = normalizeEmail(trialDonor.plexEmail);
             const normalizedAccountId = (trialDonor.plexAccountId || '')
               .toString()
               .trim()

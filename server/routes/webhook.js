@@ -101,7 +101,7 @@ function normalizeEmail(value) {
 function buildCandidateEmails(donor, inviteRecipientEmail) {
   const seen = new Set();
   const ordered = [];
-  [donor && donor.plexEmail, donor && donor.email, inviteRecipientEmail].forEach((value) => {
+  [donor && donor.plexEmail, inviteRecipientEmail].forEach((value) => {
     const normalized = normalizeEmail(value);
     if (!normalized || seen.has(normalized)) {
       return;
