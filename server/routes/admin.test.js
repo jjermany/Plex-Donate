@@ -604,6 +604,13 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   assert.ok(body.donor);
   assert.equal(body.donor.needsPlexInvite, false);
   assert.equal(body.donor.plexPending, true);
+
+  const events = getRecentEvents(1);
+  assert.equal(events[0].eventType, 'plex.invite.admin_sent');
+  const payload = JSON.parse(events[0].payload);
+  assert.equal(payload.donorEmailIsRelay, false);
+  assert.equal(payload.plexEmailIsRelay, false);
+  assert.equal(payload.emailsDiffer, false);
 });
 
 

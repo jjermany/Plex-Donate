@@ -31,9 +31,12 @@ const {
   markDonorEmailVerified,
   createDonorEmailVerificationToken,
   createDonorPasswordResetToken,
+  getRecentEvents,
 } = require('../db');
 const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
 const paypalService = require('../services/paypal');
+const emailService = require('../services/email');
+const plexService = require('../services/plex');
 const { ensureSessionToken } = require('../utils/session-tokens');
 const settingsStore = require('../state/settings');
 
@@ -731,4 +734,62 @@ test('customer session payload includes non-blocking relay warning', async () =>
     assert.match(payload.warning, /Hide My Email/i);
     assert.equal(payload.authenticated, true);
   });
+});
+
+
+test('customer trial invite event logs relay diagnostics without raw emails', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'TrialRelay123!';
+  const donor = createDonor({
+    email: 'trial-relay@privaterelay.appleid.com',
+    name: 'Trial Relay',
+    status: 'cancelled',
+    plexAccountId: 'plex-trial-relay',
+    plexEmail: 'trial-plex@example.com',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  const originalIsConfigured = plexService.isConfigured;
+  const originalListUsers = plexService.listUsers;
+  const originalCreateInvite = plexService.createInvite;
+  const originalSendInvite = emailService.sendInviteEmail;
+
+  plexService.isConfigured = () => true;
+  plexService.listUsers = async () => [];
+  plexService.createInvite = async () => ({
+    inviteId: 'trial-relay-invite',
+    inviteUrl: 'https://plex.local/invite/trial-relay-invite',
+    status: 'pending',
+    invitedAt: new Date().toISOString(),
+  });
+  emailService.sendInviteEmail = async () => {};
+
+  t.after(() => {
+    plexService.isConfigured = originalIsConfigured;
+    plexService.listUsers = originalListUsers;
+    plexService.createInvite = originalCreateInvite;
+    emailService.sendInviteEmail = originalSendInvite;
+  });
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 200);
+  });
+
+  const event = getRecentEvents(20).find((item) => item.eventType === 'invite.trial.generated');
+  assert.ok(event);
+  const payload = JSON.parse(event.payload);
+  assert.equal(payload.donorEmailIsRelay, true);
+  assert.equal(payload.plexEmailIsRelay, false);
+  assert.equal(payload.emailsDiffer, true);
+  assert.equal(Object.hasOwn(payload, 'email'), false);
 });

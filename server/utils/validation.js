@@ -25,6 +25,19 @@ function getRelayEmailWarning(email) {
   return "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.";
 }
 
+function getInviteEmailDiagnostics(donorEmail, plexEmail) {
+  const normalizedDonorEmail = normalizeEmail(donorEmail);
+  const normalizedPlexEmail = normalizeEmail(plexEmail);
+  return {
+    donorEmailIsRelay: isAppleRelayEmail(normalizedDonorEmail),
+    plexEmailIsRelay: isAppleRelayEmail(normalizedPlexEmail),
+    emailsDiffer:
+      Boolean(normalizedDonorEmail) &&
+      Boolean(normalizedPlexEmail) &&
+      normalizedDonorEmail !== normalizedPlexEmail,
+  };
+}
+
 /**
  * Validate email format
  * @param {string} email - Email address to validate
@@ -153,6 +166,7 @@ module.exports = {
   normalizeEmail,
   isAppleRelayEmail,
   getRelayEmailWarning,
+  getInviteEmailDiagnostics,
   isValidEmail,
   sanitizeString,
   validateName,
