@@ -804,3 +804,70 @@ test('customer trial invite event logs relay diagnostics without raw emails', as
   assert.equal(sentInviteEmails.length, 1);
   assert.equal(sentInviteEmails[0].to, 'trial-relay@privaterelay.appleid.com');
 });
+
+test('customer trial invite uses plexEmail target and does not match existing users by donor email alone', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'TrialPlexIdentity123!';
+  const donor = createDonor({
+    email: 'non-plex@example.com',
+    name: 'Trial Plex Identity',
+    status: 'cancelled',
+    plexAccountId: 'acct-trial-plex-123',
+    plexEmail: 'relay-or-plex@example.com',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  const originalIsConfigured = plexService.isConfigured;
+  const originalListUsers = plexService.listUsers;
+  const originalCreateInvite = plexService.createInvite;
+
+  const createInviteCalls = [];
+  plexService.isConfigured = () => true;
+  plexService.listUsers = async () => [
+    {
+      email: 'non-plex@example.com',
+      id: 'someone-else',
+    },
+  ];
+  plexService.createInvite = async (payload) => {
+    createInviteCalls.push(payload);
+    return {
+      inviteId: 'trial-plex-identity-invite',
+      inviteUrl: 'https://plex.local/invite/trial-plex-identity-invite',
+      status: 'pending',
+      invitedAt: new Date().toISOString(),
+    };
+  };
+
+  t.after(() => {
+    plexService.isConfigured = originalIsConfigured;
+    plexService.listUsers = originalListUsers;
+    plexService.createInvite = originalCreateInvite;
+  });
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const trialResponse = await client.post('/customer/trial');
+    assert.equal(trialResponse.status, 200);
+  });
+
+  assert.equal(createInviteCalls.length, 1);
+  assert.equal(createInviteCalls[0].email, 'relay-or-plex@example.com');
+
+  const generated = getRecentEvents(30).find(
+    (item) => item.eventType === 'invite.trial.generated'
+  );
+  assert.ok(generated);
+  const payload = JSON.parse(generated.payload);
+  assert.equal(payload.donorEmailIsRelay, false);
+  assert.equal(payload.plexEmailIsRelay, false);
+  assert.equal(payload.emailsDiffer, true);
+});
