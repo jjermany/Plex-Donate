@@ -102,15 +102,26 @@ function preparePlexUserIndex(users) {
 
 function collectDonorEmailCandidates(donor) {
   const invites = Array.isArray(donor && donor.invites) ? donor.invites : [];
-  const values = [donor && donor.email, donor && donor.plexEmail];
-  invites.forEach((invite) => {
-    values.push(invite && invite.recipientEmail);
-    values.push(invite && invite.plexEmail);
-  });
-  return values
+  const latestActiveInvite = invites.find((invite) => invite && !invite.revokedAt) || null;
+  const seen = new Set();
+  const ordered = [];
+
+  [
+    donor && donor.plexEmail,
+    donor && donor.email,
+    latestActiveInvite && latestActiveInvite.recipientEmail,
+  ]
     .flatMap(gatherStrings)
     .map(normalizeValue)
-    .filter((value) => value);
+    .forEach((value) => {
+      if (!value || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      ordered.push(value);
+    });
+
+  return ordered;
 }
 
 function collectDonorIdCandidates(donor) {
