@@ -22,7 +22,7 @@ function getRelayEmailWarning(email) {
   if (!isAppleRelayEmail(email)) {
     return '';
   }
-  return "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.";
+  return "Heads up: If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address in some identity-mapping cases. Use your real Plex account email when possible.";
 }
 
 function getInviteEmailDiagnostics(donorEmail, plexEmail) {

@@ -317,6 +317,27 @@ function requiresPlexRelink(donor) {
   return normalizeEmail(donor.plexEmail) !== normalizeEmail(donor.email);
 }
 
+function getDonorRelayWarning(donor) {
+  if (!donor) {
+    return '';
+  }
+
+  const plexEmail = normalizeEmail(donor.plexEmail);
+  const contactEmail = normalizeEmail(donor.email);
+  const warningSource = plexEmail || contactEmail;
+  const relayWarning = getRelayEmailWarning(warningSource);
+
+  if (!relayWarning) {
+    return '';
+  }
+
+  if (!plexEmail || !contactEmail || plexEmail === contactEmail) {
+    return relayWarning;
+  }
+
+  return `${relayWarning} Your Plex account email and Plex Donate login email are different, which can increase mapping issues.`;
+}
+
 function getActivePlexLinkSession(req, donor) {
   if (!req.session || !req.session.plexLink) {
     return null;
@@ -433,7 +454,7 @@ function buildDashboardResponse({
     : '';
   return {
     authenticated: Boolean(donor),
-    warning: donor ? getRelayEmailWarning(donor.email || donor.plexEmail) : '',
+    warning: getDonorRelayWarning(donor),
     donor: donor
       ? {
           id: donor.id,

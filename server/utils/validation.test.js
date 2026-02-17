@@ -14,8 +14,10 @@ test('isAppleRelayEmail detects Apple relay addresses', () => {
   assert.equal(isAppleRelayEmail(''), false);
 });
 
-test('getRelayEmailWarning returns advisory only for relay emails', () => {
-  assert.match(getRelayEmailWarning('abc@privaterelay.appleid.com'), /Hide My Email/i);
+test('getRelayEmailWarning returns non-blocking advisory only for relay emails', () => {
+  const warning = getRelayEmailWarning('abc@privaterelay.appleid.com');
+  assert.match(warning, /Heads up:/i);
+  assert.match(warning, /Hide My Email/i);
   assert.equal(getRelayEmailWarning('person@example.com'), '');
 });
 

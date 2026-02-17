@@ -641,10 +641,10 @@
                 required
               />
             </label>
-            <p id="account-relay-warning" class="status-text small relay-warning">
-              <strong>Important:</strong> If your Plex account uses Apple ‘Hide My Email’
+            <p id="account-relay-warning" class="status-text small relay-warning hidden">
+              <strong>Heads up:</strong> If your Plex account uses Apple ‘Hide My Email’
               (<code>@privaterelay.appleid.com</code>), Plex invites may map to a different
-              identity. Use your real Plex account email when possible before continuing.
+              identity in some cases. Use your real Plex account email when possible before continuing.
             </p>
             <label>
               <span>Display name</span>
@@ -862,14 +862,19 @@
         if (!accountRelayWarning) {
           return;
         }
+        const defaultWarning =
+          "Heads up: If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address in some identity-mapping cases. Use your real Plex account email when possible.";
         const warning =
           (typeof backendWarning === 'string' ? backendWarning.trim() : '') ||
-          (isAppleRelayEmail(email)
-            ? "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible."
-            : '');
+          (isAppleRelayEmail(email) ? defaultWarning : '');
+
         if (warning) {
+          accountRelayWarning.innerHTML = warning;
           accountRelayWarning.classList.remove('hidden');
+          return;
         }
+
+        accountRelayWarning.classList.add('hidden');
       }
 
       function showLoading() {
