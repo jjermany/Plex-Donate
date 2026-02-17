@@ -11,6 +11,20 @@ function normalizeEmail(email) {
   return (email || '').trim().toLowerCase();
 }
 
+const APPLE_RELAY_DOMAIN = 'privaterelay.appleid.com';
+
+function isAppleRelayEmail(email) {
+  const normalized = normalizeEmail(email);
+  return normalized.endsWith(`@${APPLE_RELAY_DOMAIN}`);
+}
+
+function getRelayEmailWarning(email) {
+  if (!isAppleRelayEmail(email)) {
+    return '';
+  }
+  return "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.";
+}
+
 /**
  * Validate email format
  * @param {string} email - Email address to validate
@@ -137,6 +151,8 @@ function validateISODate(dateString) {
 
 module.exports = {
   normalizeEmail,
+  isAppleRelayEmail,
+  getRelayEmailWarning,
   isValidEmail,
   sanitizeString,
   validateName,

@@ -1222,6 +1222,9 @@
                   required
                 />
               </label>
+              <p id="login-relay-warning" class="status-text small info hidden">
+                If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.
+              </p>
               <label>
                 <span>Password</span>
                 <input
@@ -1545,6 +1548,12 @@
                     <p id="profile-status" class="status-text"></p>
                   </div>
                 </form>
+                <details class="helper-text">
+                  <summary>Why did my Plex invite go to a different email?</summary>
+                  If your account uses Apple “Hide My Email” (relay addresses ending in
+                  <code>@privaterelay.appleid.com</code>), Plex may map you to a different identity.
+                  Re-link Plex with your non-relay Plex account email in the Plex setup tab.
+                </details>
               </article>
 
               <article id="password-panel" class="surface">
@@ -1670,6 +1679,9 @@
                     <p class="step-footnote muted small">
                       We rely on Plex to deliver the library—linking your account
                       keeps access seamless.
+                    </p>
+                    <p id="plex-relay-warning" class="status-text small warning hidden">
+                      If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.
                     </p>
                     <div id="plex-link-controls" class="plex-link-controls">
                       <button id="plex-link-button" class="button-primary" type="button">
@@ -1926,6 +1938,7 @@
       const loginStatus = document.getElementById('login-status');
       const loginPassword = document.getElementById('login-password');
       const loginEmail = document.getElementById('login-email');
+      const loginRelayWarning = document.getElementById('login-relay-warning');
       const loginCardContent = document.getElementById('login-card-content');
       const resetCardContent = document.getElementById('reset-card-content');
       const passwordResetForm = document.getElementById('password-reset-form');
@@ -1994,6 +2007,7 @@
       const stepInvite = document.getElementById('step-invite');
       const stepSubscriptionNote = document.getElementById('step-subscription-note');
       const stepPlexNote = document.getElementById('step-plex-note');
+      const plexRelayWarning = document.getElementById('plex-relay-warning');
       const stepInviteNote = document.getElementById('step-invite-note');
       const overseerrSection = document.getElementById('overseerr-section');
       const overseerrLink = document.getElementById('overseerr-link');
@@ -2031,6 +2045,12 @@
         trialButton.dataset.available = 'false';
       }
 
+      if (loginEmail) {
+        loginEmail.addEventListener('input', () => {
+          renderRelayWarnings({ loginEmailValue: loginEmail.value || '' });
+        });
+      }
+
       if (supportReplyMessage) {
         supportReplyMessage.addEventListener('input', () => {
           const activeThreadId = state.support.activeThreadId;
@@ -2056,6 +2076,39 @@
       let initialVerificationToken = null;
       let initialPasswordResetToken = null;
       let verificationInFlight = false;
+
+
+      function isAppleRelayEmail(email) {
+        const normalized = (email || '').trim().toLowerCase();
+        return normalized.endsWith('@privaterelay.appleid.com');
+      }
+
+      function getRelayWarningMessage(email, serverWarning = '') {
+        const advisory =
+          typeof serverWarning === 'string' ? serverWarning.trim() : '';
+        if (advisory) {
+          return advisory;
+        }
+        if (isAppleRelayEmail(email)) {
+          return "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.";
+        }
+        return '';
+      }
+
+      function renderRelayWarnings({ loginEmailValue = '', donor = null, warning = '' } = {}) {
+        const message = getRelayWarningMessage(
+          (donor && (donor.email || donor.plexEmail)) || loginEmailValue,
+          warning
+        );
+        if (loginRelayWarning) {
+          loginRelayWarning.textContent = message;
+          loginRelayWarning.classList.toggle('hidden', !message);
+        }
+        if (plexRelayWarning) {
+          plexRelayWarning.textContent = message;
+          plexRelayWarning.classList.toggle('hidden', !message);
+        }
+      }
 
       const ANNOUNCEMENT_TONE_LABELS = {
         info: 'Information',
@@ -3762,6 +3815,7 @@
           state.data && state.data.authenticated
         );
         state.data = data;
+        renderRelayWarnings({ loginEmailValue: loginEmail ? loginEmail.value : '', donor: data && data.donor ? data.donor : null, warning: data && data.warning ? data.warning : '' });
         showApp();
 
         const hasAnnouncement =
@@ -3802,6 +3856,7 @@
             plexLinkPinExpiry.textContent = '';
           }
           showLoginForm();
+          renderRelayWarnings({ loginEmailValue: loginEmail ? loginEmail.value : '' });
           if (initialPasswordResetToken) {
             showPasswordResetForm(initialPasswordResetToken);
           }

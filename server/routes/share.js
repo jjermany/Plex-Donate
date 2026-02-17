@@ -48,6 +48,11 @@ const {
   mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
 const adminNotifications = require('../services/admin-notifications');
+const {
+  normalizeEmail,
+  isValidEmail,
+  getRelayEmailWarning,
+} = require('../utils/validation');
 
 const router = express.Router();
 const { annotateDonorWithPlex, loadPlexContext } = require('../utils/plex');
@@ -129,16 +134,6 @@ function isShareInviteUsed(shareInvite) {
   return true;
 }
 
-function normalizeEmail(email) {
-  return (email || '').trim().toLowerCase();
-}
-
-function isValidEmail(email) {
-  if (!email) {
-    return false;
-  }
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-}
 
 function hasPlexLink(donor) {
   return Boolean(donor && donor.plexAccountId);
@@ -277,6 +272,7 @@ function buildShareResponse({
     : null;
 
   return {
+    warning: donor ? getRelayEmailWarning(donor.email || donor.plexEmail) : '',
     donor: donor
       ? {
           id: donor.id,

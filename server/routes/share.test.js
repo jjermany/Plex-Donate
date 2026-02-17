@@ -428,6 +428,16 @@ async function createAdminSession() {
   }
 }
 
+
+test('share page includes Apple relay advisory copy', () => {
+  const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
+  const html = fs.readFileSync(shareHtmlPath, 'utf8');
+  assert.match(
+    html,
+    /If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address\./
+  );
+});
+
 test('share routes handle donor and prospect flows', { concurrency: false }, async (t) => {
   await t.test('existing donor can update account details', async (t) => {
     resetDatabase();
@@ -474,6 +484,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       );
 
       assert.equal(accountResponse.status, 200);
+      assert.equal(accountResponse.body.warning, '');
       assert.equal(accountResponse.body.donor.email, 'updated@example.com');
       assert.equal(accountResponse.body.donor.name, 'Updated Name');
       assert.equal(accountResponse.body.donor.hasPassword, true);
@@ -503,6 +514,51 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         .get(accountResponse.body.donor.id);
       assert.ok(tokenRow && tokenRow.token);
       assert.equal(tokenRow.used_at, null);
+    } finally {
+      welcomeMock.mock.restore();
+      await server.close();
+    }
+  });
+
+  await t.test('account setup response includes relay warning for Apple relay emails', async (t) => {
+    resetDatabase();
+    const welcomeMock = t.mock.method(
+      emailService,
+      'sendAccountWelcomeEmail',
+      async () => {}
+    );
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const prospect = createProspect({
+        email: 'relay-user@privaterelay.appleid.com',
+        name: 'Relay User',
+      });
+      const shareLink = createOrUpdateShareLink({
+        prospectId: prospect.id,
+        token: 'relay-token',
+        sessionToken: 'relay-session',
+      });
+
+      const accountResponse = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/account`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'relay-user@privaterelay.appleid.com',
+            name: 'Relay User',
+            password: 'Password1234!',
+            confirmPassword: 'Password1234!',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(accountResponse.status, 200);
+      assert.match(accountResponse.body.warning, /Hide My Email/i);
     } finally {
       welcomeMock.mock.restore();
       await server.close();

@@ -699,3 +699,36 @@ test('customer support workflow creates thread and notifies admin', async (t) =>
     )
   );
 });
+
+test('dashboard page includes relay advisory and FAQ guidance', () => {
+  const dashboardHtmlPath = path.join(__dirname, '..', '..', 'public', 'dashboard.html');
+  const html = fs.readFileSync(dashboardHtmlPath, 'utf8');
+  assert.match(
+    html,
+    /If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address\./
+  );
+  assert.match(html, /Why did my Plex invite go to a different email\?/);
+});
+
+test('customer session payload includes non-blocking relay warning', async () => {
+  resetDatabase();
+  const donor = createDonor({
+    email: 'relay-session@privaterelay.appleid.com',
+    name: 'Relay Session',
+    status: 'active',
+  });
+
+  await withTestServer(async (client) => {
+    const setupResponse = await client.post('/test/setup-session', {
+      body: { customerId: donor.id },
+    });
+    assert.equal(setupResponse.status, 200);
+    await setupResponse.json();
+
+    const sessionResponse = await client.get('/customer/session');
+    assert.equal(sessionResponse.status, 200);
+    const payload = await sessionResponse.json();
+    assert.match(payload.warning, /Hide My Email/i);
+    assert.equal(payload.authenticated, true);
+  });
+});

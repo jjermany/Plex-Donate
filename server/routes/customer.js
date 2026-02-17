@@ -68,6 +68,11 @@ const {
   needsSubscriptionRefresh,
   refreshDonorSubscription,
 } = require('../utils/donor-subscriptions');
+const {
+  normalizeEmail,
+  isValidEmail,
+  getRelayEmailWarning,
+} = require('../utils/validation');
 
 const router = express.Router();
 
@@ -284,16 +289,6 @@ function isShareInviteUsed(shareInvite) {
   return true;
 }
 
-function normalizeEmail(email) {
-  return (email || '').trim().toLowerCase();
-}
-
-function isValidEmail(email) {
-  if (!email) {
-    return false;
-  }
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
-}
 
 function hasPlexLink(donor) {
   return Boolean(donor && donor.plexAccountId);
@@ -437,6 +432,7 @@ function buildDashboardResponse({
     : '';
   return {
     authenticated: Boolean(donor),
+    warning: donor ? getRelayEmailWarning(donor.email || donor.plexEmail) : '',
     donor: donor
       ? {
           id: donor.id,
