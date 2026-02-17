@@ -90,6 +90,7 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const plexService = require('../services/plex');
+const logger = require('../utils/logger');
 
 function resetDatabase() {
   db.exec(`
@@ -672,6 +673,87 @@ test('POST /api/admin/plex/sync-status-now matches donor email candidates and in
   assert.ok(syncedDonor);
   assert.equal(syncedDonor.plexShared, true);
   assert.equal(syncedDonor.plexShareState, 'shared');
+});
+
+
+
+test('POST /api/admin/plex/sync-status-now logs factual mismatch diagnostics without UI-state assertions', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  createDonor({
+    email: 'mismatch-donor@example.com',
+    plexEmail: 'linked-mismatch@example.com',
+    plexAccountId: 'MISMATCH-ID-999',
+    name: 'Mismatch Candidate',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-sync',
+    serverIdentifier: 'server-sync',
+    librarySectionIds: '1',
+  });
+
+  const originalListUsers = plexService.listUsers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  const originalLoggerInfo = logger.info;
+  const capturedLogs = [];
+
+  plexService.listUsers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      {
+        id: 'share-unrelated',
+        emails: ['other-user@example.com'],
+        userIds: ['OTHER-ID-1'],
+        status: 'accepted',
+        pending: false,
+      },
+    ],
+  });
+
+  logger.info = (...args) => {
+    capturedLogs.push(args);
+  };
+
+  t.after(() => {
+    plexService.listUsers = originalListUsers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+    logger.info = originalLoggerInfo;
+  });
+
+  const response = await agent.post('/api/admin/plex/sync-status-now', {
+    headers: { 'x-csrf-token': csrfToken },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.mismatchCount, 1);
+  assert.ok(!body.message.includes('UI will show correctly'));
+
+  const mismatchLog = capturedLogs.find(([message]) =>
+    typeof message === 'string' && message.includes('has Plex link but no current share')
+  );
+
+  assert.ok(mismatchLog);
+  assert.ok(!mismatchLog[0].includes('UI will correctly show as NOT shared'));
+
+  const logMeta = mismatchLog[1];
+  assert.equal(logMeta.donorEmail, 'mismatch-donor@example.com');
+  assert.equal(logMeta.plexEmail, 'linked-mismatch@example.com');
+  assert.equal(logMeta.plexAccountId, 'MISMATCH-ID-999');
+  assert.equal(logMeta.matchedByEmail, false);
+  assert.equal(logMeta.matchedById, false);
+  assert.equal(logMeta.matchedCandidate, null);
+  assert.ok(Array.isArray(logMeta.emailCandidates));
+  assert.ok(Array.isArray(logMeta.idCandidates));
+  assert.equal(logMeta.shareSample, null);
 });
 
 test('announcements settings round-trip through admin API', async (t) => {

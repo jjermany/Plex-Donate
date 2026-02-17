@@ -220,6 +220,61 @@ function buildPlexSyncContextFromShares(shares) {
   };
 }
 
+function resolvePlexMatchDiagnostics(donor, plexContext) {
+  const emailCandidates = collectDonorEmailCandidates(donor);
+  const idCandidates = collectDonorIdCandidates(donor);
+  const index = plexContext && Array.isArray(plexContext.index) ? plexContext.index : [];
+
+  let matchedEntry = null;
+  let matchedByEmail = false;
+  let matchedById = false;
+  let matchedCandidate = null;
+
+  for (const entry of index) {
+    if (!entry) {
+      continue;
+    }
+
+    const emailMatch = emailCandidates.find((value) => entry.emails.has(value));
+    if (emailMatch) {
+      matchedEntry = entry;
+      matchedByEmail = true;
+      matchedCandidate = emailMatch;
+      break;
+    }
+
+    const idMatch = idCandidates.find((value) => entry.ids.has(value));
+    if (idMatch) {
+      matchedEntry = entry;
+      matchedById = true;
+      matchedCandidate = idMatch;
+      break;
+    }
+  }
+
+  const shareSample = matchedEntry && matchedEntry.user
+    ? {
+        id: matchedEntry.user.id || null,
+        emails: Array.isArray(matchedEntry.user.emails)
+          ? matchedEntry.user.emails.slice(0, 3)
+          : [],
+        userIds: Array.isArray(matchedEntry.user.userIds)
+          ? matchedEntry.user.userIds.slice(0, 3)
+          : [],
+        status: matchedEntry.user.status || null,
+      }
+    : null;
+
+  return {
+    emailCandidates,
+    idCandidates,
+    matchedByEmail,
+    matchedById,
+    matchedCandidate,
+    shareSample,
+  };
+}
+
 async function buildPaypalPlanPayload(options = {}) {
   const { allowErrors = false } = options;
   const paypalSettings = settingsStore.getPaypalSettings();
@@ -1576,13 +1631,11 @@ router.post(
       for (const donor of donorsWithPlex) {
         const donorWithPlex = annotateDonorWithPlex(donor, syncPlexContext);
         const hasShare = donorWithPlex.plexShared;
-        const emailCandidates = collectDonorEmailCandidates(donor);
-        const idCandidates = collectDonorIdCandidates(donor);
+        const diagnostics = resolvePlexMatchDiagnostics(donor, syncPlexContext);
 
         logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`,
           {
-            emailCandidates,
-            idCandidates,
+            ...diagnostics,
           }
         );
 
@@ -1593,7 +1646,13 @@ router.post(
             email: donor.email,
             name: donor.name,
           });
-          logger.info(`Donor ${donor.id} has Plex link but no current share - UI will correctly show as NOT shared`);
+          logger.info(`Donor ${donor.id} has Plex link but no current share`, {
+            donorId: donor.id,
+            donorEmail: donor.email,
+            plexEmail: donor.plexEmail || null,
+            plexAccountId: donor.plexAccountId || null,
+            ...diagnostics,
+          });
         }
       }
 
@@ -1603,7 +1662,7 @@ router.post(
       res.json({
         success: true,
         message: mismatchCount > 0
-          ? `Plex sync complete. ${mismatchCount} donor(s) have Plex linked but no current access (UI will show correctly).`
+          ? `Plex sync complete. ${mismatchCount} donor(s) have Plex linked but no current access.`
           : 'Plex status is up to date.',
         totalShares: currentShares.length,
         donorsChecked: donorsWithPlex.length,
