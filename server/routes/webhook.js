@@ -571,10 +571,13 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     return;
   }
 
-  const email = (donor.email || '').trim();
+  // Plex invite target email should use the Plex identity address when available.
+  // Contact/billing notifications continue to use donor.email.
+  const plexInviteEmail = ((donor.plexEmail || donor.email || '') + '').trim();
+  const contactEmail = (donor.email || '').trim();
   const inviteEmailDiagnostics = getInviteEmailDiagnostics(donor.email, donor.plexEmail);
-  if (!email) {
-    logger.info('Skipping automatic invite: donor email missing', {
+  if (!plexInviteEmail) {
+    logger.info('Skipping automatic invite: Plex invite target email missing', {
       donorId: donor.id,
     });
     logEvent('invite.auto.skipped', {
@@ -607,7 +610,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     });
   }
 
-  const normalizedEmail = normalizeEmail(email);
+  const normalizedEmail = normalizeEmail(plexInviteEmail);
   const normalizedAccountId = (donor.plexAccountId || '')
     .toString()
     .trim()
@@ -769,7 +772,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
           } else {
             try {
               const inviteData = await plexService.createInvite({
-                email,
+                email: plexInviteEmail,
                 friendlyName: donor.name || undefined,
                 invitedId: donor.plexAccountId || undefined,
               });
@@ -808,7 +811,8 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         if (recreatedInvite.inviteUrl) {
           try {
             await emailService.sendInviteEmail({
-              to: email,
+              // Notification email goes to billing/contact email by product behavior.
+              to: contactEmail,
               inviteUrl: recreatedInvite.inviteUrl,
               name: donor.name,
               subscriptionId: donor.subscriptionId,
@@ -855,7 +859,8 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       if (!invite.emailSentAt) {
         try {
           await emailService.sendInviteEmail({
-            to: email,
+            // Notification email goes to billing/contact email by product behavior.
+            to: contactEmail,
             inviteUrl: invite.inviteUrl,
             name: donor.name,
             subscriptionId: donor.subscriptionId,
@@ -890,7 +895,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     const note = noteParts.join(' ');
 
     const inviteData = await plexService.createInvite({
-      email,
+      email: plexInviteEmail,
       friendlyName: donor.name || undefined,
       invitedId: donor.plexAccountId || undefined,
     });
@@ -904,7 +909,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       sharedLibraries: Array.isArray(inviteData.sharedLibraries)
         ? inviteData.sharedLibraries
         : undefined,
-      recipientEmail: email,
+      recipientEmail: plexInviteEmail,
       note,
       plexAccountId: donor.plexAccountId,
       plexEmail: donor.plexEmail,
@@ -928,7 +933,8 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
 
     try {
       await emailService.sendInviteEmail({
-        to: email,
+        // Notification email goes to billing/contact email by product behavior.
+        to: contactEmail,
         inviteUrl: inviteRecord.inviteUrl,
         name: donor.name,
         subscriptionId: donor.subscriptionId,

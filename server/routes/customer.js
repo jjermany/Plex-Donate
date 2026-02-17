@@ -1900,18 +1900,24 @@ router.post(
           // Create Plex invite
           try {
             const note = 'Auto-generated for trial';
+            // Plex invite target email should prefer Plex identity.
+            const trialPlexInviteEmail =
+              (trialDonor.plexEmail || trialDonor.email || '').trim();
+            // Notification email continues to go to billing/contact email.
+            const trialNotificationEmail = (trialDonor.email || '').trim();
 
             // Debug logging to see what we're passing
             logger.info('Trial: About to create Plex invite', {
               donorId: trialDonor.id,
-              email: trialDonor.email,
+              plexInviteEmail: trialPlexInviteEmail,
+              notificationEmail: trialNotificationEmail,
               plexAccountId: trialDonor.plexAccountId,
               plexEmail: trialDonor.plexEmail,
               hasPlexAccountId: !!trialDonor.plexAccountId,
             });
 
             const inviteData = await plexService.createInvite({
-              email: trialDonor.email,
+              email: trialPlexInviteEmail,
               friendlyName: trialDonor.name || undefined,
               invitedId: trialDonor.plexAccountId || undefined,
             });
@@ -1925,7 +1931,7 @@ router.post(
               sharedLibraries: Array.isArray(inviteData.sharedLibraries)
                 ? inviteData.sharedLibraries
                 : undefined,
-              recipientEmail: trialDonor.email,
+              recipientEmail: trialPlexInviteEmail,
               note,
               plexAccountId: trialDonor.plexAccountId,
               plexEmail: trialDonor.plexEmail,
@@ -1954,7 +1960,8 @@ router.post(
             } else {
               try {
                 await emailService.sendInviteEmail({
-                  to: trialDonor.email,
+                  // Notification email goes to billing/contact email by product behavior.
+                  to: trialNotificationEmail,
                   inviteUrl: inviteRecord.inviteUrl,
                   name: trialDonor.name,
                   subscriptionId: trialDonor.subscriptionId,

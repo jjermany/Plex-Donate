@@ -756,16 +756,23 @@ test('customer trial invite event logs relay diagnostics without raw emails', as
   const originalListUsers = plexService.listUsers;
   const originalCreateInvite = plexService.createInvite;
   const originalSendInvite = emailService.sendInviteEmail;
+  const createInviteCalls = [];
+  const sentInviteEmails = [];
 
   plexService.isConfigured = () => true;
   plexService.listUsers = async () => [];
-  plexService.createInvite = async () => ({
-    inviteId: 'trial-relay-invite',
-    inviteUrl: 'https://plex.local/invite/trial-relay-invite',
-    status: 'pending',
-    invitedAt: new Date().toISOString(),
-  });
-  emailService.sendInviteEmail = async () => {};
+  plexService.createInvite = async (payload) => {
+    createInviteCalls.push(payload);
+    return {
+      inviteId: 'trial-relay-invite',
+      inviteUrl: 'https://plex.local/invite/trial-relay-invite',
+      status: 'pending',
+      invitedAt: new Date().toISOString(),
+    };
+  };
+  emailService.sendInviteEmail = async (payload) => {
+    sentInviteEmails.push(payload);
+  };
 
   t.after(() => {
     plexService.isConfigured = originalIsConfigured;
@@ -792,4 +799,8 @@ test('customer trial invite event logs relay diagnostics without raw emails', as
   assert.equal(payload.plexEmailIsRelay, false);
   assert.equal(payload.emailsDiffer, true);
   assert.equal(Object.hasOwn(payload, 'email'), false);
+  assert.equal(createInviteCalls.length, 1);
+  assert.equal(createInviteCalls[0].email, 'trial-plex@example.com');
+  assert.equal(sentInviteEmails.length, 1);
+  assert.equal(sentInviteEmails[0].to, 'trial-relay@privaterelay.appleid.com');
 });
