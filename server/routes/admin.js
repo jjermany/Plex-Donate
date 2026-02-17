@@ -47,6 +47,7 @@ const { refreshDonorSubscription } = require('../utils/donor-subscriptions');
 const config = require('../config');
 const {
   normalizeValue,
+  preparePlexUserIndex,
   collectDonorEmailCandidates,
   collectDonorIdCandidates,
   annotateDonorWithPlex,
@@ -159,6 +160,64 @@ async function buildDonorListWithPlex() {
   const plexContext = await loadPlexContext({ logContext: 'admin dashboard' });
   const annotatedDonors = donors.map((donor) => annotateDonorWithPlex(donor, plexContext));
   return { donors: annotatedDonors, plexContext };
+}
+
+function buildPlexSyncContextFromShares(shares) {
+  const sharedUsers = (Array.isArray(shares) ? shares : [])
+    .map((member) => {
+      if (!member) {
+        return null;
+      }
+
+      const emails = Array.isArray(member.emails)
+        ? member.emails.map((email) => String(email).trim()).filter(Boolean)
+        : [];
+      const ids = Array.isArray(member.userIds)
+        ? member.userIds.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+
+      if (!emails.length && !ids.length) {
+        return null;
+      }
+
+      const primaryEmail = emails[0] || null;
+      const primaryId = ids[0] || null;
+      const statusValue = member && member.status ? String(member.status).trim() : '';
+      const status = statusValue || (member && member.pending ? 'pending' : 'accepted');
+
+      return {
+        email: primaryEmail,
+        username: primaryEmail,
+        title: primaryEmail,
+        friendlyName: primaryEmail,
+        invitedEmail: primaryEmail,
+        emails,
+        invitations: emails.map((email) => ({ email })),
+        account: primaryEmail || primaryId
+          ? {
+              email: primaryEmail,
+              id: primaryId,
+              uuid: primaryId,
+              machineIdentifier: primaryId,
+            }
+          : {},
+        id: primaryId,
+        uuid: primaryId,
+        userID: primaryId,
+        machineIdentifier: primaryId,
+        accountID: primaryId,
+        status,
+        state: status,
+        friendStatus: status,
+        requestStatus: status,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    configured: true,
+    index: preparePlexUserIndex(sharedUsers),
+  };
 }
 
 async function buildPaypalPlanPayload(options = {}) {
@@ -1503,6 +1562,8 @@ router.post(
         plexAccountId: d.plexAccountId
       })), null, 2));
 
+      const syncPlexContext = buildPlexSyncContextFromShares(currentShares);
+
       // Check each donor against current Plex shares (for status verification only)
       // NOTE: We do NOT clear plexAccountId/plexEmail fields here because:
       // 1. These fields represent the user's Plex identity link (not access status)
@@ -1513,9 +1574,17 @@ router.post(
       const mismatchedDonors = [];
 
       for (const donor of donorsWithPlex) {
-        const hasShare = plexService.checkDonorHasPlexShare(donor, currentShares);
+        const donorWithPlex = annotateDonorWithPlex(donor, syncPlexContext);
+        const hasShare = donorWithPlex.plexShared;
+        const emailCandidates = collectDonorEmailCandidates(donor);
+        const idCandidates = collectDonorIdCandidates(donor);
 
-        logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`);
+        logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`,
+          {
+            emailCandidates,
+            idCandidates,
+          }
+        );
 
         if (!hasShare) {
           mismatchCount++;
