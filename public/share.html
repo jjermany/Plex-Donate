@@ -335,6 +335,15 @@
       .status-text.info {
         color: #bae6fd;
       }
+      .status-text.relay-warning {
+        margin-top: 10px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(248, 113, 113, 0.55);
+        background: rgba(127, 29, 29, 0.32);
+        color: #fecaca;
+        font-weight: 600;
+      }
       .helper-text {
         color: rgba(203, 213, 225, 0.85);
         font-size: 0.9rem;
@@ -632,8 +641,10 @@
                 required
               />
             </label>
-            <p id="account-relay-warning" class="status-text small info hidden">
-              If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.
+            <p id="account-relay-warning" class="status-text small relay-warning">
+              <strong>Important:</strong> If your Plex account uses Apple ‘Hide My Email’
+              (<code>@privaterelay.appleid.com</code>), Plex invites may map to a different
+              identity. Use your real Plex account email when possible before continuing.
             </p>
             <label>
               <span>Display name</span>
@@ -856,8 +867,9 @@
           (isAppleRelayEmail(email)
             ? "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible."
             : '');
-        accountRelayWarning.textContent = warning;
-        accountRelayWarning.classList.toggle('hidden', !warning);
+        if (warning) {
+          accountRelayWarning.classList.remove('hidden');
+        }
       }
 
       function showLoading() {

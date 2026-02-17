@@ -429,12 +429,20 @@ async function createAdminSession() {
 }
 
 
-test('share page includes Apple relay advisory copy', () => {
+test('share signup page keeps Apple relay advisory visible before account creation', () => {
   const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
   const html = fs.readFileSync(shareHtmlPath, 'utf8');
   assert.match(
     html,
-    /If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address\./
+    /<p id="account-relay-warning" class="status-text small relay-warning">/
+  );
+  assert.doesNotMatch(
+    html,
+    /<p id="account-relay-warning" class="[^"]*hidden[^"]*">/
+  );
+  assert.match(
+    html,
+    /<strong>Important:<\/strong> If your Plex account uses Apple ‘Hide My Email’/
   );
 });
 
