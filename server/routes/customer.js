@@ -72,6 +72,7 @@ const {
   normalizeEmail,
   isValidEmail,
   getRelayEmailWarning,
+  getInviteEmailDiagnostics,
 } = require('../utils/validation');
 
 const router = express.Router();
@@ -1834,6 +1835,10 @@ router.post(
 
     // Attempt to automatically create and email a Plex invite for the trial.
     let inviteError = null;
+    const inviteEmailDiagnostics = getInviteEmailDiagnostics(
+      trialDonor.email,
+      trialDonor.plexEmail
+    );
     try {
       if (plexService.isConfigured()) {
         // First, try to detect if the donor already has access on the Plex server
@@ -1878,6 +1883,11 @@ router.post(
         }
 
         if (donorHasAccess) {
+          logEvent('invite.trial.skipped', {
+            donorId: trialDonor.id,
+            reason: 'already_on_server',
+            ...inviteEmailDiagnostics,
+          });
           if (!trialDonor.hadPreexistingAccess) {
             setDonorPreexistingAccess(trialDonor.id, true);
             logEvent('donor.preexisting_access.detected', {
@@ -1925,6 +1935,7 @@ router.post(
               donorId: trialDonor.id,
               inviteId: inviteRecord.id,
               plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
+              ...inviteEmailDiagnostics,
             });
 
             if (!inviteRecord.inviteUrl) {
@@ -1934,6 +1945,12 @@ router.post(
                 plexInviteId: inviteRecord.plexInviteId,
               });
               inviteError = errorMsg;
+              logEvent('invite.trial.failed', {
+                donorId: trialDonor.id,
+                reason: 'missing_invite_url',
+                inviteId: inviteRecord.id,
+                ...inviteEmailDiagnostics,
+              });
             } else {
               try {
                 await emailService.sendInviteEmail({
@@ -1950,6 +1967,12 @@ router.post(
               } catch (err) {
                 logger.error('Failed to send trial invite email', err.message);
                 inviteError = 'Trial started but failed to send invite email. Check your email or contact support.';
+                logEvent('invite.trial.failed', {
+                  donorId: trialDonor.id,
+                  reason: 'invite_email_failed',
+                  inviteId: inviteRecord.id,
+                  ...inviteEmailDiagnostics,
+                });
                 if (inviteRecord.plexInviteId) {
                   try {
                     await plexService.cancelInvite(inviteRecord.plexInviteId);
@@ -1967,6 +1990,11 @@ router.post(
           } catch (err) {
             logger.error('Failed to create automatic trial invite', err.message);
             inviteError = `Failed to create Plex invite: ${err.message}`;
+            logEvent('invite.trial.failed', {
+              donorId: trialDonor.id,
+              reason: 'invite_create_failed',
+              ...inviteEmailDiagnostics,
+            });
           }
         }
       } else {

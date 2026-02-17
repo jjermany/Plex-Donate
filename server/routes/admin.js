@@ -53,6 +53,7 @@ const {
   annotateDonorWithPlex,
   loadPlexContext,
 } = require('../utils/plex');
+const { getInviteEmailDiagnostics } = require('../utils/validation');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 
 function notifyDonorOfSupportReply(thread) {
@@ -1098,6 +1099,7 @@ router.post(
 
     const note = typeof req.body === 'object' && req.body !== null ? req.body.note : '';
     const normalizedNote = typeof note === 'string' ? note.trim() : '';
+    const inviteEmailDiagnostics = getInviteEmailDiagnostics(donor.email, donor.plexEmail);
 
     let plexInvite;
     try {
@@ -1110,6 +1112,11 @@ router.post(
       logger.error('Failed to create Plex invite for donor', {
         donorId: donor.id,
         error: err && err.message,
+      });
+      logEvent('plex.invite.admin_failed', {
+        donorId: donor.id,
+        reason: 'plex_invite_failed',
+        ...inviteEmailDiagnostics,
       });
       return res.status(502).json({
         error: err && err.message ? `Plex invite failed: ${err.message}` : 'Failed to create Plex invite',
@@ -1134,6 +1141,7 @@ router.post(
       inviteId: inviteRecord.id,
       plexInviteId: inviteRecord.plexInviteId,
       note: normalizedNote || undefined,
+      ...inviteEmailDiagnostics,
     });
     logger.info('Created Plex invite for donor', {
       donorId: donor.id,

@@ -22,6 +22,7 @@ const emailService = require('../services/email');
 const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const { isInviteStale } = require('../utils/invite-stale');
+const { getInviteEmailDiagnostics } = require('../utils/validation');
 
 const router = express.Router();
 
@@ -571,15 +572,16 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
   }
 
   const email = (donor.email || '').trim();
+  const inviteEmailDiagnostics = getInviteEmailDiagnostics(donor.email, donor.plexEmail);
   if (!email) {
     logger.info('Skipping automatic invite: donor email missing', {
       donorId: donor.id,
     });
     logEvent('invite.auto.skipped', {
       donorId: donor.id,
-      email: donor.email || null,
       subscriptionId: donor.subscriptionId,
       reason: 'missing_email',
+      ...inviteEmailDiagnostics,
     });
     return;
   }
@@ -590,9 +592,9 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     });
     logEvent('invite.auto.skipped', {
       donorId: donor.id,
-      email: donor.email || null,
       subscriptionId: donor.subscriptionId,
       reason: 'plex_not_linked',
+      ...inviteEmailDiagnostics,
     });
     return;
   }
@@ -651,9 +653,9 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
           });
           logEvent('invite.auto.skipped', {
             donorId: donor.id,
-            email: donor.email || null,
             subscriptionId: donor.subscriptionId,
             reason: 'already_on_server',
+            ...inviteEmailDiagnostics,
           });
           const latestInvite =
             getLatestActiveInviteForDonor(donor.id) ||
@@ -843,10 +845,10 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       if (donorHasShare || donorHasPendingShare) {
         logEvent('invite.auto.skipped', {
           donorId: donor.id,
-          email: donor.email || null,
           subscriptionId: donor.subscriptionId,
           reason: donorHasPendingShare ? 'share_pending' : 'share_already_present',
           inviteId: invite.id,
+          ...inviteEmailDiagnostics,
         });
         return;
       }
@@ -870,10 +872,10 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       } else {
         logEvent('invite.auto.skipped', {
           donorId: donor.id,
-          email: donor.email || null,
           subscriptionId: donor.subscriptionId,
           reason: 'existing_invite_reused',
           inviteId: invite.id,
+          ...inviteEmailDiagnostics,
         });
       }
       return;
@@ -913,6 +915,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       inviteId: inviteRecord.id,
       source: 'payment-webhook',
       plexInviteId: inviteRecord.plexInviteId || inviteData.inviteId || null,
+      ...inviteEmailDiagnostics,
     });
 
     if (!inviteRecord.inviteUrl) {
@@ -951,6 +954,12 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
   } catch (err) {
     logger.warn('Failed to create automatic invite after payment', err.message);
+    logEvent('invite.auto.failed', {
+      donorId: donor.id,
+      subscriptionId: donor.subscriptionId,
+      reason: 'invite_create_failed',
+      ...inviteEmailDiagnostics,
+    });
   }
 }
 

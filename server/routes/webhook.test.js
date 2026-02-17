@@ -16,10 +16,11 @@ const assert = require('node:assert/strict');
 const express = require('express');
 
 const webhookRouter = require('./webhook');
-const { db, createDonor, listDonorsWithDetails } = require('../db');
+const { db, createDonor, listDonorsWithDetails, getRecentEvents } = require('../db');
 const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const emailService = require('../services/email');
+const plexService = require('../services/plex');
 const adminNotifications = require('../services/admin-notifications');
 const nodemailer = require('nodemailer');
 
@@ -405,6 +406,195 @@ test('trial donor converts to active on payment without disrupting Plex access',
 
     // Verify lastPaymentAt was updated
     assert.equal(updatedDonor.lastPaymentAt, '2024-01-15T00:00:00Z');
+  } finally {
+    await server.close();
+  }
+});
+
+
+test('automatic webhook invite logs relay diagnostics for generated invites', { concurrency: false }, async (t) => {
+  resetDatabase();
+
+  const originalVerifySignature = paypalService.verifyWebhookSignature;
+  paypalService.verifyWebhookSignature = async () => ({ verified: true });
+  t.after(() => {
+    paypalService.verifyWebhookSignature = originalVerifySignature;
+  });
+
+  const originalIsConfigured = plexService.isConfigured;
+  const originalListUsers = plexService.listUsers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  const originalCreateInvite = plexService.createInvite;
+  const originalSendInvite = emailService.sendInviteEmail;
+
+  plexService.isConfigured = () => true;
+  plexService.listUsers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({ success: true, shares: [] });
+  plexService.createInvite = async () => ({
+    inviteId: 'relay-generated-1',
+    inviteUrl: 'https://plex.local/invites/relay-generated-1',
+    status: 'pending',
+    invitedAt: new Date().toISOString(),
+  });
+  emailService.sendInviteEmail = async () => {};
+
+  t.after(() => {
+    plexService.isConfigured = originalIsConfigured;
+    plexService.listUsers = originalListUsers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+    plexService.createInvite = originalCreateInvite;
+    emailService.sendInviteEmail = originalSendInvite;
+  });
+
+  createDonor({
+    email: 'relay-user@privaterelay.appleid.com',
+    name: 'Relay User',
+    subscriptionId: 'I-RELAY-GENERATED',
+    status: 'active',
+    plexAccountId: 'relay-account',
+    plexEmail: 'plex-user@example.com',
+  });
+
+  const app = express();
+  app.use('/', webhookRouter);
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'WH-RELAY-GENERATED',
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          id: 'PAYMENT-RELAY-GENERATED',
+          status: 'COMPLETED',
+          amount: { value: '10.00', currency_code: 'USD' },
+          supplementary_data: {
+            related_ids: {
+              subscription_id: 'I-RELAY-GENERATED',
+            },
+          },
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    const generated = getRecentEvents(20).find((event) => event.eventType === 'invite.auto.generated');
+    assert.ok(generated);
+    const payload = JSON.parse(generated.payload);
+    assert.equal(payload.donorEmailIsRelay, true);
+    assert.equal(payload.plexEmailIsRelay, false);
+    assert.equal(payload.emailsDiffer, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test('automatic webhook invite logs relay diagnostics for skip and failure outcomes', { concurrency: false }, async (t) => {
+  resetDatabase();
+
+  const originalVerifySignature = paypalService.verifyWebhookSignature;
+  paypalService.verifyWebhookSignature = async () => ({ verified: true });
+  t.after(() => {
+    paypalService.verifyWebhookSignature = originalVerifySignature;
+  });
+
+  const originalIsConfigured = plexService.isConfigured;
+  const originalListUsers = plexService.listUsers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  const originalCreateInvite = plexService.createInvite;
+
+  plexService.isConfigured = () => true;
+  plexService.getCurrentPlexShares = async () => ({ success: true, shares: [] });
+
+  t.after(() => {
+    plexService.isConfigured = originalIsConfigured;
+    plexService.listUsers = originalListUsers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+    plexService.createInvite = originalCreateInvite;
+  });
+
+  createDonor({
+    email: 'skip-relay@privaterelay.appleid.com',
+    name: 'Skip Relay',
+    subscriptionId: 'I-RELAY-SKIP',
+    status: 'active',
+    plexAccountId: 'relay-skip',
+    plexEmail: 'skip-plex@example.com',
+  });
+
+  createDonor({
+    email: 'fail-relay@privaterelay.appleid.com',
+    name: 'Fail Relay',
+    subscriptionId: 'I-RELAY-FAIL',
+    status: 'active',
+    plexAccountId: 'relay-fail',
+    plexEmail: 'fail-plex@example.com',
+  });
+
+  const app = express();
+  app.use('/', webhookRouter);
+  const server = await startServer(app);
+
+  try {
+    plexService.listUsers = async () => [{ email: 'skip-relay@privaterelay.appleid.com', id: 'relay-skip' }];
+    plexService.createInvite = async () => {
+      throw new Error('createInvite should not run for skipped donor');
+    };
+
+    let response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'WH-RELAY-SKIP',
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          id: 'PAYMENT-RELAY-SKIP',
+          status: 'COMPLETED',
+          amount: { value: '10.00', currency_code: 'USD' },
+          supplementary_data: { related_ids: { subscription_id: 'I-RELAY-SKIP' } },
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    plexService.listUsers = async () => [];
+    plexService.createInvite = async () => {
+      throw new Error('simulated invite creation failure');
+    };
+
+    response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: 'WH-RELAY-FAIL',
+        event_type: 'PAYMENT.CAPTURE.COMPLETED',
+        resource: {
+          id: 'PAYMENT-RELAY-FAIL',
+          status: 'COMPLETED',
+          amount: { value: '10.00', currency_code: 'USD' },
+          supplementary_data: { related_ids: { subscription_id: 'I-RELAY-FAIL' } },
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+
+    const events = getRecentEvents(50);
+    const skipped = events.find((event) => event.eventType === 'invite.auto.skipped' && JSON.parse(event.payload).reason === 'already_on_server');
+    assert.ok(skipped);
+    const skippedPayload = JSON.parse(skipped.payload);
+    assert.equal(skippedPayload.donorEmailIsRelay, true);
+    assert.equal(skippedPayload.plexEmailIsRelay, false);
+    assert.equal(skippedPayload.emailsDiffer, true);
+    assert.equal(Object.hasOwn(skippedPayload, 'email'), false);
+
+    const failed = events.find((event) => event.eventType === 'invite.auto.failed');
+    assert.ok(failed);
+    const failedPayload = JSON.parse(failed.payload);
+    assert.equal(failedPayload.donorEmailIsRelay, true);
+    assert.equal(failedPayload.plexEmailIsRelay, false);
+    assert.equal(failedPayload.emailsDiffer, true);
   } finally {
     await server.close();
   }
