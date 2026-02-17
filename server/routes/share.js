@@ -52,6 +52,7 @@ const {
   normalizeEmail,
   isValidEmail,
   getRelayEmailWarning,
+  getInviteEmailDiagnostics,
 } = require('../utils/validation');
 
 const router = express.Router();
@@ -156,14 +157,22 @@ function getDonorRelayWarning(donor) {
 
   const plexEmail = normalizeEmail(donor.plexEmail);
   const contactEmail = normalizeEmail(donor.email);
+  const diagnostics = getInviteEmailDiagnostics(contactEmail, plexEmail);
   const warningSource = plexEmail || contactEmail;
   const relayWarning = getRelayEmailWarning(warningSource);
+  const relayMismatch =
+    diagnostics.emailsDiffer &&
+    (diagnostics.donorEmailIsRelay || diagnostics.plexEmailIsRelay);
 
-  if (!relayWarning) {
+  const shouldWarn = !plexEmail
+    ? diagnostics.donorEmailIsRelay
+    : diagnostics.plexEmailIsRelay || relayMismatch;
+
+  if (!relayWarning || !shouldWarn) {
     return '';
   }
 
-  if (!plexEmail || !contactEmail || plexEmail === contactEmail) {
+  if (!diagnostics.emailsDiffer) {
     return relayWarning;
   }
 

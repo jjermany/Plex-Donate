@@ -570,6 +570,30 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
   });
 
 
+  await t.test('share response warning falls back to relay contact email when Plex is not linked', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'relay-fallback@privaterelay.appleid.com',
+        status: 'active',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'share-fallback-warning-token',
+        sessionToken: 'share-fallback-warning-session',
+      });
+
+      const response = await requestJson(server, 'GET', `/share/${shareLink.token}`);
+      assert.equal(response.status, 200);
+      assert.match(response.body.warning, /Heads up:/i);
+    } finally {
+      await server.close();
+    }
+  });
+
   await t.test('share response warning prefers Plex email and adds mismatch guidance', async () => {
     resetDatabase();
     const app = createApp();
