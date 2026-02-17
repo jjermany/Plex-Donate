@@ -632,6 +632,9 @@
                 required
               />
             </label>
+            <p id="account-relay-warning" class="status-text small info hidden">
+              If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.
+            </p>
             <label>
               <span>Display name</span>
               <input
@@ -796,6 +799,7 @@
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
+      const accountRelayWarning = document.getElementById('account-relay-warning');
       const accountNameInput = document.getElementById('account-name');
       const accountPasswordInput = document.getElementById('account-password');
       const accountConfirmInput = document.getElementById('account-confirm');
@@ -836,6 +840,24 @@
               console.warn('Service worker registration failed', err);
             });
         });
+      }
+
+      function isAppleRelayEmail(email) {
+        const normalized = (email || '').trim().toLowerCase();
+        return normalized.endsWith('@privaterelay.appleid.com');
+      }
+
+      function updateRelayWarning(email, backendWarning = '') {
+        if (!accountRelayWarning) {
+          return;
+        }
+        const warning =
+          (typeof backendWarning === 'string' ? backendWarning.trim() : '') ||
+          (isAppleRelayEmail(email)
+            ? "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible."
+            : '');
+        accountRelayWarning.textContent = warning;
+        accountRelayWarning.classList.toggle('hidden', !warning);
       }
 
       function showLoading() {
@@ -1240,6 +1262,7 @@
       function render(data) {
         state.trialRequestPending = false;
         state.data = data;
+        updateRelayWarning((data && data.donor && data.donor.email) || (data && data.prospect && data.prospect.email) || (accountEmailInput && accountEmailInput.value) || '', data && data.warning);
         state.sessionToken =
           data && data.shareLink && data.shareLink.sessionToken
             ? data.shareLink.sessionToken
@@ -1540,6 +1563,12 @@
         }
       }
 
+
+      if (accountEmailInput) {
+        accountEmailInput.addEventListener('input', () => {
+          updateRelayWarning(accountEmailInput.value || '');
+        });
+      }
 
       if (accountForm) {
         accountForm.addEventListener('submit', async (event) => {
