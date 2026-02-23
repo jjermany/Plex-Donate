@@ -31,4 +31,4 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/jermcee/plex-donate:latest
+          tags: ghcr.io/jjermany/plex-donate:latest
