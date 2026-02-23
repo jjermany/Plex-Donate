@@ -750,8 +750,12 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
     }
   }
 
+  // A direct share via /api/v2/shared_servers grants access immediately and
+  // returns a plexInviteId but no inviteUrl. Treat those as usable too.
   const existingInviteUsable =
-    existingInvite && existingInvite.inviteUrl && !existingInvite.revokedAt;
+    existingInvite &&
+    (existingInvite.inviteUrl || existingInvite.plexInviteId) &&
+    !existingInvite.revokedAt;
   const existingInviteMatches =
     existingInviteUsable &&
     candidateEmails.some(
@@ -775,7 +779,9 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
 
     if (!donorHasShare && !donorHasPendingShare) {
       const inviteIsStale = isInviteStale(invite);
-      const inviteMissingUrl = !invite.inviteUrl;
+      // A direct share (plexInviteId present, no inviteUrl) has already granted
+      // access — no need to recreate just because there is no URL.
+      const inviteMissingUrl = !invite.inviteUrl && !invite.plexInviteId;
       const shouldRecreateInvite = inviteIsStale || inviteMissingUrl;
       const shouldResendEmail =
         Boolean(invite.emailSentAt) && !inviteIsStale && !inviteMissingUrl;
@@ -830,35 +836,38 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
           });
         }
 
-        if (recreatedInvite.inviteUrl) {
-          try {
-            await emailService.sendInviteEmail({
-              // Notification email goes to billing/contact email by product behavior.
-              to: contactEmail,
-              inviteUrl: recreatedInvite.inviteUrl,
-              name: donor.name,
-              subscriptionId: donor.subscriptionId,
-            });
-            recreatedInvite = markInviteEmailSent(recreatedInvite.id);
-            logEvent('invite.auto.email_sent', {
-              donorId: donor.id,
-              inviteId: recreatedInvite.id,
-              source: 'payment-webhook',
-            });
-          } catch (err) {
-            logger.warn('Automatic invite email failed', err.message);
-            if (
-              reinviteAction === 'recreate_invite' &&
-              recreatedInvite.plexInviteId
-            ) {
-              try {
-                await plexService.cancelInvite(recreatedInvite.plexInviteId);
-              } catch (cancelErr) {
-                logger.warn(
-                  'Failed to cancel Plex invite after email failure',
-                  cancelErr.message
-                );
-              }
+        // When Plex uses a direct share (e.g. /api/v2/shared_servers), the user is
+        // immediately granted access and no invite URL is returned. Fall back to the
+        // Plex web app URL so the notification email can still be sent.
+        const autoEmailInviteUrl = recreatedInvite.inviteUrl || 'https://app.plex.tv/desktop#!/settings/manage-library-access';
+        try {
+          await emailService.sendInviteEmail({
+            // Notification email goes to billing/contact email by product behavior.
+            to: contactEmail,
+            inviteUrl: autoEmailInviteUrl,
+            name: donor.name,
+            subscriptionId: donor.subscriptionId,
+          });
+          recreatedInvite = markInviteEmailSent(recreatedInvite.id);
+          logEvent('invite.auto.email_sent', {
+            donorId: donor.id,
+            inviteId: recreatedInvite.id,
+            source: 'payment-webhook',
+          });
+        } catch (err) {
+          logger.warn('Automatic invite email failed', err.message);
+          if (
+            reinviteAction === 'recreate_invite' &&
+            recreatedInvite.plexInviteId &&
+            recreatedInvite.inviteUrl
+          ) {
+            try {
+              await plexService.cancelInvite(recreatedInvite.plexInviteId);
+            } catch (cancelErr) {
+              logger.warn(
+                'Failed to cancel Plex invite after email failure',
+                cancelErr.message
+              );
             }
           }
         }
@@ -879,11 +888,12 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         return;
       }
       if (!invite.emailSentAt) {
+        const existingEmailUrl = invite.inviteUrl || 'https://app.plex.tv/desktop#!/settings/manage-library-access';
         try {
           await emailService.sendInviteEmail({
             // Notification email goes to billing/contact email by product behavior.
             to: contactEmail,
-            inviteUrl: invite.inviteUrl,
+            inviteUrl: existingEmailUrl,
             name: donor.name,
             subscriptionId: donor.subscriptionId,
           });

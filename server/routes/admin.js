@@ -1090,9 +1090,36 @@ router.post(
     }
 
     const normalizedStatus = normalizeValue(donor.status || '');
-    if (normalizedStatus !== 'active') {
+    if (normalizedStatus !== 'active' && normalizedStatus !== 'trial') {
       return res.status(403).json({
-        error: 'Only subscribers with an active status can receive Plex invites.',
+        error: `Only subscribers with an active subscription or trial can receive Plex invites (current status: ${normalizedStatus || 'unknown'}).`,
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    // Check current Plex share state before attempting to create an invite.
+    const plexContext = await loadPlexContext({ logContext: 'admin invite' });
+    const donorInvites = listInvitesForDonor(donorId);
+    const annotatedForCheck = annotateDonorWithPlex({ ...donor, invites: donorInvites }, plexContext);
+
+    if (annotatedForCheck.plexShared) {
+      return res.status(400).json({
+        error: 'User already has Plex access.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    if (annotatedForCheck.plexPending) {
+      // Invite already exists and is pending acceptance — Plex will have sent
+      // their own accept email. Return 200 with an info flag so the UI can
+      // display this as a non-error informational message.
+      const { donors: refreshedDonors, plexContext: refreshedContext } = await buildDonorListWithPlex();
+      const refreshedDonor = refreshedDonors.find((item) => item.id === donor.id) || null;
+      return res.status(200).json({
+        message: 'A Plex invite is already pending for this user. Plex will send them an email with the accept link.',
+        info: true,
+        donor: refreshedDonor,
+        plex: { configured: refreshedContext.configured, error: refreshedContext.error },
         csrfToken: res.locals.csrfToken,
       });
     }

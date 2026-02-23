@@ -2416,6 +2416,11 @@
         color: var(--status-danger-color);
       }
 
+      .dashboard-toast[data-state='info'] {
+        border-color: rgba(96, 165, 250, 0.35);
+        color: var(--status-pending-color);
+      }
+
       #plex-status-note {
         margin: 12px 0 0;
         font-size: 0.9rem;
@@ -6631,24 +6636,30 @@
         const shareUrl = buildShareUrl(donor.shareLink);
 
         // Send Plex invite button
-        const canInvite = Boolean(donor.needsPlexInvite);
+        // Enabled whenever Plex is configured, donor has an email, no active
+        // shared access exists, and the subscriber has an active subscription
+        // or active trial. A pending invite is informational only — admin can
+        // still click to get status feedback.
+        const plexConfigured = Boolean(plexState && plexState.configured !== false);
+        const statusAllowsInvite = status === 'active' || status === 'trial';
+        const canInvite = plexConfigured && Boolean(donor.email) && !donor.plexShared && statusAllowsInvite;
         const inviteBtn = document.createElement('button');
         inviteBtn.className = 'secondary';
         inviteBtn.textContent = 'Send Plex invite';
         inviteBtn.disabled = !canInvite;
         inviteBtn.dataset.action = 'invite';
         inviteBtn.dataset.donorId = donor.id;
-        if (!plexState || plexState.configured === false) {
+        if (!plexConfigured) {
           inviteBtn.title = 'Configure Plex settings to send invites.';
         } else if (!donor.email) {
           inviteBtn.title = 'Add an email address to send a Plex invite.';
         } else if (donor.plexShared) {
           inviteBtn.title = 'User already has Plex access.';
+        } else if (!statusAllowsInvite) {
+          inviteBtn.title = 'User must have an active subscription or trial to receive a Plex invite.';
         } else if (donor.plexPending) {
-          inviteBtn.title = 'A Plex invite has already been sent and is pending acceptance.';
-        } else if (status === 'pending') {
-          inviteBtn.title = 'Pending subscribers must activate their subscription before a Plex invite can be sent.';
-        } else if (canInvite) {
+          inviteBtn.title = 'A Plex invite is already pending — click to check status or resend.';
+        } else {
           inviteBtn.title = 'Send a Plex invite to this user.';
         }
         donorDetailActions.appendChild(inviteBtn);
@@ -8155,9 +8166,9 @@
               } else {
                 requiresReload = true;
               }
-              const successMessage =
+              const inviteMessage =
                 (response && response.message) || 'Plex invite created successfully.';
-              showDashboardToast(successMessage, 'success');
+              showDashboardToast(inviteMessage, (response && response.info) ? 'info' : 'success');
             } else if (action === 'share' || action === 'share-generate') {
               const regenerate = action === 'share-generate' ? true : event.shiftKey;
               const options = { method: 'POST' };
@@ -8432,8 +8443,8 @@
               } else {
                 requiresReload = true;
               }
-              const successMessage = (response && response.message) || 'Plex invite created successfully.';
-              showDashboardToast(successMessage, 'success');
+              const inviteMessage = (response && response.message) || 'Plex invite created successfully.';
+              showDashboardToast(inviteMessage, (response && response.info) ? 'info' : 'success');
             } else if (action === 'share' || action === 'share-generate') {
               const regenerate = action === 'share-generate' ? true : event.shiftKey;
               const options = { method: 'POST' };
