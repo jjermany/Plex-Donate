@@ -1973,25 +1973,28 @@ router.post(
               ...inviteEmailDiagnostics,
             });
 
+            // When Plex uses a direct share (e.g. /api/v2/shared_servers), the user is
+            // immediately granted access and no invite URL is returned. Fall back to the
+            // Plex web app URL so the notification email can still be sent.
+            const emailInviteUrl = inviteRecord.inviteUrl || 'https://app.plex.tv';
+
             if (!inviteRecord.inviteUrl) {
-              const errorMsg = 'Plex invite created but no URL was returned. Please contact support.';
-              logger.warn('Plex invite created without a shareable URL for trial', {
+              logger.info('Plex invite created without shareable URL (direct share) - using Plex app URL for email', {
                 donorId: trialDonor.id,
                 plexInviteId: inviteRecord.plexInviteId,
               });
-              inviteError = errorMsg;
-              logEvent('invite.trial.failed', {
+              logEvent('invite.trial.direct_share', {
                 donorId: trialDonor.id,
-                reason: 'missing_invite_url',
                 inviteId: inviteRecord.id,
                 ...inviteEmailDiagnostics,
               });
-            } else {
-              try {
+            }
+
+            try {
                 await emailService.sendInviteEmail({
                   // Notification email goes to billing/contact email by product behavior.
                   to: trialNotificationEmail,
-                  inviteUrl: inviteRecord.inviteUrl,
+                  inviteUrl: emailInviteUrl,
                   name: trialDonor.name,
                   subscriptionId: trialDonor.subscriptionId,
                 });
@@ -2000,7 +2003,7 @@ router.post(
                   donorId: trialDonor.id,
                   inviteId: inviteRecord.id,
                 });
-              } catch (err) {
+            } catch (err) {
                 logger.error('Failed to send trial invite email', err.message);
                 inviteError = 'Trial started but failed to send invite email. Check your email or contact support.';
                 logEvent('invite.trial.failed', {
@@ -2009,7 +2012,7 @@ router.post(
                   inviteId: inviteRecord.id,
                   ...inviteEmailDiagnostics,
                 });
-                if (inviteRecord.plexInviteId) {
+                if (inviteRecord.plexInviteId && inviteRecord.inviteUrl) {
                   try {
                     await plexService.cancelInvite(inviteRecord.plexInviteId);
                   } catch (cancelErr) {
@@ -2021,7 +2024,6 @@ router.post(
                 } catch (revokeErr) {
                   logger.warn('Failed to revoke invite record after email failure', revokeErr.message);
                 }
-              }
             }
           } catch (err) {
             logger.error('Failed to create automatic trial invite', err.message);
