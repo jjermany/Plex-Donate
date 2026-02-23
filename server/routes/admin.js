@@ -1140,6 +1140,26 @@ router.post(
         donorId: donor.id,
         error: err && err.message,
       });
+
+      // Plex rejected the invite because the user already has a pending
+      // invitation that our DB doesn't know about (e.g. a previous UI bug
+      // prevented recording it). Treat this the same as plexPending so the
+      // admin sees an informational message rather than a generic error.
+      if (err && err.plexAlreadyInvited) {
+        logger.info('Plex indicated user already has a pending invite; treating as pending', {
+          donorId: donor.id,
+        });
+        const { donors: refreshedDonors, plexContext: refreshedContext } = await buildDonorListWithPlex();
+        const refreshedDonor = refreshedDonors.find((item) => item.id === donor.id) || null;
+        return res.status(200).json({
+          message: 'A Plex invite is already pending for this user. Plex will send them an email with the accept link.',
+          info: true,
+          donor: refreshedDonor,
+          plex: { configured: refreshedContext.configured, error: refreshedContext.error },
+          csrfToken: res.locals.csrfToken,
+        });
+      }
+
       logEvent('plex.invite.admin_failed', {
         donorId: donor.id,
         reason: 'plex_invite_failed',
