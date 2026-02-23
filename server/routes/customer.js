@@ -1976,7 +1976,7 @@ router.post(
             // When Plex uses a direct share (e.g. /api/v2/shared_servers), the user is
             // immediately granted access and no invite URL is returned. Fall back to the
             // Plex web app URL so the notification email can still be sent.
-            const emailInviteUrl = inviteRecord.inviteUrl || 'https://app.plex.tv';
+            const emailInviteUrl = inviteRecord.inviteUrl || 'https://app.plex.tv/desktop#!/settings/manage-library-access';
 
             if (!inviteRecord.inviteUrl) {
               logger.info('Plex invite created without shareable URL (direct share) - using Plex app URL for email', {

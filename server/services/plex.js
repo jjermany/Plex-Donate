@@ -3182,6 +3182,13 @@ async function createInvite(
     data = {};
   }
 
+  // Log the raw Plex response so we can diagnose URL extraction issues in
+  // production (e.g. when invitation.uri is absent or in an unexpected shape).
+  logger.info('Plex shared_servers raw response', {
+    status: response.status,
+    data: JSON.stringify(data),
+  });
+
   const mapped = mapInviteResponse(data);
 
   if (!mapped.inviteId && !mapped.inviteUrl) {

@@ -839,7 +839,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         // When Plex uses a direct share (e.g. /api/v2/shared_servers), the user is
         // immediately granted access and no invite URL is returned. Fall back to the
         // Plex web app URL so the notification email can still be sent.
-        const autoEmailInviteUrl = recreatedInvite.inviteUrl || 'https://app.plex.tv';
+        const autoEmailInviteUrl = recreatedInvite.inviteUrl || 'https://app.plex.tv/desktop#!/settings/manage-library-access';
         try {
           await emailService.sendInviteEmail({
             // Notification email goes to billing/contact email by product behavior.
@@ -888,7 +888,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
         return;
       }
       if (!invite.emailSentAt) {
-        const existingEmailUrl = invite.inviteUrl || 'https://app.plex.tv';
+        const existingEmailUrl = invite.inviteUrl || 'https://app.plex.tv/desktop#!/settings/manage-library-access';
         try {
           await emailService.sendInviteEmail({
             // Notification email goes to billing/contact email by product behavior.
