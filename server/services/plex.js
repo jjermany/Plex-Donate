@@ -3155,6 +3155,24 @@ async function createInvite(
       );
     }
 
+    // Detect "already invited / pending" responses from Plex so the caller can
+    // surface a friendlier message instead of a generic failure.
+    const bodyLower = bodyText.toLowerCase();
+    const looksAlreadyInvited =
+      (bodyLower.includes('already') &&
+        (bodyLower.includes('invited') ||
+          bodyLower.includes('pending') ||
+          bodyLower.includes('access'))) ||
+      bodyLower.includes('invitation already') ||
+      bodyLower.includes('already a member');
+    if (looksAlreadyInvited) {
+      const alreadyInvitedError = new Error(
+        `Plex declined the invite because the user may already have a pending invitation. Details: ${response.status} (${statusText})${suffix}`
+      );
+      alreadyInvitedError.plexAlreadyInvited = true;
+      throw alreadyInvitedError;
+    }
+
     throw new Error(
       `Plex invite creation failed with ${response.status} (${statusText})${suffix}`
     );
