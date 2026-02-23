@@ -1176,7 +1176,7 @@ router.post(
       plexInviteId: inviteRecord.plexInviteId,
     });
 
-    const { donors, plexContext } = await buildDonorListWithPlex();
+    const { donors, plexContext: refreshedPlexContext } = await buildDonorListWithPlex();
     const annotatedDonor = donors.find((item) => item.id === donor.id) || null;
 
     res.json({
@@ -1184,8 +1184,8 @@ router.post(
       donor: annotatedDonor,
       message: `Plex invite created for ${donor.email}.`,
       plex: {
-        configured: plexContext.configured,
-        error: plexContext.error,
+        configured: refreshedPlexContext.configured,
+        error: refreshedPlexContext.error,
       },
       csrfToken: res.locals.csrfToken,
     });
