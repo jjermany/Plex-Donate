@@ -54,6 +54,7 @@ const {
   loadPlexContext,
 } = require('../utils/plex');
 const { getInviteEmailDiagnostics } = require('../utils/validation');
+const { resolvePublicBaseUrl } = require('../utils/public-base-url');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 
 function notifyDonorOfSupportReply(thread) {
@@ -98,24 +99,6 @@ function asyncHandler(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
   };
-}
-
-function resolvePublicBaseUrl(req) {
-  let configured = '';
-  try {
-    const appSettings = settingsStore.getAppSettings();
-    configured = appSettings && appSettings.publicBaseUrl
-      ? String(appSettings.publicBaseUrl).trim()
-      : '';
-  } catch (err) {
-    configured = '';
-  }
-
-  if (configured && /^https?:\/\//i.test(configured)) {
-    return configured.replace(/\/+$/, '');
-  }
-
-  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
 }
 
 function resolveEnvironmentTimezone() {
@@ -1245,6 +1228,12 @@ router.post(
     }
 
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before generating share links.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
     const url = `${origin}/share/${shareLink.token}`;
 
     return res.json({
@@ -1350,6 +1339,12 @@ router.post(
     }
 
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before generating share links.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
     const url = `${origin}/share/${shareLink.token}`;
 
     return res.json({

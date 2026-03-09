@@ -17,19 +17,19 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
-    "body-parser": "^1.20.3",
-    "csurf": "^1.2.2",
+    "body-parser": "^1.20.4",
+    "csurf": "^1.11.0",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-rate-limit": "^8.2.1",
+    "express": "^4.22.1",
+    "express-rate-limit": "^8.3.0",
     "express-session": "^1.18.0",
     "nanoid": "^5.0.7",
     "node-fetch": "^2.7.0",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "^8.0.1",
     "raw-body": "^2.5.2",
     "winston": "^3.18.3"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.14"
   }
 }

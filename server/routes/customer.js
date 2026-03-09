@@ -3,6 +3,7 @@ const { nanoid } = require('../utils/nanoid-shim');
 const { authLimiter, emailVerificationLimiter } = require('../middleware/rate-limit');
 const {
   getDonorById,
+  getDonorBySubscriptionId,
   getLatestActiveInviteForDonor,
   getLatestInviteForDonor,
   createInvite: createInviteRecord,
@@ -67,6 +68,8 @@ const {
   isValidSubscriptionId,
   needsSubscriptionRefresh,
   refreshDonorSubscription,
+  fetchVerifiedPayPalSubscription,
+  applyPayPalSubscriptionSnapshot,
 } = require('../utils/donor-subscriptions');
 const {
   normalizeEmail,
@@ -74,6 +77,7 @@ const {
   getRelayEmailWarning,
   getInviteEmailDiagnostics,
 } = require('../utils/validation');
+const { resolvePublicBaseUrl } = require('../utils/public-base-url');
 
 const router = express.Router();
 
@@ -220,25 +224,6 @@ router.use((req, res, next) => {
 
   next();
 });
-
-function resolvePublicBaseUrl(req) {
-  let configured = '';
-  try {
-    const appSettings = settingsStore.getAppSettings();
-    configured =
-      appSettings && appSettings.publicBaseUrl
-        ? String(appSettings.publicBaseUrl).trim()
-        : '';
-  } catch (err) {
-    configured = '';
-  }
-
-  if (configured && /^https?:\/\//i.test(configured)) {
-    return configured.replace(/\/+$/, '');
-  }
-
-  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
-}
 
 function buildShareInviteDetails(shareInvite, origin) {
   if (!shareInvite) {
@@ -421,6 +406,43 @@ function getInviteState(donorId) {
     inviteLimitReached,
     nextInviteAvailableAt,
   };
+}
+
+async function verifyRequestedSubscription({
+  subscriptionId,
+  expectedEmail,
+  activeDonorId = null,
+}) {
+  const normalizedSubscriptionId = normalizeSubscriptionId(subscriptionId).toUpperCase();
+  if (!normalizedSubscriptionId) {
+    return null;
+  }
+
+  if (!isValidSubscriptionId(normalizedSubscriptionId)) {
+    const err = new Error('Enter a valid PayPal subscription ID (format like I-XXXX).');
+    err.code = 'INVALID_SUBSCRIPTION_ID';
+    throw err;
+  }
+
+  const activeDonor = getDonorById(activeDonorId);
+  const currentSubscriptionId = normalizeSubscriptionId(
+    activeDonor && activeDonor.subscriptionId
+  ).toUpperCase();
+
+  if (currentSubscriptionId && currentSubscriptionId === normalizedSubscriptionId) {
+    return null;
+  }
+
+  const linkedDonor = getDonorBySubscriptionId(normalizedSubscriptionId);
+  if (linkedDonor && linkedDonor.id && linkedDonor.id !== activeDonorId) {
+    const err = new Error('This PayPal subscription is already linked to another account.');
+    err.code = 'SUBSCRIPTION_ALREADY_LINKED';
+    throw err;
+  }
+
+  return fetchVerifiedPayPalSubscription(normalizedSubscriptionId, {
+    expectedEmail,
+  });
 }
 
 function buildDashboardResponse({
@@ -778,6 +800,11 @@ router.post(
     }
 
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before sending reset emails.',
+      });
+    }
     const resetUrl = `${origin}/dashboard?reset=${encodeURIComponent(tokenRecord.token)}`;
     const loginUrl = `${origin}/dashboard`;
 
@@ -1252,10 +1279,36 @@ router.post(
       normalizedSubscriptionInput &&
       normalizedSubscriptionInput !== normalizedExisting
     ) {
+      let verifiedSubscription;
+      try {
+        verifiedSubscription = await verifyRequestedSubscription({
+          subscriptionId: normalizedSubscriptionInput,
+          expectedEmail: email,
+          activeDonorId: updatedDonor.id,
+        });
+      } catch (err) {
+        if (err && err.code === 'INVALID_SUBSCRIPTION_ID') {
+          return res.status(400).json({ error: err.message });
+        }
+        if (err && err.code === 'SUBSCRIPTION_ALREADY_LINKED') {
+          return res.status(409).json({ error: err.message });
+        }
+        if (
+          err &&
+          ['SUBSCRIPTION_EMAIL_MISMATCH', 'SUBSCRIPTION_SUBSCRIBER_MISSING'].includes(
+            err.code
+          )
+        ) {
+          return res.status(403).json({ error: err.message });
+        }
+        throw err;
+      }
+
       updatedDonor = updateDonorSubscriptionId(
         updatedDonor.id,
         normalizedSubscriptionInput
       );
+      updatedDonor = applyPayPalSubscriptionSnapshot(updatedDonor, verifiedSubscription);
       subscriptionLinked = true;
       logEvent('customer.subscription.linked', {
         donorId: donor.id,
@@ -1273,7 +1326,7 @@ router.post(
     const previousLastPaymentAt = updatedDonor.lastPaymentAt;
 
     let subscriptionRefreshError = '';
-    if (shouldRefreshSubscription) {
+    if (shouldRefreshSubscription && !subscriptionLinked) {
       const donorForRefresh = updatedDonor;
       const { donor: refreshedDonor, error } = await refreshDonorSubscription(
         donorForRefresh,
@@ -1639,6 +1692,11 @@ router.post(
     } = getInviteState(donor.id);
     let invite = activeInviteFromState || latestInvite || null;
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before generating invites.',
+      });
+    }
     const currentShareInviteDetails = buildShareInviteDetails(shareInvite, origin);
     const shareInviteReusable =
       shareInvite &&

@@ -49,6 +49,9 @@ const {
 } = require('../utils/paypal');
 const {
   needsSubscriptionRefresh,
+  isValidSubscriptionId,
+  fetchVerifiedPayPalSubscription,
+  applyPayPalSubscriptionSnapshot,
 } = require('../utils/donor-subscriptions');
 const adminNotifications = require('../services/admin-notifications');
 const {
@@ -57,6 +60,7 @@ const {
   getRelayEmailWarning,
   getInviteEmailDiagnostics,
 } = require('../utils/validation');
+const { resolvePublicBaseUrl } = require('../utils/public-base-url');
 
 const router = express.Router();
 const { annotateDonorWithPlex, loadPlexContext } = require('../utils/plex');
@@ -68,25 +72,6 @@ function asyncHandler(handler) {
 }
 
 router.use(express.json());
-
-function resolvePublicBaseUrl(req) {
-  let configured = '';
-  try {
-    const appSettings = settingsStore.getAppSettings();
-    configured =
-      appSettings && appSettings.publicBaseUrl
-        ? String(appSettings.publicBaseUrl).trim()
-        : '';
-  } catch (err) {
-    configured = '';
-  }
-
-  if (configured && /^https?:\/\//i.test(configured)) {
-    return configured.replace(/\/+$/, '');
-  }
-
-  return `${req.protocol}://${req.get('host')}`.replace(/\/$/, '');
-}
 
 function buildShareInviteDetails(shareInvite, origin) {
   if (!shareInvite) {
@@ -491,6 +476,38 @@ async function refreshDonorFromPaypalSubscription(donor, { shareLinkId, context 
   }
 }
 
+async function verifyRequestedSubscription({
+  subscriptionId,
+  expectedEmail,
+  activeDonorId = null,
+}) {
+  const normalizedSubscriptionId = (subscriptionId || '').trim().toUpperCase();
+  if (!normalizedSubscriptionId) {
+    return null;
+  }
+
+  if (!isValidSubscriptionId(normalizedSubscriptionId)) {
+    const err = new Error('Enter a valid PayPal subscription ID (format like I-XXXX).');
+    err.code = 'INVALID_SUBSCRIPTION_ID';
+    throw err;
+  }
+
+  const existingLinkedDonor = getDonorBySubscriptionId(normalizedSubscriptionId);
+  if (
+    existingLinkedDonor &&
+    existingLinkedDonor.id &&
+    existingLinkedDonor.id !== activeDonorId
+  ) {
+    const err = new Error('This PayPal subscription is already linked to another account.');
+    err.code = 'SUBSCRIPTION_ALREADY_LINKED';
+    throw err;
+  }
+
+  return fetchVerifiedPayPalSubscription(normalizedSubscriptionId, {
+    expectedEmail,
+  });
+}
+
 router.get(
   '/:token',
   asyncHandler(async (req, res) => {
@@ -627,6 +644,11 @@ router.post(
     } = getInviteState(donor.id);
     let invite = inviteFromState || latestInvite || null;
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before generating invites.',
+      });
+    }
     const currentShareInviteDetails = buildShareInviteDetails(shareInvite, origin);
     const shareInviteReusable =
       shareInvite &&
@@ -1081,6 +1103,12 @@ router.post(
       ? subscriptionInput.toUpperCase()
       : '';
 
+    if (normalizedSubscriptionId && !isValidSubscriptionId(normalizedSubscriptionId)) {
+      return res.status(400).json({
+        error: 'Enter a valid PayPal subscription ID (format like I-XXXX).',
+      });
+    }
+
     if (!normalizedEmail) {
       return res.status(400).json({ error: 'Email is required to set up your account.' });
     }
@@ -1135,15 +1163,41 @@ router.post(
 
       const existingSubscription = (activeDonor.subscriptionId || '').trim();
       let subscriptionLinked = false;
+      let verifiedSubscription = null;
       if (
         normalizedSubscriptionId &&
         normalizedSubscriptionId !== existingSubscription.toUpperCase()
       ) {
+        try {
+          verifiedSubscription = await verifyRequestedSubscription({
+            subscriptionId: normalizedSubscriptionId,
+            expectedEmail: normalizedEmail || activeDonor.email,
+            activeDonorId: activeDonor.id,
+          });
+        } catch (err) {
+          if (
+            err &&
+            ['INVALID_SUBSCRIPTION_ID', 'SUBSCRIPTION_ALREADY_LINKED'].includes(err.code)
+          ) {
+            return res.status(409).json({ error: err.message });
+          }
+          if (
+            err &&
+            ['SUBSCRIPTION_EMAIL_MISMATCH', 'SUBSCRIPTION_SUBSCRIBER_MISSING'].includes(
+              err.code
+            )
+          ) {
+            return res.status(403).json({ error: err.message });
+          }
+          throw err;
+        }
+
         activeDonor = updateDonorSubscriptionId(
           activeDonor.id,
           normalizedSubscriptionId
         );
         subscriptionLinked = true;
+        activeDonor = applyPayPalSubscriptionSnapshot(activeDonor, verifiedSubscription);
       }
 
       const shouldRefreshSubscription = needsSubscriptionRefresh(
@@ -1151,7 +1205,7 @@ router.post(
         subscriptionLinked
       );
 
-      if (shouldRefreshSubscription) {
+      if (shouldRefreshSubscription && !verifiedSubscription) {
         activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
           shareLinkId: shareLink.id,
           context: 'share-existing-account',
@@ -1169,6 +1223,11 @@ router.post(
         shareInvite,
       } = getInviteState(activeDonor.id);
       const origin = resolvePublicBaseUrl(req);
+      if (!origin) {
+        return res.status(503).json({
+          error: 'Public base URL is not configured. Configure it before sending account emails.',
+        });
+      }
       const verificationRecord = createDonorEmailVerificationToken(activeDonor.id);
       const verificationUrl = `${origin}/dashboard/verify?token=${encodeURIComponent(
         verificationRecord.token
@@ -1238,7 +1297,31 @@ router.post(
 
     // Prospect promotion flow
     let activeDonor = null;
+    let verifiedSubscription = null;
     if (normalizedSubscriptionId) {
+      try {
+        verifiedSubscription = await verifyRequestedSubscription({
+          subscriptionId: normalizedSubscriptionId,
+          expectedEmail: normalizedEmail,
+        });
+      } catch (err) {
+        if (
+          err &&
+          ['INVALID_SUBSCRIPTION_ID', 'SUBSCRIPTION_ALREADY_LINKED'].includes(err.code)
+        ) {
+          return res.status(409).json({ error: err.message });
+        }
+        if (
+          err &&
+          ['SUBSCRIPTION_EMAIL_MISMATCH', 'SUBSCRIPTION_SUBSCRIBER_MISSING'].includes(
+            err.code
+          )
+        ) {
+          return res.status(403).json({ error: err.message });
+        }
+        throw err;
+      }
+
       activeDonor =
         getDonorBySubscriptionId(normalizedSubscriptionId) ||
         getDonorBySubscriptionId(subscriptionInput);
@@ -1274,6 +1357,7 @@ router.post(
           normalizedSubscriptionId
         );
         subscriptionLinked = true;
+        activeDonor = applyPayPalSubscriptionSnapshot(activeDonor, verifiedSubscription);
       }
 
       const shouldRefreshSubscription = needsSubscriptionRefresh(
@@ -1281,7 +1365,7 @@ router.post(
         subscriptionLinked
       );
 
-      if (shouldRefreshSubscription) {
+      if (shouldRefreshSubscription && !verifiedSubscription) {
         activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
           shareLinkId: shareLink.id,
           context: 'share-prospect-promotion',
@@ -1297,10 +1381,7 @@ router.post(
         status: 'pending',
       });
       if (normalizedSubscriptionId) {
-        activeDonor = await refreshDonorFromPaypalSubscription(activeDonor, {
-          shareLinkId: shareLink.id,
-          context: 'share-prospect-created',
-        });
+        activeDonor = applyPayPalSubscriptionSnapshot(activeDonor, verifiedSubscription);
       }
     }
 
@@ -1317,6 +1398,11 @@ router.post(
       shareInvite,
     } = getInviteState(activeDonor.id);
     const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before sending account emails.',
+      });
+    }
     const verificationRecord = createDonorEmailVerificationToken(activeDonor.id);
     const verificationUrl = `${origin}/dashboard/verify?token=${encodeURIComponent(
       verificationRecord.token

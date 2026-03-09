@@ -5,6 +5,7 @@ const {
 } = require('../db');
 const logger = require('./logger');
 const { mapPaypalSubscriptionStatus } = require('./paypal');
+const { normalizeEmail } = require('./validation');
 
 function normalizeSubscriptionId(subscriptionId) {
   if (typeof subscriptionId !== 'string') {
@@ -93,6 +94,104 @@ function extractPaypalErrorMessage(err) {
   return defaultMessage;
 }
 
+function extractSubscriptionSubscriberEmail(subscription) {
+  if (!subscription || typeof subscription !== 'object') {
+    return '';
+  }
+
+  const subscriber = subscription.subscriber || subscription.payer || {};
+  const candidates = [
+    subscriber.email_address,
+    subscriber.email,
+    subscription.email_address,
+    subscription.email,
+  ];
+
+  for (const value of candidates) {
+    const normalized = normalizeEmail(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+function createSubscriptionOwnershipError(code, message) {
+  const err = new Error(message);
+  err.code = code;
+  return err;
+}
+
+async function fetchVerifiedPayPalSubscription(subscriptionId, { expectedEmail } = {}) {
+  const normalizedSubscriptionId = normalizeSubscriptionId(subscriptionId);
+  if (!normalizedSubscriptionId) {
+    throw createSubscriptionOwnershipError(
+      'SUBSCRIPTION_ID_REQUIRED',
+      'A PayPal subscription ID is required.'
+    );
+  }
+
+  const subscription = await paypalService.getSubscription(normalizedSubscriptionId);
+  const subscriberEmail = extractSubscriptionSubscriberEmail(subscription);
+  const normalizedExpectedEmail = normalizeEmail(expectedEmail);
+
+  if (normalizedExpectedEmail) {
+    if (!subscriberEmail) {
+      throw createSubscriptionOwnershipError(
+        'SUBSCRIPTION_SUBSCRIBER_MISSING',
+        'PayPal did not return a subscriber email for this subscription.'
+      );
+    }
+
+    if (subscriberEmail !== normalizedExpectedEmail) {
+      throw createSubscriptionOwnershipError(
+        'SUBSCRIPTION_EMAIL_MISMATCH',
+        'The PayPal subscription email does not match this account email.'
+      );
+    }
+  }
+
+  const billingInfo = (subscription && subscription.billing_info) || {};
+  const subscriptionStatus = (subscription && subscription.status) || '';
+  const lastPaymentAt =
+    (billingInfo.last_payment && billingInfo.last_payment.time) || null;
+
+  return {
+    subscription,
+    subscriberEmail,
+    normalizedStatus: mapPaypalSubscriptionStatus(subscriptionStatus),
+    lastPaymentAt,
+  };
+}
+
+function applyPayPalSubscriptionSnapshot(donor, snapshot) {
+  if (!donor || !snapshot) {
+    return donor;
+  }
+
+  const statusToApply = snapshot.normalizedStatus || donor.status || 'pending';
+  const statusUpdated = updateDonorStatus(
+    donor.subscriptionId,
+    statusToApply,
+    snapshot.lastPaymentAt || donor.lastPaymentAt || null
+  );
+
+  let updatedDonor = statusUpdated || donor;
+
+  if (snapshot.normalizedStatus === 'active') {
+    const donorWithAccess = setDonorAccessExpirationBySubscription(
+      donor.subscriptionId,
+      null
+    );
+    if (donorWithAccess) {
+      updatedDonor = donorWithAccess;
+    }
+  }
+
+  return updatedDonor;
+}
+
 async function refreshDonorSubscription(donor, { onError } = {}) {
   if (!donor) {
     return { donor, error: '' };
@@ -166,4 +265,7 @@ module.exports = {
   isValidSubscriptionId,
   needsSubscriptionRefresh,
   refreshDonorSubscription,
+  fetchVerifiedPayPalSubscription,
+  extractSubscriptionSubscriberEmail,
+  applyPayPalSubscriptionSnapshot,
 };

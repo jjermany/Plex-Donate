@@ -477,9 +477,59 @@ test(
     assert.equal(paypalMock.mock.callCount(), 1);
     const refreshed = getDonorById(donor.id);
     assert.equal(refreshed.status, 'active');
-    assert.equal(refreshed.lastPaymentAt, '2024-02-20T00:00:00Z');
+  assert.equal(refreshed.lastPaymentAt, '2024-02-20T00:00:00Z');
   }
 );
+
+test('customer profile rejects PayPal subscription email mismatches', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const donor = createDonor({
+    email: 'profile-owner@example.com',
+    name: 'Profile Owner',
+    status: 'pending',
+  });
+
+  const paypalMock = t.mock.method(
+    paypalService,
+    'getSubscription',
+    async (subscriptionId) => {
+      assert.equal(subscriptionId, 'I-MISMATCH-PROFILE');
+      return {
+        status: 'ACTIVE',
+        subscriber: {
+          email_address: 'different@example.com',
+        },
+      };
+    }
+  );
+
+  await withTestServer(async (client) => {
+    const setupResponse = await client.post('/test/setup-session', {
+      body: { customerId: donor.id },
+    });
+    assert.equal(setupResponse.status, 200);
+    await setupResponse.json();
+
+    const response = await client.post('/customer/profile', {
+      body: {
+        email: donor.email,
+        name: donor.name,
+        subscriptionId: 'I-MISMATCH-PROFILE',
+      },
+    });
+
+    assert.equal(response.status, 403);
+    const payload = await response.json();
+    assert.match(payload.error, /does not match/i);
+  });
+
+  assert.equal(paypalMock.mock.callCount(), 1);
+  const unchanged = getDonorById(donor.id);
+  assert.equal(unchanged.subscriptionId, null);
+  assert.equal(unchanged.status, 'pending');
+});
 
 
 test('customer can start a trial from the dashboard', async (t) => {

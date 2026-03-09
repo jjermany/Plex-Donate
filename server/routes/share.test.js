@@ -653,6 +653,19 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
 
   await t.test('prospect promotion creates donor record', async (t) => {
     resetDatabase();
+    const paypalMock = t.mock.method(
+      paypalService,
+      'getSubscription',
+      async (subscriptionId) => {
+        assert.equal(subscriptionId, 'I-NEW123');
+        return {
+          status: 'APPROVAL_PENDING',
+          subscriber: {
+            email_address: 'future@example.com',
+          },
+        };
+      }
+    );
     const welcomeMock = t.mock.method(
       emailService,
       'sendAccountWelcomeEmail',
@@ -700,6 +713,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(accountResponse.body.donor.email, 'future@example.com');
       assert.equal(accountResponse.body.donor.subscriptionId, 'I-NEW123');
       assert.equal(accountResponse.body.prospect, null);
+      assert.equal(paypalMock.mock.callCount(), 1);
 
       assert.equal(welcomeMock.mock.callCount(), 1);
       const welcomeArgs = welcomeMock.mock.calls[0].arguments[0];
@@ -734,6 +748,66 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.ok(tokenRow && tokenRow.token);
       assert.equal(tokenRow.used_at, null);
     } finally {
+      paypalMock.mock.restore();
+      welcomeMock.mock.restore();
+      await server.close();
+    }
+  });
+
+  await t.test('share account setup rejects PayPal subscription email mismatches', async (t) => {
+    resetDatabase();
+    const paypalMock = t.mock.method(
+      paypalService,
+      'getSubscription',
+      async () => ({
+        status: 'ACTIVE',
+        subscriber: {
+          email_address: 'different@example.com',
+        },
+      })
+    );
+    const welcomeMock = t.mock.method(
+      emailService,
+      'sendAccountWelcomeEmail',
+      async () => {}
+    );
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const prospect = createProspect({
+        email: 'future@example.com',
+        name: 'Future Supporter',
+      });
+      const shareLink = createOrUpdateShareLink({
+        prospectId: prospect.id,
+        token: 'prospect-mismatch-token',
+        sessionToken: 'prospect-mismatch-session',
+      });
+
+      const accountResponse = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}/account`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'future@example.com',
+            name: 'Future Supporter',
+            password: 'Password1234!',
+            confirmPassword: 'Password1234!',
+            subscriptionId: 'I-MISMATCH123',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(accountResponse.status, 403);
+      assert.match(accountResponse.body.error, /does not match/i);
+      assert.equal(paypalMock.mock.callCount(), 1);
+      assert.equal(welcomeMock.mock.callCount(), 0);
+    } finally {
+      paypalMock.mock.restore();
       welcomeMock.mock.restore();
       await server.close();
     }

@@ -62,6 +62,7 @@ function writeCredentialsFile({ username, passwordHash }) {
   fs.mkdirSync(path.dirname(CREDENTIALS_FILE), { recursive: true });
   fs.writeFileSync(CREDENTIALS_FILE, `${JSON.stringify(payload, null, 2)}\n`, {
     encoding: 'utf8',
+    mode: 0o600,
   });
 }
 
@@ -144,7 +145,7 @@ function ensureCache() {
   };
 
   logger.info(
-    `Generated admin credentials for first-time setup. Username: ${username}, Temporary password: ${password}`
+    `Generated admin credentials for first-time setup. Username: ${username}. Run the reset-admin command to set a known password securely.`
   );
 
   return cache;

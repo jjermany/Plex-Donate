@@ -28,6 +28,7 @@ config.dataDir = testDataDir;
 const adminRouter = require('./admin');
 const customerRouter = require('./customer');
 const { createDonor, markDonorEmailVerified } = require('../db');
+const paypalService = require('../services/paypal');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
 const { clearSessionToken } = require('../utils/session-tokens');
 
@@ -458,6 +459,16 @@ test('customer can link an existing subscription from the profile form', async (
   assert.equal(loginBody.donor.subscriptionId, null);
 
   const subscriptionId = 'I-LINK123456';
+  const paypalMock = t.mock.method(paypalService, 'getSubscription', async (requestedId) => {
+    assert.equal(requestedId, subscriptionId);
+    return {
+      status: 'ACTIVE',
+      subscriber: {
+        email_address: donor.email,
+      },
+    };
+  });
+
   const updateResponse = await agent.post('/api/customer/profile', {
     body: {
       email: donor.email,
@@ -473,5 +484,6 @@ test('customer can link an existing subscription from the profile form', async (
     updateBody && updateBody.error ? updateBody.error : 'Profile update should succeed'
   );
   assert.equal(updateBody.donor.subscriptionId, subscriptionId);
+  assert.equal(paypalMock.mock.callCount(), 1);
 });
 
