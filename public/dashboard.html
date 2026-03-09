@@ -1375,8 +1375,7 @@
             <div>
               <span class="section-title">Customer sign-in</span>
               <p class="muted small">
-                Use the same credentials you saved on the invite page. If you're still setting up,
-                finish account creation and email verification there first.
+                Sign in with the email and password saved during account setup.
               </p>
             </div>
             <form id="login-form">
@@ -1410,20 +1409,6 @@
                 <p id="login-status" class="status-text"></p>
               </div>
             </form>
-            <ul class="login-helper-list">
-              <li>
-                <strong>Use your saved login</strong>
-                <span>Sign in with the email and password created during invite setup.</span>
-              </li>
-              <li>
-                <strong>Verification comes first</strong>
-                <span>If login fails right after signup, open the email verification link you were sent.</span>
-              </li>
-              <li>
-                <strong>Forgot your password?</strong>
-                <span>Use the reset link below to issue a new password without losing your dashboard history.</span>
-              </li>
-            </ul>
             <p class="muted small login-footnote">
               <a
                 id="forgot-password-link"
@@ -1533,34 +1518,6 @@
           </div>
         </section>
 
-        <section id="unauthenticated-hero" class="surface hero">
-          <span class="eyebrow">Plex Donate</span>
-          <h1>Everything important about your access lives here.</h1>
-          <p class="muted">
-            Sign in with the account you created on your share page. From this dashboard you can
-            confirm billing, link Plex, recover invite access, and contact the server team if something breaks.
-          </p>
-          <div class="hero-badges">
-            <span class="hero-chip">Account details</span>
-            <span class="hero-chip">Plex connection</span>
-            <span class="hero-chip">Support history</span>
-          </div>
-          <div class="hero-grid">
-            <article class="hero-card">
-              <strong>Start with your account</strong>
-              <span>Check your membership status, email verification, and password settings.</span>
-            </article>
-            <article class="hero-card">
-              <strong>Then confirm Plex</strong>
-              <span>Link the right Plex identity before trials, invites, or donation activation.</span>
-            </article>
-            <article class="hero-card">
-              <strong>Use support when needed</strong>
-              <span>Keep one thread per issue so the full history stays in one place.</span>
-            </article>
-          </div>
-        </section>
-
         <section id="dashboard-panel" class="dashboard-tabs hidden">
           <nav
             class="dashboard-legend"
@@ -1617,21 +1574,6 @@
               Resources
             </button>
           </nav>
-
-          <section class="surface dashboard-overview" aria-label="Dashboard overview">
-            <article class="overview-card">
-              <strong>Account</strong>
-              <span>Review your donation status, email verification, and password settings.</span>
-            </article>
-            <article class="overview-card">
-              <strong>Setup & access</strong>
-              <span>Connect Plex, start a trial, or restore access using the same identity every time.</span>
-            </article>
-            <article class="overview-card">
-              <strong>Resources & support</strong>
-              <span>Use support for account issues and keep request links handy when you need them.</span>
-            </article>
-          </section>
 
           <div class="dashboard-tabpanels">
             <section
@@ -4049,27 +3991,27 @@
         if (stepSubscriptionNote) {
           if (!plexLinked) {
             stepSubscriptionNote.textContent =
-              'Finish Plex authentication first—we unlock membership management in the Account tab right after.';
+              'Finish Plex authentication first. Billing actions unlock here right after.';
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
-                `Free trial active—access expires in ${trialCountdown}. Visit the Account tab anytime to subscribe before it ends.`;
+                `Free trial active. Access expires in ${trialCountdown}. Subscribe here before it ends.`;
             } else if (trialExpiresOn) {
               stepSubscriptionNote.textContent =
-                `Free trial active until ${trialExpiresOn}. Head to the Account tab when you're ready to subscribe.`;
+                `Free trial active until ${trialExpiresOn}. Subscribe here when you're ready.`;
             } else {
               stepSubscriptionNote.textContent =
-                'Free trial active. Manage your membership from the Account tab to keep streaming once it ends.';
+                'Free trial active. Manage billing here to keep streaming once it ends.';
             }
           } else if (isTrialExpired) {
             stepSubscriptionNote.textContent =
-              'Your trial has ended—start a subscription from the Account tab to restore access.';
+              'Your trial has ended. Start a subscription here to restore access.';
           } else if (!subscriptionStarted) {
             stepSubscriptionNote.textContent =
-              'Plex is linked—start your trial or subscription from the Account tab when you are ready.';
+              'Plex is linked. Start your trial or subscription here when you are ready.';
           } else if (!subscriptionComplete) {
             stepSubscriptionNote.textContent =
-              'We are waiting to confirm your first payment. Check the Account tab if you need to update details.';
+              'We are waiting to confirm your first payment. Check Account if you need to update profile details.';
           } else {
             stepSubscriptionNote.textContent =
               'Subscription active! You are ready for the next step.';
@@ -4388,7 +4330,7 @@
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
-                'Link your Plex account from the Plex setup tab to unlock subscription checkout or paste your subscription ID once you have it.';
+                'Link your Plex account from the Setup & access tab to unlock subscription checkout or paste your subscription ID once you have it.';
             } else {
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;

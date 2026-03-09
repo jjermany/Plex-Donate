@@ -2752,6 +2752,70 @@
         line-height: 1;
         animation: badgePulse 2s ease-in-out infinite;
       }
+      .tab-badge[data-tone='warning'] {
+        background: #f59e0b;
+        color: #111827;
+      }
+      .service-summary-grid {
+        display: grid;
+        gap: 12px;
+        margin: 0 0 20px;
+      }
+      @media (min-width: 900px) {
+        .service-summary-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .service-summary-card {
+        display: grid;
+        gap: 8px;
+        padding: 16px 18px;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border-color);
+        background: var(--input-background);
+      }
+      .service-summary-card strong {
+        font-size: 0.92rem;
+      }
+      .service-summary-card span {
+        color: var(--text-muted);
+        font-size: 0.86rem;
+        line-height: 1.45;
+      }
+      .service-summary-card .status-pill {
+        width: fit-content;
+      }
+      .panel-disclosure {
+        margin-top: 20px;
+        border: 1px solid var(--panel-border-color);
+        border-radius: 16px;
+        background: var(--input-background);
+        overflow: hidden;
+      }
+      .panel-disclosure summary {
+        cursor: pointer;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 18px;
+        font-weight: 700;
+      }
+      .panel-disclosure summary::-webkit-details-marker {
+        display: none;
+      }
+      .panel-disclosure summary::after {
+        content: '+';
+        font-size: 1rem;
+        color: var(--text-muted);
+      }
+      .panel-disclosure[open] summary::after {
+        content: '-';
+      }
+      .panel-disclosure-body {
+        padding: 0 18px 18px;
+      }
 
       @keyframes badgePulse {
         0%, 100% { transform: scale(1); }
@@ -2815,7 +2879,7 @@
           <span class="page-kicker">Admin Workspace</span>
           <h1>Plex Donate Control Center</h1>
           <p class="page-subtitle">
-            Manage subscriber access, billing-linked invites, support requests, and system settings from one place.
+            Manage subscribers, support, and service settings.
           </p>
         </div>
         <div class="header-actions">
@@ -2834,7 +2898,7 @@
             </div>
             <h2>Admin Sign In</h2>
             <p class="login-description" id="login-help">
-              Sign in to manage donors, Plex access, support, and service configuration.
+              Sign in with your admin credentials.
             </p>
           </div>
           <form id="login-form" class="login-form" autocomplete="on">
@@ -2878,20 +2942,6 @@
               <button id="login-submit" type="submit">Sign in</button>
             </div>
           </form>
-          <ul class="login-helper-list">
-            <li>
-              <strong>Subscribers</strong>
-              <span>Review billing state, invite history, and current Plex access from one view.</span>
-            </li>
-            <li>
-              <strong>Services</strong>
-              <span>Update Plex, PayPal, SMTP, and notification settings without editing environment files.</span>
-            </li>
-            <li>
-              <strong>Support</strong>
-              <span>Keep support replies and account actions in the same workspace so context is easy to follow.</span>
-            </li>
-          </ul>
           <p id="status-message" class="form-status-text"></p>
         </section>
       </div>
@@ -2971,20 +3021,6 @@
             Workspace
           </button>
         </nav>
-        <section class="dashboard-hero-strip" aria-label="Workspace overview">
-          <article class="dashboard-hero-card">
-            <strong>Handle access fast</strong>
-            <span>Start in Subscribers when you need to verify Plex status, refresh billing, or resend an invite link.</span>
-          </article>
-          <article class="dashboard-hero-card">
-            <strong>Open the right tool once</strong>
-            <span>Services and Alerts are separated so connection settings and outbound notices do not compete for space.</span>
-          </article>
-          <article class="dashboard-hero-card">
-            <strong>Keep a clean audit trail</strong>
-            <span>Use Support Inbox and Activity Log to answer issues without losing the timeline behind each account action.</span>
-          </article>
-        </section>
         <div class="dashboard-views">
           <div
             class="dashboard-view"
@@ -3034,11 +3070,62 @@
                 </div>
               </form>
             </section>
+          </div>
+          <div
+            class="dashboard-view"
+            id="dashboard-view-notifications"
+            role="tabpanel"
+            aria-labelledby="dashboard-tab-notifications"
+            data-dashboard-view="notifications"
+            hidden
+          >
+            <section class="panel" id="notification-settings-panel">
+              <h2 style="margin-top:0;">Admin alerts</h2>
+              <p class="muted-text" style="margin:0 0 16px;">
+                Choose which events should trigger an email to the admin team.
+              </p>
+              <form class="settings-form" data-group="notifications">
+                <label>
+                  Notification email
+                  <input
+                    name="adminEmail"
+                    type="email"
+                    autocomplete="email"
+                    placeholder="alerts@example.com"
+                  />
+                  <span class="help">Defaults to your SMTP support email if left blank.</span>
+                </label>
+                <div class="field-grid">
+                  <label class="checkbox-row">
+                    <input name="onDonorCreated" type="checkbox" />
+                    New donor account created
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onTrialStarted" type="checkbox" />
+                    Trial started for a donor
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onSubscriptionStarted" type="checkbox" />
+                    Subscription activated
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onPlexRevoked" type="checkbox" />
+                    Plex access revoked
+                  </label>
+                </div>
+                <p class="muted-text subtle-text" style="margin:8px 0 0;">
+                  Notifications use the Plex Donate email theme and include helpful context about the event.
+                </p>
+                <p class="form-status" data-status-for="notifications"></p>
+                <div class="form-actions">
+                  <button type="submit" class="secondary">Save notification settings</button>
+                </div>
+              </form>
+            </section>
             <section class="panel" id="announcement-settings-panel">
               <h2 style="margin-top:0;">Customer announcements</h2>
               <p class="muted-text" style="margin:0 0 16px;">
-                Share timely updates with donors directly on the customer dashboard. Banners support optional buttons and can
-                be dismissed if you allow it.
+                Publish customer-facing dashboard updates and optionally email the same message.
               </p>
               <form class="settings-form" data-group="announcements">
                 <div class="field-grid">
@@ -3070,7 +3157,7 @@
                     <textarea
                       name="bannerBody"
                       rows="4"
-                      placeholder="Highlight a new library, scheduled maintenance, or important reminders for supporters."
+                      placeholder="Highlight maintenance, library changes, or important reminders."
                     ></textarea>
                   </label>
                 </div>
@@ -3138,121 +3225,11 @@
           </div>
           <div
             class="dashboard-view"
-            id="dashboard-view-notifications"
-            role="tabpanel"
-            aria-labelledby="dashboard-tab-notifications"
-            data-dashboard-view="notifications"
-            hidden
-          >
-            <section class="panel" id="notification-settings-panel">
-              <h2 style="margin-top:0;">Admin alerts</h2>
-              <p class="muted-text" style="margin:0 0 16px;">
-                Choose which events should trigger an email to the admin team.
-              </p>
-              <form class="settings-form" data-group="notifications">
-                <label>
-                  Notification email
-                  <input
-                    name="adminEmail"
-                    type="email"
-                    autocomplete="email"
-                    placeholder="alerts@example.com"
-                  />
-                  <span class="help">Defaults to your SMTP support email if left blank.</span>
-                </label>
-                <div class="field-grid">
-                  <label class="checkbox-row">
-                    <input name="onDonorCreated" type="checkbox" />
-                    New donor account created
-                  </label>
-                  <label class="checkbox-row">
-                    <input name="onTrialStarted" type="checkbox" />
-                    Trial started for a donor
-                  </label>
-                  <label class="checkbox-row">
-                    <input name="onSubscriptionStarted" type="checkbox" />
-                    Subscription activated
-                  </label>
-                  <label class="checkbox-row">
-                    <input name="onPlexRevoked" type="checkbox" />
-                    Plex access revoked
-                  </label>
-                </div>
-                <p class="muted-text subtle-text" style="margin:8px 0 0;">
-                  Notifications use the Plex Donate email theme and include helpful context about the event.
-                </p>
-                <p class="form-status" data-status-for="notifications"></p>
-                <div class="form-actions">
-                  <button type="submit" class="secondary">Save notification settings</button>
-                </div>
-              </form>
-            </section>
-          </div>
-          <div
-            class="dashboard-view"
             id="dashboard-view-donors"
             role="tabpanel"
             aria-labelledby="dashboard-tab-donors"
             data-dashboard-view="donors"
           >
-            <section class="panel" id="prospect-share-panel">
-              <h2 style="margin-top:0;">Invite a new supporter</h2>
-              <p class="muted-text" style="margin:0 0 16px;">
-                Generate a share page for someone who isn't subscribed yet. The link walks them
-                through account creation and the PayPal signup flow before unlocking Plex access.
-              </p>
-              <form id="prospect-share-form">
-                <input type="hidden" name="prospectId" />
-                <div class="field-grid">
-                  <label>
-                    Contact email
-                    <input
-                      name="email"
-                      type="email"
-                      autocomplete="off"
-                      placeholder="future.supporter@example.com"
-                    />
-                  </label>
-                  <label>
-                    Display name
-                    <input
-                      name="name"
-                      type="text"
-                      autocomplete="off"
-                      placeholder="Future Supporter"
-                    />
-                  </label>
-                </div>
-                <label>
-                  Internal notes
-                  <textarea name="note" placeholder="Optional details for other admins"></textarea>
-                </label>
-                <p class="form-status" data-status-for="prospect-share"></p>
-                <div class="form-actions">
-                  <button type="submit">Generate invite page link</button>
-                  <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
-                </div>
-              </form>
-              <div class="share-output hidden" id="prospect-share-result">
-                <div>
-                  <div class="share-output-meta" id="prospect-share-summary"></div>
-                  <a
-                    id="prospect-share-url"
-                    class="share-url"
-                    href="#"
-                    target="_blank"
-                    rel="noopener"
-                  ></a>
-                </div>
-                <div class="share-output-actions">
-                  <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
-                  <button type="button" class="secondary" id="prospect-share-regenerate">
-                    Generate new link
-                  </button>
-                </div>
-                <div class="share-output-meta" id="prospect-share-note"></div>
-              </div>
-            </section>
             <div class="grid">
               <section class="panel">
                 <div class="donors-panel-header">
@@ -3413,6 +3390,70 @@
                 </div>
               </section>
             </div>
+            <section class="panel" id="prospect-share-panel">
+              <details class="panel-disclosure">
+                <summary>
+                  <span>Invite a new supporter</span>
+                  <span class="muted-text">Secondary task</span>
+                </summary>
+                <div class="panel-disclosure-body">
+                  <p class="muted-text" style="margin:0 0 16px;">
+                    Generate a share page for someone who is not subscribed yet.
+                  </p>
+                  <form id="prospect-share-form">
+                    <input type="hidden" name="prospectId" />
+                    <div class="field-grid">
+                      <label>
+                        Contact email
+                        <input
+                          name="email"
+                          type="email"
+                          autocomplete="off"
+                          placeholder="future.supporter@example.com"
+                        />
+                      </label>
+                      <label>
+                        Display name
+                        <input
+                          name="name"
+                          type="text"
+                          autocomplete="off"
+                          placeholder="Future Supporter"
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      Internal notes
+                      <textarea name="note" placeholder="Optional details for other admins"></textarea>
+                    </label>
+                    <p class="form-status" data-status-for="prospect-share"></p>
+                    <div class="form-actions">
+                      <button type="submit">Generate invite page link</button>
+                      <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
+                    </div>
+                  </form>
+                  <div class="share-output hidden" id="prospect-share-result">
+                    <div>
+                      <div class="share-output-meta" id="prospect-share-summary"></div>
+                      <a
+                        id="prospect-share-url"
+                        class="share-url"
+                        href="#"
+                        target="_blank"
+                        rel="noopener"
+                      ></a>
+                    </div>
+                    <div class="share-output-actions">
+                      <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
+                      <button type="button" class="secondary" id="prospect-share-regenerate">
+                        Generate new link
+                      </button>
+                    </div>
+                    <div class="share-output-meta" id="prospect-share-note"></div>
+                  </div>
+                </div>
+              </details>
+            </section>
           </div>
           <div
             class="dashboard-view"
@@ -3480,6 +3521,28 @@
             <section class="panel" id="settings-panel">
               <h2 style="margin-top:0;">Integration settings</h2>
               <p class="muted-text" style="margin:0 0 16px;">Keep service credentials in one place so you can avoid editing environment files.</p>
+              <div class="service-summary-grid" id="service-summary-grid" aria-label="Service status overview">
+                <article class="service-summary-card">
+                  <span class="status-pill" id="service-summary-app-state" data-status="pending">Needs review</span>
+                  <strong>Application</strong>
+                  <span id="service-summary-app-copy">Confirm the public URLs donors and share links rely on.</span>
+                </article>
+                <article class="service-summary-card">
+                  <span class="status-pill" id="service-summary-paypal-state" data-status="pending">Needs review</span>
+                  <strong>PayPal</strong>
+                  <span id="service-summary-paypal-copy">Save billing credentials and a plan ID for subscriptions.</span>
+                </article>
+                <article class="service-summary-card">
+                  <span class="status-pill" id="service-summary-smtp-state" data-status="pending">Needs review</span>
+                  <strong>Email</strong>
+                  <span id="service-summary-smtp-copy">Configure SMTP so support replies and invites can be sent.</span>
+                </article>
+                <article class="service-summary-card">
+                  <span class="status-pill" id="service-summary-plex-state" data-status="pending">Needs review</span>
+                  <strong>Plex</strong>
+                  <span id="service-summary-plex-copy">Connect Plex before sending invites from this dashboard.</span>
+                </article>
+              </div>
 
               <form class="settings-form" data-group="app">
                 <h3>Application</h3>
@@ -4060,6 +4123,15 @@
       const supportReopenButton = document.getElementById('support-reopen');
       const supportDeleteButton = document.getElementById('support-delete-thread');
       const supportError = document.getElementById('support-error');
+      const integrationTab = document.getElementById('dashboard-tab-integration');
+      const serviceSummaryAppState = document.getElementById('service-summary-app-state');
+      const serviceSummaryAppCopy = document.getElementById('service-summary-app-copy');
+      const serviceSummaryPaypalState = document.getElementById('service-summary-paypal-state');
+      const serviceSummaryPaypalCopy = document.getElementById('service-summary-paypal-copy');
+      const serviceSummarySmtpState = document.getElementById('service-summary-smtp-state');
+      const serviceSummarySmtpCopy = document.getElementById('service-summary-smtp-copy');
+      const serviceSummaryPlexState = document.getElementById('service-summary-plex-state');
+      const serviceSummaryPlexCopy = document.getElementById('service-summary-plex-copy');
       const dashboardViewContainers = Array.from(
         document.querySelectorAll('[data-dashboard-view]')
       );
@@ -5260,6 +5332,89 @@
         }
       }
 
+      function setServiceSummaryCard(stateEl, copyEl, configured, configuredText, missingText) {
+        if (!stateEl || !copyEl) {
+          return;
+        }
+        stateEl.dataset.status = configured ? 'active' : 'pending';
+        stateEl.textContent = configured ? 'Ready' : 'Needs review';
+        copyEl.textContent = configured ? configuredText : missingText;
+      }
+
+      function updateIntegrationBadge(settings) {
+        if (!integrationTab) {
+          return;
+        }
+        let badge = integrationTab.querySelector('.tab-badge');
+        if (!state.authenticated) {
+          if (badge) {
+            badge.remove();
+          }
+          return;
+        }
+        const nextSettings = settings || {};
+        const app = nextSettings.app || {};
+        const paypal = nextSettings.paypal || {};
+        const smtp = nextSettings.smtp || {};
+        const plex = nextSettings.plex || {};
+        const configuredCount = [
+          [app.publicBaseUrl, app.overseerrBaseUrl].some(hasNonEmptyValue),
+          [paypal.clientId, paypal.clientSecret, paypal.webhookId, paypal.planId].every(hasNonEmptyValue),
+          [smtp.host, smtp.user, smtp.pass, smtp.from].every(hasNonEmptyValue),
+          [plex.baseUrl, plex.token].every(hasNonEmptyValue),
+        ].filter(Boolean).length;
+        const missingCount = 4 - configuredCount;
+        if (missingCount > 0) {
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'tab-badge';
+            integrationTab.appendChild(badge);
+          }
+          badge.dataset.tone = 'warning';
+          badge.textContent = String(missingCount);
+        } else if (badge) {
+          badge.remove();
+        }
+      }
+
+      function renderServiceSummary() {
+        const settings = state.settings || {};
+        const app = settings.app || {};
+        const paypal = settings.paypal || {};
+        const smtp = settings.smtp || {};
+        const plex = settings.plex || {};
+
+        setServiceSummaryCard(
+          serviceSummaryAppState,
+          serviceSummaryAppCopy,
+          [app.publicBaseUrl, app.overseerrBaseUrl].some(hasNonEmptyValue),
+          'Public links and request URLs are configured.',
+          'Add the public base URL and optional request URL used by donors.'
+        );
+        setServiceSummaryCard(
+          serviceSummaryPaypalState,
+          serviceSummaryPaypalCopy,
+          [paypal.clientId, paypal.clientSecret, paypal.webhookId, paypal.planId].every(hasNonEmptyValue),
+          'Billing credentials and plan details are saved.',
+          'Save client credentials, webhook ID, and plan ID before checkout can work.'
+        );
+        setServiceSummaryCard(
+          serviceSummarySmtpState,
+          serviceSummarySmtpCopy,
+          [smtp.host, smtp.user, smtp.pass, smtp.from].every(hasNonEmptyValue),
+          'Email delivery is configured for invites and notifications.',
+          'Complete SMTP settings so support, invites, and alerts can be delivered.'
+        );
+        setServiceSummaryCard(
+          serviceSummaryPlexState,
+          serviceSummaryPlexCopy,
+          [plex.baseUrl, plex.token].every(hasNonEmptyValue),
+          'Plex connection details are saved.',
+          'Add your Plex server URL and token to send invites from the dashboard.'
+        );
+        updateIntegrationBadge(settings);
+      }
+
       async function loadSupportRequests(options = {}) {
         if (!state.authenticated) {
           return false;
@@ -5326,6 +5481,8 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
+          updateIntegrationBadge(null);
+          updateSupportBadge();
           setLoginStatus('', '');
           if (loginHelp) {
             loginHelp.innerHTML =
@@ -5999,6 +6156,7 @@
         renderPlexLibrarySelector({ preserveSelection: false });
         renderPaypalPlan();
         renderAnnouncementPreview();
+        renderServiceSummary();
       }
 
       function renderPaypalPlan() {
@@ -6051,6 +6209,7 @@
         if (!prospectSharePanel) {
           return;
         }
+        const disclosure = prospectSharePanel.querySelector('.panel-disclosure');
 
         if (!state.authenticated) {
           prospectSharePanel.classList.add('hidden');
@@ -6114,6 +6273,9 @@
           if (prospectShareResult) {
             prospectShareResult.classList.add('hidden');
           }
+          if (disclosure && !state.prospectShare) {
+            disclosure.open = false;
+          }
           if (prospectShareCopy) {
             prospectShareCopy.disabled = true;
           }
@@ -6125,6 +6287,9 @@
 
         if (prospectShareResult) {
           prospectShareResult.classList.remove('hidden');
+        }
+        if (disclosure) {
+          disclosure.open = true;
         }
         if (prospectShareCopy) {
           prospectShareCopy.disabled = false;
@@ -6275,6 +6440,7 @@
         }
         plexLibraryOptionsDirty = true;
         settingsForms.forEach((form) => setFormStatus(form, ''));
+        renderServiceSummary();
         maybeDefaultToIntegrationLanding();
       }
 
