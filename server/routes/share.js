@@ -47,6 +47,9 @@ const {
   buildSubscriberDetails,
   mapPaypalSubscriptionStatus,
 } = require('../utils/paypal');
+const {
+  needsSubscriptionRefresh,
+} = require('../utils/donor-subscriptions');
 const adminNotifications = require('../services/admin-notifications');
 const {
   normalizeEmail,
@@ -250,23 +253,6 @@ function getInviteState(donorId) {
     nextInviteAvailableAt,
     shareInvite: shareInviteLink || null,
   };
-}
-
-function needsSubscriptionRefresh(donor, subscriptionLinked) {
-  if (!donor || !(donor.subscriptionId || '').trim()) {
-    return false;
-  }
-
-  if (subscriptionLinked) {
-    return true;
-  }
-
-  const status = (donor.status || '').toString().trim().toLowerCase();
-  if (!status) {
-    return true;
-  }
-
-  return ['pending', 'approval_pending', 'approved'].includes(status);
 }
 
 function buildPlexShareState(donor) {

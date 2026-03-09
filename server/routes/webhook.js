@@ -22,7 +22,10 @@ const emailService = require('../services/email');
 const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const { isInviteStale } = require('../utils/invite-stale');
-const { getInviteEmailDiagnostics } = require('../utils/validation');
+const {
+  normalizeEmail,
+  getInviteEmailDiagnostics,
+} = require('../utils/validation');
 
 const router = express.Router();
 
@@ -89,13 +92,6 @@ async function handleEvent(event) {
       logger.info('Unhandled PayPal event type', type);
       break;
   }
-}
-
-function normalizeEmail(value) {
-  if (!value) {
-    return '';
-  }
-  return String(value).trim().toLowerCase();
 }
 
 function buildCandidateEmails(donor, inviteRecipientEmail) {

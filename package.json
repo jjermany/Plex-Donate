@@ -9,7 +9,11 @@
     "dev": "NODE_ENV=development nodemon --watch server server/index.js",
     "test": "node server/scripts/run-tests.js",
     "test:watch": "node server/scripts/run-tests.js --watch",
-    "reset-admin": "node server/scripts/reset-admin-password.js"
+    "reset-admin": "node server/scripts/reset-admin-password.js",
+    "diag:plex-invite": "node scripts/manual/plex-invite.js",
+    "diag:access-expiration": "node scripts/manual/access-expiration.js",
+    "diag:plex-revoke": "node scripts/manual/plex-revoke.js",
+    "diag:plex-sync": "node scripts/manual/plex-sync.js"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",

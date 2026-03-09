@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { db } = require('./server/db');
-const { processAccessExpirations } = require('./server/index');
+const { db } = require('../../server/db');
+const { processAccessExpirations } = require('../../server/index');
 
 console.log('=== Automatic Access Expiration Test ===\n');
 
@@ -35,8 +35,8 @@ donors.forEach((donor, index) => {
 // Get donor ID from command line argument
 const donorIndex = parseInt(process.argv[2], 10);
 if (Number.isNaN(donorIndex) || donorIndex < 1 || donorIndex > donors.length) {
-  console.log('Usage: node test-auto-revoke.js <number>');
-  console.log(`Example: node test-auto-revoke.js 1 (to expire and revoke donor #1 from the list above)`);
+  console.log('Usage: node scripts/manual/access-expiration.js <number>');
+  console.log('Example: node scripts/manual/access-expiration.js 1');
   process.exit(1);
 }
 

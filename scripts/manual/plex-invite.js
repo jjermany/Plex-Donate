@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * Test script to diagnose Plex invite issues
- * Run: node test-plex-invite.js
+ * Manual diagnostic script for Plex invite issues
+ * Run: node scripts/manual/plex-invite.js
  */
 
 const Database = require('better-sqlite3');
 const path = require('path');
 
+const projectRoot = path.resolve(__dirname, '..', '..');
+
 // Get the most recent donor with Plex linked
-const dbPath = process.env.DATABASE_FILE || path.join(__dirname, 'data', 'plex-donate.db');
+const dbPath = process.env.DATABASE_FILE || path.join(projectRoot, 'data', 'plex-donate.db');
 const db = new Database(dbPath, { readonly: true });
 
 console.log('\n=== Checking Database ===');

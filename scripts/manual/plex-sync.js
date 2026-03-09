@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { db } = require('./server/db');
-const plexService = require('./server/services/plex');
+const { db } = require('../../server/db');
+const plexService = require('../../server/services/plex');
 
 console.log('=== Plex Status Sync Test ===\n');
 
@@ -95,8 +95,8 @@ console.log('Step 1: Fetching current Plex shares...\n');
         console.log(`  - ${donor.email} (ID: ${donor.id})`);
       });
       console.log('\nTo clear these stale records, the admin can:');
-      console.log('1. Use the Admin UI (if a sync button is added)');
-      console.log('2. Call: POST /admin/plex/sync-status (requires authentication)');
+      console.log('1. Use the Admin UI Plex sync action');
+      console.log('2. Call: POST /api/admin/plex/sync-status-now (requires authentication)');
     } else {
       console.log('\n✅ No stale records found! Database is in sync with Plex.');
     }

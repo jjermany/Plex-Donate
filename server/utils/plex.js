@@ -229,7 +229,7 @@ async function loadPlexContext({ logContext } = {}) {
         const emails = Array.isArray(member.emails)
           ? member.emails.map((email) => String(email).trim()).filter(Boolean)
           : [];
-        const ids = Array.isArray(member.userIds)  // Changed from member.ids to member.userIds
+        const ids = Array.isArray(member.userIds)
           ? member.userIds.map((id) => String(id).trim()).filter(Boolean)
           : [];
 
@@ -289,10 +289,6 @@ async function loadPlexContext({ logContext } = {}) {
 
 module.exports = {
   normalizeValue,
-  gatherStrings,
-  extractUserEmailCandidates,
-  extractUserIdCandidates,
-  isPlexUserPending,
   preparePlexUserIndex,
   collectDonorEmailCandidates,
   collectDonorIdCandidates,

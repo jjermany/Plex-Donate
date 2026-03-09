@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { db } = require('./server/db');
-const plexService = require('./server/services/plex');
+const { db } = require('../../server/db');
+const plexService = require('../../server/services/plex');
 
 console.log('=== Plex Access Revocation Test ===\n');
 
@@ -36,8 +36,8 @@ donors.forEach((donor, index) => {
 // Get donor ID from command line argument
 const donorIndex = parseInt(process.argv[2], 10);
 if (Number.isNaN(donorIndex) || donorIndex < 1 || donorIndex > donors.length) {
-  console.log('Usage: node test-plex-revoke.js <number>');
-  console.log(`Example: node test-plex-revoke.js 1 (to revoke donor #1 from the list above)`);
+  console.log('Usage: node scripts/manual/plex-revoke.js <number>');
+  console.log('Example: node scripts/manual/plex-revoke.js 1');
   process.exit(1);
 }
 
@@ -74,7 +74,7 @@ console.log('');
       console.log('\nTo verify:');
       console.log('1. Go to Plex.tv → Settings → Users & Sharing');
       console.log('2. Confirm the user is no longer in your Friends list');
-      console.log('3. Or run: node test-plex-revoke.js (should show "User not found")');
+      console.log('3. Or run: node scripts/manual/plex-revoke.js (should show "User not found")');
     } else {
       console.log(`\n⚠️  Revocation returned: ${result.reason}`);
       if (result.reason === 'User not found on Plex server') {

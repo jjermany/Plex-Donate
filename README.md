@@ -35,6 +35,22 @@ cp .env.example .env   # adjust only the core app settings
 npm run dev            # run locally with nodemon
 ```
 
+### Windows development
+
+This repository is maintained for Windows development going forward.
+
+- Use Windows Node.js and run the project from PowerShell or `cmd`.
+- Do not use WSL for this checkout.
+- Native modules such as `better-sqlite3` are OS-specific, so switching the same working tree between Windows Node and WSL Node will break `node_modules`.
+
+If dependencies ever look out of sync on Windows, rebuild them from a Windows terminal:
+
+```powershell
+rmdir /s /q node_modules
+npm install
+npm test
+```
+
 After the server is running visit `http://localhost:3000`, sign in with the admin username and password (credentials must be entered in the form), and fill in the integration credentials directly from the dashboard. The default username is `admin`. On first start Plex Donate generates a secure temporary password and prints it to the server log so you can sign in and change it from the dashboard. When upgrading from a legacy release that stored the admin secret as a `password` value in `data/admin-credentials.json`, Plex Donate rehashes that existing password on startup instead of replacing it, so you can continue signing in with the same credential. If the legacy file also included an obsolete `passwordHash` entry, the plaintext `password` is trusted and the outdated hash is replaced automatically.
 
 If you need to reset the admin password after a crash/restart, run the helper script (it writes a new hash to `data/admin-credentials.json` and prints the new password directly to stdout):
@@ -97,6 +113,23 @@ PayPal settings now include fields for the subscription plan ID, recurring price
 npm run dev    # start with hot reload
 # or
 npm start      # production mode
+```
+
+### Tests and diagnostics
+
+Automated tests stay colocated with the server code as `*.test.js` files under `server/` and run with:
+
+```bash
+npm test
+```
+
+Manual live-environment diagnostics live under `scripts/manual/` and can be run with:
+
+```bash
+npm run diag:plex-invite
+npm run diag:access-expiration -- 1
+npm run diag:plex-revoke -- 1
+npm run diag:plex-sync
 ```
 
 The admin dashboard is served from `http://localhost:3000/` and exposes JSON APIs under `/api/admin`. Configure your PayPal webhook to POST to `/api/paypal/webhook`.
