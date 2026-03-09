@@ -1339,34 +1339,6 @@
     <div id="error-panel" class="panel error hidden"></div>
     <div id="app" class="hidden">
       <main class="canvas">
-        <section class="surface hero">
-          <span class="eyebrow">Plex Donate</span>
-          <h1>Everything important about your access lives here.</h1>
-          <p class="muted">
-            Sign in with the account you created on your share page. From this dashboard you can
-            confirm billing, link Plex, recover invite access, and contact the server team if something breaks.
-          </p>
-          <div class="hero-badges">
-            <span class="hero-chip">Account details</span>
-            <span class="hero-chip">Plex connection</span>
-            <span class="hero-chip">Support history</span>
-          </div>
-          <div class="hero-grid">
-            <article class="hero-card">
-              <strong>Start with your account</strong>
-              <span>Check your membership status, email verification, and password settings.</span>
-            </article>
-            <article class="hero-card">
-              <strong>Then confirm Plex</strong>
-              <span>Link the right Plex identity before trials, invites, or donation activation.</span>
-            </article>
-            <article class="hero-card">
-              <strong>Use support when needed</strong>
-              <span>Keep one thread per issue so the full history stays in one place.</span>
-            </article>
-          </div>
-        </section>
-
         <section
           id="announcement-banner"
           class="announcement-banner hidden"
@@ -1407,20 +1379,6 @@
                 finish account creation and email verification there first.
               </p>
             </div>
-            <ul class="login-helper-list">
-              <li>
-                <strong>Use your saved login</strong>
-                <span>Sign in with the email and password created during invite setup.</span>
-              </li>
-              <li>
-                <strong>Verification comes first</strong>
-                <span>If login fails right after signup, open the email verification link you were sent.</span>
-              </li>
-              <li>
-                <strong>Forgot your password?</strong>
-                <span>Use the reset link below to issue a new password without losing your dashboard history.</span>
-              </li>
-            </ul>
             <form id="login-form">
               <label>
                 <span>Email on file</span>
@@ -1452,6 +1410,20 @@
                 <p id="login-status" class="status-text"></p>
               </div>
             </form>
+            <ul class="login-helper-list">
+              <li>
+                <strong>Use your saved login</strong>
+                <span>Sign in with the email and password created during invite setup.</span>
+              </li>
+              <li>
+                <strong>Verification comes first</strong>
+                <span>If login fails right after signup, open the email verification link you were sent.</span>
+              </li>
+              <li>
+                <strong>Forgot your password?</strong>
+                <span>Use the reset link below to issue a new password without losing your dashboard history.</span>
+              </li>
+            </ul>
             <p class="muted small login-footnote">
               <a
                 id="forgot-password-link"
@@ -1561,6 +1533,34 @@
           </div>
         </section>
 
+        <section id="unauthenticated-hero" class="surface hero">
+          <span class="eyebrow">Plex Donate</span>
+          <h1>Everything important about your access lives here.</h1>
+          <p class="muted">
+            Sign in with the account you created on your share page. From this dashboard you can
+            confirm billing, link Plex, recover invite access, and contact the server team if something breaks.
+          </p>
+          <div class="hero-badges">
+            <span class="hero-chip">Account details</span>
+            <span class="hero-chip">Plex connection</span>
+            <span class="hero-chip">Support history</span>
+          </div>
+          <div class="hero-grid">
+            <article class="hero-card">
+              <strong>Start with your account</strong>
+              <span>Check your membership status, email verification, and password settings.</span>
+            </article>
+            <article class="hero-card">
+              <strong>Then confirm Plex</strong>
+              <span>Link the right Plex identity before trials, invites, or donation activation.</span>
+            </article>
+            <article class="hero-card">
+              <strong>Use support when needed</strong>
+              <span>Keep one thread per issue so the full history stays in one place.</span>
+            </article>
+          </div>
+        </section>
+
         <section id="dashboard-panel" class="dashboard-tabs hidden">
           <nav
             class="dashboard-legend"
@@ -1590,7 +1590,7 @@
               data-dashboard-tab="plex"
               tabindex="-1"
             >
-              Plex setup
+              Setup & access
             </button>
             <button
               id="dashboard-tab-support"
@@ -1624,7 +1624,7 @@
               <span>Review your donation status, email verification, and password settings.</span>
             </article>
             <article class="overview-card">
-              <strong>Plex setup</strong>
+              <strong>Setup & access</strong>
               <span>Connect Plex, start a trial, or restore access using the same identity every time.</span>
             </article>
             <article class="overview-card">
@@ -1684,21 +1684,9 @@
                   class="status-text small"
                   aria-live="polite"
                 ></p>
-                <div id="subscription-cta" class="subscription-cta hidden">
-                  <button id="trial-button" class="button-secondary" type="button">
-                    Start 7-day trial
-                  </button>
-                  <button id="subscription-button" class="button-primary" type="button">
-                    Start subscription
-                  </button>
-                  <p id="subscription-note" class="status-text small">
-                    Choose your payment method to get started.
-                  </p>
-                  <p id="trial-status" class="status-text"></p>
-                </div>
               </article>
 
-              <article id="trial-panel" class="surface hidden" hidden>
+              <article id="trial-panel-legacy" class="surface hidden" hidden aria-hidden="true">
                 <div class="trial-panel-header">
                   <div>
                     <h2 class="section-title">Free trial countdown</h2>
@@ -1711,16 +1699,16 @@
                 </div>
                 <div class="trial-countdown">
                   <div class="trial-countdown-time">
-                    <span id="trial-days-remaining" class="trial-countdown-value">0</span>
-                    <span id="trial-days-label" class="trial-countdown-label"
+                    <span id="trial-days-remaining-legacy" class="trial-countdown-value">0</span>
+                    <span id="trial-days-label-legacy" class="trial-countdown-label"
                       >days remaining</span
                     >
                   </div>
                   <div class="trial-countdown-details">
                     <span class="trial-countdown-highlight">
-                      Trial ends on <strong id="trial-end-date">—</strong>
+                      Trial ends on <strong id="trial-end-date-legacy">-</strong>
                     </span>
-                    <p id="trial-countdown-detail" class="muted small"></p>
+                    <p id="trial-countdown-detail-legacy" class="muted small"></p>
                   </div>
                 </div>
               </article>
@@ -1777,7 +1765,7 @@
                   <summary>Why did my Plex invite go to a different email?</summary>
                   If your account uses Apple “Hide My Email” (relay addresses ending in
                   <code>@privaterelay.appleid.com</code>), Plex may map you to a different identity.
-                  Re-link Plex with your non-relay Plex account email in the Plex setup tab.
+                  Re-link Plex with your non-relay Plex account email in the Setup & access tab.
                 </details>
               </article>
 
@@ -1876,10 +1864,9 @@
               hidden
             >
               <article id="onboarding-panel" class="surface onboarding hidden">
-                <h2 class="section-title">Unlock endless content in three steps</h2>
+                <h2 class="section-title">Complete your access setup</h2>
                 <p class="muted">
-                  You're only moments away from streaming everything you love.
-                  Follow the guided path below to complete your setup.
+                  Follow the next steps in order so Plex, billing, and invite access stay aligned.
                 </p>
                 <p class="status-text info">
                   <strong>
@@ -1937,7 +1924,7 @@
                       <div>
                         <h3 class="step-title">Start your trial or subscription</h3>
                         <p id="step-subscription-note" class="muted small">
-                          Once Plex is linked, manage your trial or subscription from the Account tab. We'll update this step automatically.
+                          Once Plex is linked, start your trial or subscription from the actions below. We'll update this step automatically.
                         </p>
                       </div>
                     </div>
@@ -1954,6 +1941,47 @@
                         </p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </article>
+              <article class="surface">
+                <h2 class="section-title">Billing and trial</h2>
+                <p class="muted">
+                  When Plex is linked and your email is verified, start your trial or open PayPal checkout here without switching tabs.
+                </p>
+                <div id="subscription-cta" class="subscription-cta hidden">
+                  <button id="trial-button" class="button-secondary" type="button">
+                    Start 7-day trial
+                  </button>
+                  <button id="subscription-button" class="button-primary" type="button">
+                    Start subscription
+                  </button>
+                  <p id="subscription-note" class="status-text small">
+                    Choose your payment method to get started.
+                  </p>
+                  <p id="trial-status" class="status-text"></p>
+                </div>
+              </article>
+              <article id="trial-panel" class="surface hidden" hidden>
+                <div class="trial-panel-header">
+                  <div>
+                    <h2 class="section-title">Free trial countdown</h2>
+                    <p class="muted small">
+                      Upgrade before the countdown ends to keep streaming without interruption.
+                    </p>
+                  </div>
+                  <span class="trial-badge">Trial</span>
+                </div>
+                <div class="trial-countdown">
+                  <div class="trial-countdown-time">
+                    <span id="trial-days-remaining" class="trial-countdown-value">0</span>
+                    <span id="trial-days-label" class="trial-countdown-label">days remaining</span>
+                  </div>
+                  <div class="trial-countdown-details">
+                    <span class="trial-countdown-highlight">
+                      Trial ends on <strong id="trial-end-date">-</strong>
+                    </span>
+                    <p id="trial-countdown-detail" class="muted small"></p>
                   </div>
                 </div>
               </article>
@@ -1974,10 +2002,7 @@
                   Reach out to the Plex Donate team for account help or streaming
                   questions. We’ll send updates to the email on your account.
                 </p>
-                <button id="support-toggle" type="button" class="button-link button-primary support-toggle">
-                  Contact support
-                </button>
-                <div id="support-container" class="support-container hidden">
+                <div id="support-container" class="support-container">
                   <div class="support-wrapper">
                     <form id="support-form" class="support-form">
                       <div class="support-actions">
@@ -2129,7 +2154,7 @@
       let plexLinkCountdownExpiryMs = null;
       let plexLinkAuthWindow = null;
       let plexLinkStatusSticky = false;
-      let supportPanelOpen = false;
+      let supportPanelOpen = true;
       let supportLoading = false;
       let supportThreadsRequest = null;
       const INVITE_SEEN_KEY = 'plexDonateLastInviteId';
@@ -2142,6 +2167,7 @@
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
       const app = document.getElementById('app');
+      const unauthenticatedHero = document.getElementById('unauthenticated-hero');
       const loginPanel = document.getElementById('login-panel');
       const dashboardPanel = document.getElementById('dashboard-panel');
       const dashboardTablist = document.querySelector('[data-dashboard-tablist]');
@@ -2750,6 +2776,9 @@
         }
         activeDashboardTab = normalized;
         applyActiveDashboardTab();
+        if (activeDashboardTab === 'support') {
+          loadSupportThreads({ silent: true });
+        }
       }
 
       if (dashboardTabButtons.length > 0) {
@@ -3412,17 +3441,16 @@
       }
 
       async function setSupportPanelOpen(open) {
-        if (!supportContainer || !supportToggle) {
+        if (!supportContainer) {
           return;
         }
         supportPanelOpen = Boolean(open);
+        supportContainer.classList.toggle('hidden', !supportPanelOpen);
+        if (supportToggle) {
+          supportToggle.textContent = supportPanelOpen ? 'Hide support' : 'Contact support';
+        }
         if (supportPanelOpen) {
-          supportContainer.classList.remove('hidden');
-          supportToggle.textContent = 'Hide support';
           await loadSupportThreads({ silent: true });
-        } else {
-          supportContainer.classList.add('hidden');
-          supportToggle.textContent = 'Contact support';
         }
       }
 
@@ -4094,6 +4122,9 @@
         if (!data || !data.authenticated) {
           loginPanel.classList.remove('hidden');
           dashboardPanel.classList.add('hidden');
+          if (unauthenticatedHero) {
+            unauthenticatedHero.classList.remove('hidden');
+          }
           setActiveDashboardTab(DASHBOARD_TAB_DEFAULT, { force: true });
           loginForm.reset();
           setStatusText(loginStatus, '');
@@ -4145,6 +4176,9 @@
 
         loginPanel.classList.add('hidden');
         dashboardPanel.classList.remove('hidden');
+        if (unauthenticatedHero) {
+          unauthenticatedHero.classList.add('hidden');
+        }
         if (!previouslyAuthenticated) {
           // If the user has verified their email but hasn't linked Plex yet,
           // surface the Plex setup tab so they can complete linking there.

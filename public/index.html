@@ -2837,20 +2837,6 @@
               Sign in to manage donors, Plex access, support, and service configuration.
             </p>
           </div>
-          <ul class="login-helper-list">
-            <li>
-              <strong>Subscribers</strong>
-              <span>Review billing state, invite history, and current Plex access from one view.</span>
-            </li>
-            <li>
-              <strong>Integrations</strong>
-              <span>Update Plex, PayPal, SMTP, and announcement settings without editing environment files.</span>
-            </li>
-            <li>
-              <strong>Support</strong>
-              <span>Keep support replies and account actions in the same workspace so context is easy to follow.</span>
-            </li>
-          </ul>
           <form id="login-form" class="login-form" autocomplete="on">
             <label class="visually-hidden" for="username">Username</label>
             <div class="input-shell">
@@ -2892,25 +2878,25 @@
               <button id="login-submit" type="submit">Sign in</button>
             </div>
           </form>
+          <ul class="login-helper-list">
+            <li>
+              <strong>Subscribers</strong>
+              <span>Review billing state, invite history, and current Plex access from one view.</span>
+            </li>
+            <li>
+              <strong>Services</strong>
+              <span>Update Plex, PayPal, SMTP, and notification settings without editing environment files.</span>
+            </li>
+            <li>
+              <strong>Support</strong>
+              <span>Keep support replies and account actions in the same workspace so context is easy to follow.</span>
+            </li>
+          </ul>
           <p id="status-message" class="form-status-text"></p>
         </section>
       </div>
 
       <div id="dashboard" class="hidden">
-        <section class="dashboard-hero-strip" aria-label="Workspace overview">
-          <article class="dashboard-hero-card">
-            <strong>Subscribers first</strong>
-            <span>Start in the donor view when you need to verify access, refresh billing, or resend an invite link.</span>
-          </article>
-          <article class="dashboard-hero-card">
-            <strong>Settings stay grouped</strong>
-            <span>Integration, announcement, and notification controls are separated so each section has one job.</span>
-          </article>
-          <article class="dashboard-hero-card">
-            <strong>Support stays traceable</strong>
-            <span>Use the support view to reply in-thread instead of handling account issues over disconnected email chains.</span>
-          </article>
-        </section>
         <nav class="dashboard-legend" aria-label="Dashboard sections" data-dashboard-legend>
           <button
             type="button"
@@ -2928,25 +2914,13 @@
             type="button"
             class="dashboard-legend-button"
             role="tab"
-            id="dashboard-tab-account"
-            data-dashboard-target="account"
-            aria-controls="dashboard-view-account"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Admin
-          </button>
-          <button
-            type="button"
-            class="dashboard-legend-button"
-            role="tab"
             id="dashboard-tab-integration"
             data-dashboard-target="integration"
             aria-controls="dashboard-view-integration"
             aria-selected="false"
             tabindex="-1"
           >
-            Integrations
+            Services
           </button>
           <button
             type="button"
@@ -2958,7 +2932,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Notices
+            Alerts
           </button>
           <button
             type="button"
@@ -2970,7 +2944,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Support
+            Support Inbox
           </button>
           <button
             type="button"
@@ -2982,9 +2956,35 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Activity
+            Activity Log
+          </button>
+          <button
+            type="button"
+            class="dashboard-legend-button"
+            role="tab"
+            id="dashboard-tab-account"
+            data-dashboard-target="account"
+            aria-controls="dashboard-view-account"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Workspace
           </button>
         </nav>
+        <section class="dashboard-hero-strip" aria-label="Workspace overview">
+          <article class="dashboard-hero-card">
+            <strong>Handle access fast</strong>
+            <span>Start in Subscribers when you need to verify Plex status, refresh billing, or resend an invite link.</span>
+          </article>
+          <article class="dashboard-hero-card">
+            <strong>Open the right tool once</strong>
+            <span>Services and Alerts are separated so connection settings and outbound notices do not compete for space.</span>
+          </article>
+          <article class="dashboard-hero-card">
+            <strong>Keep a clean audit trail</strong>
+            <span>Use Support Inbox and Activity Log to answer issues without losing the timeline behind each account action.</span>
+          </article>
+        </section>
         <div class="dashboard-views">
           <div
             class="dashboard-view"
@@ -2995,7 +2995,7 @@
             hidden
           >
             <section class="panel" id="admin-account-panel">
-              <h2 style="margin-top:0;">Admin account</h2>
+              <h2 style="margin-top:0;">Workspace access</h2>
               <p class="muted-text" id="admin-account-description">
                 Update the username and password used to access this dashboard. Password changes require at least 12 characters.
               </p>
@@ -3145,7 +3145,7 @@
             hidden
           >
             <section class="panel" id="notification-settings-panel">
-              <h2 style="margin-top:0;">Admin notifications</h2>
+              <h2 style="margin-top:0;">Admin alerts</h2>
               <p class="muted-text" style="margin:0 0 16px;">
                 Choose which events should trigger an email to the admin team.
               </p>
@@ -3257,8 +3257,8 @@
               <section class="panel">
                 <div class="donors-panel-header">
                   <div>
-                    <h2 style="margin:0 0 4px;">Active users</h2>
-                    <p class="muted-text" style="margin:0;">Manage Plex invites and check the latest payments.</p>
+                    <h2 style="margin:0 0 4px;">Subscribers</h2>
+                    <p class="muted-text" style="margin:0;">Open a subscriber to manage access, billing, invite recovery, and status notes from one place.</p>
                   </div>
                   <div class="donors-controls">
                     <input
@@ -3391,7 +3391,7 @@
               <section class="panel" id="share-links-panel">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
                   <div>
-                    <h2 style="margin:0 0 4px;">Invite page links</h2>
+                    <h2 style="margin:0 0 4px;">Recovery and invite links</h2>
                     <p class="muted-text" style="margin:0;">
                       Review active share URLs and remove any that are no longer needed.
                     </p>
@@ -4068,11 +4068,11 @@
       const DASHBOARD_VIEW_DEFAULT = 'donors';
       const DASHBOARD_VIEW_ORDER = [
         'donors',
-        'account',
         'integration',
         'notifications',
         'support',
         'logs',
+        'account',
       ];
       const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
       const hasDashboardPreference = Boolean(
@@ -8701,7 +8701,7 @@
       if (donorDetail && donorsLayout) {
         const backButton = document.createElement('button');
         backButton.className = 'secondary';
-        backButton.textContent = '← Back to list';
+        backButton.textContent = 'Back to list';
         backButton.style.display = 'none';
         backButton.style.marginBottom = '16px';
         backButton.id = 'donor-detail-back';
