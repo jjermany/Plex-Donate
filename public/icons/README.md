@@ -1,13 +1,14 @@
 # PWA Icons
 
-Place progressive web app icon images in this directory when ready.
+This directory contains the shipped production icon set for Plex Donate.
 
-Required files referenced by the manifest:
+Current assets:
 
-- 192×192 PNG for Android round icon
-- 512×512 PNG for iOS square icon
+- Android launcher icons: `plex-donate-android-any-144.png`, `plex-donate-android-any-192.png`, `plex-donate-android-any-512.png`
+- Android maskable icons: `plex-donate-android-maskable-192.png`, `plex-donate-android-maskable-512.png`
+- iOS touch icons: `plex-donate-ios-120.png`, `plex-donate-ios-152.png`, `plex-donate-ios-167.png`, `plex-donate-ios-180.png`, `plex-donate-ios-1024.png`
+- Unraid container icon: `plex-donate-unraid-icon.png`
 
-Until branded artwork is available, the application serves inline transparent
-placeholders so the PWA install flow still works. Replace the data URI entries
-in `public/manifest.webmanifest` and the `<link rel="apple-touch-icon">` tags
-once the production-ready assets are ready.
+The artwork is intentionally text-free with generous padding so it remains
+legible for Unraid docker containers, Android maskable launchers, and iOS home
+screen icons.

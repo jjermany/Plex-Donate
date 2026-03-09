@@ -4,8 +4,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#4f46e5",
+  "background_color": "#f59e0b",
+  "theme_color": "#f59e0b",
   "description": "Manage Plex donations and share invites with supporters.",
   "icons": [
     {
