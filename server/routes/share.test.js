@@ -186,7 +186,8 @@ function getShareDashboardScript() {
   if (!cachedShareDashboardScript) {
     const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
     const html = fs.readFileSync(shareHtmlPath, 'utf8');
-    const match = html.match(/<script>([\s\S]*)<\/script>/i);
+    const matches = Array.from(html.matchAll(/<script>([\s\S]*?)<\/script>/gi));
+    const match = matches[matches.length - 1];
     if (!match) {
       throw new Error('Unable to locate share dashboard script for tests');
     }
@@ -310,11 +311,22 @@ function createShareUiHarness() {
     elements.set(id, createDomElementStub(id));
   });
   const documentStub = {
+    documentElement: {
+      dataset: {},
+    },
     getElementById(id) {
       if (!elements.has(id)) {
         elements.set(id, createDomElementStub(id));
       }
       return elements.get(id);
+    },
+    querySelector(selector) {
+      if (selector === 'meta[name="theme-color"]') {
+        return {
+          setAttribute() {},
+        };
+      }
+      return null;
     },
     activeElement: null,
     title: '',
@@ -322,6 +334,9 @@ function createShareUiHarness() {
   const windowStub = {
     location: { pathname: '/' },
     addEventListener() {},
+    matchMedia() {
+      return { matches: false };
+    },
     setInterval() {
       return 0;
     },
@@ -336,13 +351,21 @@ function createShareUiHarness() {
       register: async () => {},
     },
   };
+  const localStorageStub = {
+    getItem() {
+      return null;
+    },
+    setItem() {},
+  };
   documentStub.defaultView = windowStub;
   windowStub.document = documentStub;
   windowStub.console = console;
+  windowStub.localStorage = localStorageStub;
   const context = {
     window: windowStub,
     document: documentStub,
     navigator: navigatorStub,
+    localStorage: localStorageStub,
     console,
     fetch: async () => {
       throw new Error('fetch not implemented in test harness');
@@ -1286,6 +1309,65 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       const inviteCount = db.prepare('SELECT COUNT(*) AS count FROM invites').get()
         .count;
       assert.equal(inviteCount, 2);
+    } finally {
+      await server.close();
+    }
+  });
+
+  await t.test('share dashboard rehydrates share-link metadata for invite links', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const donor = createDonor({
+        email: 'rehydrate@example.com',
+        name: 'Rehydrate Donor',
+        subscriptionId: 'I-REHYDRATE',
+        status: 'active',
+        plexAccountId: 'plex-rehydrate',
+        plexEmail: 'rehydrate@example.com',
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: 'rehydrate-token',
+        sessionToken: 'rehydrate-session',
+      });
+
+      const createResponse = await requestJson(
+        server,
+        'POST',
+        `/share/${shareLink.token}`,
+        {
+          headers: { Authorization: `Bearer ${shareLink.sessionToken}` },
+          body: {
+            email: 'friend@example.com',
+            name: 'Friend',
+            sessionToken: shareLink.sessionToken,
+          },
+        }
+      );
+
+      assert.equal(createResponse.status, 200);
+      assert.ok(createResponse.body.shareInvite);
+      assert.equal(createResponse.body.shareInvite.token, createResponse.body.invite.plexInviteId);
+
+      const reloadResponse = await requestJson(
+        server,
+        'GET',
+        `/share/${shareLink.token}`
+      );
+
+      assert.equal(reloadResponse.status, 200);
+      assert.ok(reloadResponse.body.shareInvite);
+      assert.equal(
+        reloadResponse.body.shareInvite.token,
+        createResponse.body.invite.plexInviteId
+      );
+      assert.equal(
+        reloadResponse.body.shareInvite.inviteUrl,
+        createResponse.body.shareInvite.inviteUrl
+      );
     } finally {
       await server.close();
     }

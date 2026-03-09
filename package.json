@@ -7,11 +7,12 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "NODE_ENV=development nodemon --watch server server/index.js",
-    "test": "node --test",
+    "test": "node server/scripts/run-tests.js",
+    "test:watch": "node server/scripts/run-tests.js --watch",
     "reset-admin": "node server/scripts/reset-admin-password.js"
   },
   "dependencies": {
-    "better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^12.6.2",
     "body-parser": "^1.20.3",
     "csurf": "^1.2.2",
     "dotenv": "^16.4.5",

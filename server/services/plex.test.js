@@ -107,7 +107,7 @@ test('plexService.createInvite uses v2 when available', async () => {
       }
     );
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -116,9 +116,13 @@ test('plexService.createInvite uses v2 when available', async () => {
     assert.equal(calls[2].url, 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123');
     assert.equal(
       calls[3].url,
+      'https://plex.local/accounts?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123'
     );
-    const v2Payload = new URLSearchParams(calls[3].options.body);
+    const v2Payload = new URLSearchParams(calls[4].options.body);
     assert.equal(v2Payload.get('machineIdentifier'), 'd4e2machine');
     assert.equal(v2Payload.get('invitedEmail'), 'friend@example.com');
     assert.equal(v2Payload.get('allow_channels'), '1');
@@ -134,7 +138,7 @@ test('plexService.createInvite uses v2 when available', async () => {
     assert.equal(result.inviteUrl, 'https://plex.example/invite/INV-100');
     assert.equal(result.status, 'pending');
     assert.equal(
-      calls[3].options.headers['X-Plex-Client-Identifier'],
+      calls[4].options.headers['X-Plex-Client-Identifier'],
       'plex-donate-d4e2machine'
     );
   });
@@ -322,7 +326,7 @@ test('plexService.createInvite translates legacy configured section indices', as
       }
     );
 
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     assert.equal(
       calls[0].url,
       'https://plex.tv/api/resources?includeHttps=1&includeRelay=1&X-Plex-Token=token123'
@@ -331,9 +335,13 @@ test('plexService.createInvite translates legacy configured section indices', as
     assert.equal(calls[2].url, 'https://plex.tv/api/servers/d4e2machine?X-Plex-Token=token123');
     assert.equal(
       calls[3].url,
+      'https://plex.local/accounts?X-Plex-Token=token123'
+    );
+    assert.equal(
+      calls[4].url,
       'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123'
     );
-    const v2Payload = new URLSearchParams(calls[3].options.body);
+    const v2Payload = new URLSearchParams(calls[4].options.body);
     assert.equal(v2Payload.get('libraries[0][library_id]'), '10');
     assert.equal(v2Payload.get('libraries[1][library_id]'), '12');
 
@@ -380,6 +388,14 @@ test('plexService.createInvite uses invitedEmail even when invitedId is supplied
         status: 200,
         text: async () =>
           '<MediaContainer><Server machineIdentifier="d4e2machine"><Section id="10" key="/library/sections/1" title="Movies"/></Server></MediaContainer>',
+      };
+    }
+
+    if (url === 'https://plex.local/accounts?X-Plex-Token=token123') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
       };
     }
 
@@ -457,6 +473,14 @@ test('plexService.createInvite uses invitedEmail when invitedId is omitted', asy
         status: 200,
         text: async () =>
           '<MediaContainer><Server machineIdentifier="d4e2machine"><Section id="10" key="/library/sections/1" title="Movies"/></Server></MediaContainer>',
+      };
+    }
+
+    if (url === 'https://plex.local/accounts?X-Plex-Token=token123') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({}),
       };
     }
 
@@ -962,13 +986,23 @@ test('plexService.createInvite throws when Plex omits invite id', async () => {
         };
       }
 
-      if (
-        url ===
-    return {
-      ok: true,
-        status: 200,
-        json: async () => ({}),
-      };
+      if (url === 'https://plex.local/accounts?X-Plex-Token=token123') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+        };
+      }
+
+      if (url === 'https://plex.tv/api/v2/shared_servers?X-Plex-Token=token123') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({}),
+        };
+      }
+
+      throw new Error(`Unexpected URL: ${url}`);
     },
     async (plexService) => {
       await assert.rejects(

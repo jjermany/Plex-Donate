@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plex-donate-cache-v3';
+const CACHE_NAME = 'plex-donate-cache-v5';
 const CORE_ASSETS = ['/', '/index.html', '/dashboard.html', '/share.html', '/manifest.webmanifest'];
 const OPTIONAL_ASSETS = [
   '/icons/plex-donate-android-any-144.png',

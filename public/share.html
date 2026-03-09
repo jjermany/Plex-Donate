@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,11 +22,74 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
 
     <title>Plex Donate Invite</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('plexDonateTheme');
+          const prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : prefersDark
+                ? 'dark'
+                : 'light';
+          document.documentElement.dataset.theme = theme;
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute('content', theme === 'dark' ? '#050818' : '#f8fafc');
+          }
+        } catch (err) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
     <style>
       :root {
         color-scheme: dark;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
           sans-serif;
+        --page-text: #e2e8f0;
+        --page-muted: rgba(203, 213, 225, 0.82);
+        --page-background: radial-gradient(
+            120% 120% at 50% -10%,
+            rgba(99, 102, 241, 0.35) 0%,
+            rgba(15, 23, 42, 0.92) 45%,
+            #050818 100%
+          ),
+          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
+        --page-overlay: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(76, 29, 149, 0.18),
+          transparent 70%
+        );
+        --panel-background: rgba(15, 23, 42, 0.82);
+        --panel-border: rgba(148, 163, 184, 0.3);
+        --surface-background: rgba(15, 23, 42, 0.76);
+        --surface-border: rgba(148, 163, 184, 0.22);
+        --surface-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        --theme-toggle-background: rgba(15, 23, 42, 0.78);
+        --theme-toggle-border: rgba(148, 163, 184, 0.35);
+      }
+
+      :root[data-theme='light'] {
+        color-scheme: light;
+        --page-text: #0f172a;
+        --page-muted: rgba(51, 65, 85, 0.82);
+        --page-background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+        --page-overlay: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(96, 165, 250, 0.16),
+          transparent 70%
+        );
+        --panel-background: rgba(255, 255, 255, 0.88);
+        --panel-border: rgba(148, 163, 184, 0.26);
+        --surface-background: rgba(255, 255, 255, 0.9);
+        --surface-border: rgba(148, 163, 184, 0.24);
+        --surface-shadow: 0 24px 50px -28px rgba(37, 99, 235, 0.24);
+        --theme-toggle-background: rgba(255, 255, 255, 0.92);
+        --theme-toggle-border: rgba(148, 163, 184, 0.28);
       }
       * {
         box-sizing: border-box;
@@ -34,28 +97,19 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(
-            120% 120% at 50% -10%,
-            rgba(99, 102, 241, 0.35) 0%,
-            rgba(15, 23, 42, 0.92) 45%,
-            #050818 100%
-          ),
-          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
-        color: #e2e8f0;
+        background: var(--page-background);
+        color: var(--page-text);
         display: flex;
         justify-content: center;
         padding: 32px 16px 64px;
         position: relative;
+        transition: background 0.25s ease, color 0.25s ease;
       }
       body::after {
         content: '';
         position: fixed;
         inset: 0;
-        background: radial-gradient(
-          60% 60% at 20% 20%,
-          rgba(76, 29, 149, 0.18),
-          transparent 70%
-        );
+        background: var(--page-overlay);
         pointer-events: none;
         z-index: 0;
       }
@@ -87,12 +141,12 @@
       }
       .panel {
         width: min(760px, 100%);
-        background: rgba(15, 23, 42, 0.82);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border);
         border-radius: 20px;
         padding: 28px;
         text-align: center;
-        box-shadow: 0 25px 60px -25px rgba(30, 64, 175, 0.6);
+        box-shadow: var(--surface-shadow);
         position: relative;
         z-index: 1;
       }
@@ -113,11 +167,11 @@
         gap: 28px;
       }
       .surface {
-        background: rgba(15, 23, 42, 0.76);
-        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: var(--surface-background);
+        border: 1px solid var(--surface-border);
         border-radius: 24px;
         padding: clamp(24px, 4vw, 36px);
-        box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        box-shadow: var(--surface-shadow);
         backdrop-filter: blur(18px);
       }
       .hero {
@@ -174,6 +228,76 @@
         display: grid;
         gap: 24px;
       }
+      .requirements-strip {
+        display: grid;
+        gap: 14px;
+        padding: 18px 20px;
+        border-radius: 20px;
+        background: rgba(15, 23, 42, 0.44);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+      }
+      .requirements-strip strong {
+        color: #e0e7ff;
+      }
+      .requirements-list {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+      .requirements-item {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(59, 130, 246, 0.08);
+        border: 1px solid rgba(96, 165, 250, 0.15);
+      }
+      .requirements-item span:first-child {
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(165, 180, 252, 0.88);
+        font-weight: 700;
+      }
+      .journey-grid {
+        margin-top: 20px;
+        display: grid;
+        gap: 14px;
+      }
+      @media (min-width: 860px) {
+        .journey-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .journey-card {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border-radius: 20px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.42);
+        text-align: left;
+      }
+      .journey-step {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.55), rgba(56, 189, 248, 0.38));
+        color: #eff6ff;
+        box-shadow: 0 16px 30px -20px rgba(56, 189, 248, 0.85);
+      }
+      .journey-card h3 {
+        font-size: 1rem;
+      }
+      .journey-card p {
+        color: var(--page-muted);
+        font-size: 0.92rem;
+      }
       @media (min-width: 860px) {
         .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -195,7 +319,23 @@
         width: 100%;
       }
       .muted {
-        color: rgba(203, 213, 225, 0.8);
+        color: var(--page-muted);
+      }
+      .theme-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 101;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 10px 14px;
+        border: 1px solid var(--theme-toggle-border);
+        background: var(--theme-toggle-background);
+        color: var(--page-text);
+        box-shadow: var(--surface-shadow);
+        backdrop-filter: blur(14px);
       }
       .small {
         font-size: 0.85rem;
@@ -542,6 +682,9 @@
     </style>
   </head>
   <body>
+    <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Toggle theme">
+      Theme
+    </button>
     <div id="loading" class="panel">
       <div class="loading-spinner">
         <div class="loading-spinner-ring"></div>
@@ -552,56 +695,70 @@
     <div id="content" class="hidden">
       <main class="canvas">
         <header class="surface hero">
-          <span class="eyebrow">Start here</span>
-          <h1>Claim your Plex Donate referral invite.</h1>
+          <span class="eyebrow">Guided Setup</span>
+          <h1>Use this page to set up your access in the right order.</h1>
           <p class="lead">
-            You're moments away from joining our streaming community. Follow
-            the steps below to create your account, link Plex, and activate the
-            referral that brought you here.
+            Create your Plex Donate login, verify your email, then connect the
+            Plex account you actually want to use. Once billing is linked, this
+            page becomes your handoff point for invite recovery and referrals.
           </p>
           <div class="hero-badges">
-            <span class="chip">Plex invite ready</span>
-            <span class="chip">Community powered</span>
-            <span class="chip">Streaming sanctuary</span>
+            <span class="chip">1. Create account</span>
+            <span class="chip">2. Link Plex</span>
+            <span class="chip">3. Activate access</span>
+          </div>
+          <div class="requirements-strip">
+            <p class="muted">
+              <strong>Have these ready:</strong> your real Plex account, access to your email inbox, and optionally your PayPal subscription ID if you already subscribed.
+            </p>
+            <div class="requirements-list">
+              <div class="requirements-item">
+                <span>Plex</span>
+                <span>Create or recover your Plex account first.</span>
+              </div>
+              <div class="requirements-item">
+                <span>Email</span>
+                <span>Open the verification message before moving on.</span>
+              </div>
+              <div class="requirements-item">
+                <span>Billing</span>
+                <span>Keep your PayPal subscription ID nearby if needed.</span>
+              </div>
+            </div>
           </div>
         </header>
 
         <section class="surface" id="support-card">
-            <h2>Here's how it works</h2>
+            <h2>What to do next</h2>
             <p class="muted">
-              Follow these steps in order to activate your library access.
+              Follow these steps in order. Checkout and referral tools stay locked until Plex is linked correctly.
             </p>
-            <p class="muted">
-              <strong>
-                Before continuing, create or recover your Plex account at
-                <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
-                  >plex.tv</a
-                > so you can link it here—checkout stays disabled until Plex is ready.
-              </strong>
-            </p>
-            <ul class="support-list">
-              <li>
-                Start by creating or recovering your Plex account and saving your Plex Donate
-                login with the same supporter email.
-              </li>
-              <li>
-                Watch for our verification email—open it and sign in from that link so we can
-                confirm your dashboard access.
-              </li>
-              <li>
-                Complete the Plex authentication prompt to confirm which Plex identity you'll use
-                before sharing invites.
-              </li>
-              <li>
-                Once Plex is linked, start your subscription with PayPal, or paste your
-                existing subscription ID so we can verify billing.
-              </li>
-              <li>
-                Use the referral tool to welcome new viewers once your donation is active. Existing
-                supporters can regenerate their own Plex invite here only if they've lost library
-                access.
-              </li>
-            </ul>
+            <div class="journey-grid">
+              <article class="journey-card">
+                <span class="journey-step">1</span>
+                <h3>Save your Plex Donate login</h3>
+                <p>
+                  Use the same supporter email you want associated with this invite. After saving,
+                  confirm the verification email before you continue.
+                </p>
+              </article>
+              <article class="journey-card">
+                <span class="journey-step">2</span>
+                <h3>Connect the correct Plex identity</h3>
+                <p>
+                  Link the Plex account that should receive library access. If you use an Apple relay
+                  email, switch to your real Plex email when possible.
+                </p>
+              </article>
+              <article class="journey-card">
+                <span class="journey-step">3</span>
+                <h3>Activate billing and manage access</h3>
+                <p>
+                  Start a trial or link your PayPal subscription. After that, this page can be used
+                  for access recovery and monthly referral invites.
+                </p>
+              </article>
+            </div>
             <div id="trial-cta" class="cta hidden">
               <h3>Preview the library</h3>
               <p class="muted small" id="trial-message">
@@ -622,7 +779,7 @@
         </section>
 
         <section class="surface" id="account-panel">
-          <h2>Step 1 · Create your account</h2>
+          <h2>Step 1 · Save your Plex Donate login</h2>
           <p id="account-description" class="muted">
             Make sure you've created or recovered your Plex account, then save your Plex Donate
             login with the same email so we can guide you through linking. We'll send a verification
@@ -719,7 +876,7 @@
         </section>
 
         <section class="surface" id="invite-panel">
-          <h2>Step 3 · Link Plex & share referral invites</h2>
+          <h2>Step 3 · Share and restore access</h2>
           <p class="muted" id="invite-description">
             After Plex is linked and your donation is confirmed, you can send one referral invite
             each month. Choose who should receive it—we'll highlight when the next referral unlocks.
@@ -839,6 +996,46 @@
       const paypalCheckoutButton = document.getElementById('paypal-checkout-button');
       const paypalStatus = document.getElementById('paypal-status');
       const accountManagement = document.getElementById('account-management');
+      const themeToggleButton = document.getElementById('theme-toggle');
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      const rootElement = document.documentElement;
+      const THEME_STORAGE_KEY = 'plexDonateTheme';
+
+      function storeThemePreference(theme) {
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (err) {
+          /* noop */
+        }
+      }
+
+      function applyTheme(theme, persist = true) {
+        const normalized = theme === 'light' ? 'light' : 'dark';
+        rootElement.dataset.theme = normalized;
+        if (persist) {
+          storeThemePreference(normalized);
+        }
+        if (themeMeta) {
+          themeMeta.setAttribute('content', normalized === 'dark' ? '#050818' : '#f8fafc');
+        }
+        if (themeToggleButton) {
+          themeToggleButton.setAttribute(
+            'aria-pressed',
+            normalized === 'dark' ? 'true' : 'false'
+          );
+          themeToggleButton.textContent =
+            normalized === 'dark' ? 'Light mode' : 'Dark mode';
+        }
+      }
+
+      applyTheme(rootElement.dataset.theme || 'dark', false);
+
+      if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+          const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          applyTheme(nextTheme);
+        });
+      }
 
       function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) {

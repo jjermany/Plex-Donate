@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -22,11 +22,80 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
 
     <title>Plex Donate Dashboard</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('plexDonateTheme');
+          const prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : prefersDark
+                ? 'dark'
+                : 'light';
+          document.documentElement.dataset.theme = theme;
+          const meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) {
+            meta.setAttribute('content', theme === 'dark' ? '#050818' : '#f8fafc');
+          }
+        } catch (err) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
     <style>
       :root {
         color-scheme: dark;
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
           sans-serif;
+        --page-text: #e2e8f0;
+        --page-muted: rgba(203, 213, 225, 0.82);
+        --page-background: radial-gradient(
+            120% 120% at 50% -10%,
+            rgba(99, 102, 241, 0.35) 0%,
+            rgba(15, 23, 42, 0.92) 45%,
+            #050818 100%
+          ),
+          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
+        --page-overlay: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(76, 29, 149, 0.18),
+          transparent 70%
+        );
+        --panel-background: rgba(15, 23, 42, 0.82);
+        --panel-border: rgba(148, 163, 184, 0.3);
+        --surface-background: rgba(15, 23, 42, 0.76);
+        --surface-border: rgba(148, 163, 184, 0.22);
+        --surface-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        --secondary-button-background: rgba(148, 163, 184, 0.2);
+        --secondary-button-color: #e2e8f0;
+        --secondary-button-border: rgba(148, 163, 184, 0.4);
+        --theme-toggle-background: rgba(15, 23, 42, 0.78);
+        --theme-toggle-border: rgba(148, 163, 184, 0.35);
+      }
+
+      :root[data-theme='light'] {
+        color-scheme: light;
+        --page-text: #0f172a;
+        --page-muted: rgba(51, 65, 85, 0.82);
+        --page-background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
+        --page-overlay: radial-gradient(
+          60% 60% at 20% 20%,
+          rgba(96, 165, 250, 0.16),
+          transparent 70%
+        );
+        --panel-background: rgba(255, 255, 255, 0.88);
+        --panel-border: rgba(148, 163, 184, 0.26);
+        --surface-background: rgba(255, 255, 255, 0.9);
+        --surface-border: rgba(148, 163, 184, 0.24);
+        --surface-shadow: 0 24px 50px -28px rgba(37, 99, 235, 0.24);
+        --secondary-button-background: rgba(226, 232, 240, 0.9);
+        --secondary-button-color: #0f172a;
+        --secondary-button-border: rgba(148, 163, 184, 0.32);
+        --theme-toggle-background: rgba(255, 255, 255, 0.92);
+        --theme-toggle-border: rgba(148, 163, 184, 0.28);
       }
       * {
         box-sizing: border-box;
@@ -34,28 +103,19 @@
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(
-            120% 120% at 50% -10%,
-            rgba(99, 102, 241, 0.35) 0%,
-            rgba(15, 23, 42, 0.92) 45%,
-            #050818 100%
-          ),
-          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
-        color: #e2e8f0;
+        background: var(--page-background);
+        color: var(--page-text);
         display: flex;
         justify-content: center;
         padding: 32px 16px 64px;
         position: relative;
+        transition: background 0.25s ease, color 0.25s ease;
       }
       body::after {
         content: '';
         position: fixed;
         inset: 0;
-        background: radial-gradient(
-          60% 60% at 20% 20%,
-          rgba(76, 29, 149, 0.18),
-          transparent 70%
-        );
+        background: var(--page-overlay);
         pointer-events: none;
         z-index: 0;
       }
@@ -120,12 +180,12 @@
       }
       .panel {
         width: min(780px, 100%);
-        background: rgba(15, 23, 42, 0.82);
-        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border);
         border-radius: 20px;
         padding: 28px;
         text-align: center;
-        box-shadow: 0 25px 60px -25px rgba(30, 64, 175, 0.6);
+        box-shadow: var(--surface-shadow);
         position: relative;
         z-index: 1;
       }
@@ -206,11 +266,11 @@
         outline-offset: 4px;
       }
       .surface {
-        background: rgba(15, 23, 42, 0.76);
-        border: 1px solid rgba(148, 163, 184, 0.22);
+        background: var(--surface-background);
+        border: 1px solid var(--surface-border);
         border-radius: 24px;
         padding: clamp(24px, 4vw, 36px);
-        box-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
+        box-shadow: var(--surface-shadow);
         backdrop-filter: blur(18px);
       }
       .trial-panel-header {
@@ -424,6 +484,98 @@
         gap: 16px;
         text-align: center;
       }
+      .hero-badges {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+      }
+      .hero-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 14px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        background: rgba(99, 102, 241, 0.18);
+        border: 1px solid rgba(129, 140, 248, 0.35);
+        color: #e0e7ff;
+      }
+      .hero-grid {
+        display: grid;
+        gap: 14px;
+        text-align: left;
+      }
+      @media (min-width: 860px) {
+        .hero-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .hero-card {
+        display: grid;
+        gap: 8px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        background: rgba(15, 23, 42, 0.42);
+      }
+      .hero-card strong {
+        font-size: 0.94rem;
+        color: #f8fafc;
+      }
+      .hero-card span {
+        font-size: 0.9rem;
+        color: var(--page-muted);
+      }
+      .login-helper-list {
+        display: grid;
+        gap: 10px;
+        margin: 4px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .login-helper-list li {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.36);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .login-helper-list strong {
+        font-size: 0.88rem;
+        color: #e0e7ff;
+      }
+      .login-helper-list span {
+        font-size: 0.88rem;
+        color: var(--page-muted);
+      }
+      .dashboard-overview {
+        display: grid;
+        gap: 14px;
+      }
+      @media (min-width: 860px) {
+        .dashboard-overview {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .overview-card {
+        display: grid;
+        gap: 8px;
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(15, 23, 42, 0.44);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .overview-card strong {
+        font-size: 0.95rem;
+      }
+      .overview-card span {
+        color: var(--page-muted);
+        font-size: 0.9rem;
+      }
       .hero::after {
         content: '';
         position: absolute;
@@ -448,7 +600,7 @@
         color: rgba(165, 180, 252, 0.9);
       }
       .muted {
-        color: rgba(203, 213, 225, 0.8);
+        color: var(--page-muted);
       }
       .small {
         font-size: 0.85rem;
@@ -651,9 +803,25 @@
         box-shadow: 0 12px 30px -12px rgba(79, 70, 229, 0.65);
       }
       .button-secondary {
-        background: rgba(148, 163, 184, 0.2);
-        color: #e2e8f0;
-        border: 1px solid rgba(148, 163, 184, 0.4);
+        background: var(--secondary-button-background);
+        color: var(--secondary-button-color);
+        border: 1px solid var(--secondary-button-border);
+      }
+      .theme-toggle {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        z-index: 101;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 10px 14px;
+        border: 1px solid var(--theme-toggle-border);
+        background: var(--theme-toggle-background);
+        color: var(--page-text);
+        box-shadow: var(--surface-shadow);
+        backdrop-filter: blur(14px);
       }
       .plex-link-controls {
         display: grid;
@@ -1159,6 +1327,9 @@
   </head>
   <body>
     <a href="#app" class="skip-link">Skip to dashboard</a>
+    <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Toggle theme">
+      Theme
+    </button>
     <div id="loading" class="panel">
       <div class="loading-spinner">
         <div class="loading-spinner-ring"></div>
@@ -1170,13 +1341,30 @@
       <main class="canvas">
         <section class="surface hero">
           <span class="eyebrow">Plex Donate</span>
-          <h1>You're just steps away from endless Plex adventures</h1>
+          <h1>Everything important about your access lives here.</h1>
           <p class="muted">
-            Signed up through one of our share links? Use the account you
-            created there to manage invites, keep your details current, and
-            jump back into your libraries anytime. Not subscribed yet? Follow
-            the guided checklist below to unlock access to endless content.
+            Sign in with the account you created on your share page. From this dashboard you can
+            confirm billing, link Plex, recover invite access, and contact the server team if something breaks.
           </p>
+          <div class="hero-badges">
+            <span class="hero-chip">Account details</span>
+            <span class="hero-chip">Plex connection</span>
+            <span class="hero-chip">Support history</span>
+          </div>
+          <div class="hero-grid">
+            <article class="hero-card">
+              <strong>Start with your account</strong>
+              <span>Check your membership status, email verification, and password settings.</span>
+            </article>
+            <article class="hero-card">
+              <strong>Then confirm Plex</strong>
+              <span>Link the right Plex identity before trials, invites, or donation activation.</span>
+            </article>
+            <article class="hero-card">
+              <strong>Use support when needed</strong>
+              <span>Keep one thread per issue so the full history stays in one place.</span>
+            </article>
+          </div>
         </section>
 
         <section
@@ -1215,11 +1403,24 @@
             <div>
               <span class="section-title">Customer sign-in</span>
               <p class="muted small">
-                Use the same credentials you saved on the invite page. If you're
-                just getting started, head back to your share link to complete
-                step one.
+                Use the same credentials you saved on the invite page. If you're still setting up,
+                finish account creation and email verification there first.
               </p>
             </div>
+            <ul class="login-helper-list">
+              <li>
+                <strong>Use your saved login</strong>
+                <span>Sign in with the email and password created during invite setup.</span>
+              </li>
+              <li>
+                <strong>Verification comes first</strong>
+                <span>If login fails right after signup, open the email verification link you were sent.</span>
+              </li>
+              <li>
+                <strong>Forgot your password?</strong>
+                <span>Use the reset link below to issue a new password without losing your dashboard history.</span>
+              </li>
+            </ul>
             <form id="login-form">
               <label>
                 <span>Email on file</span>
@@ -1416,6 +1617,21 @@
               Resources
             </button>
           </nav>
+
+          <section class="surface dashboard-overview" aria-label="Dashboard overview">
+            <article class="overview-card">
+              <strong>Account</strong>
+              <span>Review your donation status, email verification, and password settings.</span>
+            </article>
+            <article class="overview-card">
+              <strong>Plex setup</strong>
+              <span>Connect Plex, start a trial, or restore access using the same identity every time.</span>
+            </article>
+            <article class="overview-card">
+              <strong>Resources & support</strong>
+              <span>Use support for account issues and keep request links handy when you need them.</span>
+            </article>
+          </section>
 
           <div class="dashboard-tabpanels">
             <section
@@ -2039,6 +2255,10 @@
       const supportReplyMessage = document.getElementById('support-reply-message');
       const supportReplyStatus = document.getElementById('support-reply-status');
       const supportReplySubmit = document.getElementById('support-reply-submit');
+      const themeToggleButton = document.getElementById('theme-toggle');
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      const rootElement = document.documentElement;
+      const THEME_STORAGE_KEY = 'plexDonateTheme';
       const defaultSubscriptionButtonLabel = subscriptionButton
         ? subscriptionButton.textContent
         : 'Start subscription';
@@ -2085,6 +2305,42 @@
       let initialVerificationToken = null;
       let initialPasswordResetToken = null;
       let verificationInFlight = false;
+
+      function storeThemePreference(theme) {
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (err) {
+          /* noop */
+        }
+      }
+
+      function applyTheme(theme, persist = true) {
+        const normalized = theme === 'light' ? 'light' : 'dark';
+        rootElement.dataset.theme = normalized;
+        if (persist) {
+          storeThemePreference(normalized);
+        }
+        if (themeMeta) {
+          themeMeta.setAttribute('content', normalized === 'dark' ? '#050818' : '#f8fafc');
+        }
+        if (themeToggleButton) {
+          themeToggleButton.setAttribute(
+            'aria-pressed',
+            normalized === 'dark' ? 'true' : 'false'
+          );
+          themeToggleButton.textContent =
+            normalized === 'dark' ? 'Light mode' : 'Dark mode';
+        }
+      }
+
+      applyTheme(rootElement.dataset.theme || 'dark', false);
+
+      if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+          const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          applyTheme(nextTheme);
+        });
+      }
 
 
       function isAppleRelayEmail(email) {

@@ -174,6 +174,29 @@
         margin-bottom: 32px;
         gap: 16px;
       }
+      .page-title-group {
+        display: grid;
+        gap: 6px;
+      }
+      .page-kicker {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 6px 12px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--badge-color);
+      }
+      .page-subtitle {
+        margin: 0;
+        color: var(--text-muted);
+        max-width: 64ch;
+        line-height: 1.5;
+      }
 
       .header-actions {
         display: flex;
@@ -287,7 +310,7 @@
       }
 
       .login-panel {
-        max-width: 460px;
+        max-width: 520px;
         width: 100%;
         margin: auto;
       }
@@ -404,6 +427,56 @@
         flex-direction: column;
         gap: 8px;
         margin-top: 10px;
+      }
+      .login-helper-list {
+        display: grid;
+        gap: 10px;
+        margin: 0 0 16px;
+        padding: 0;
+        list-style: none;
+      }
+      .login-helper-list li {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: rgba(99, 102, 241, 0.06);
+        border: 1px solid var(--panel-border-color);
+        text-align: left;
+      }
+      .login-helper-list strong {
+        font-size: 0.88rem;
+      }
+      .login-helper-list span {
+        color: var(--text-muted);
+        font-size: 0.88rem;
+      }
+      .dashboard-hero-strip {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      @media (min-width: 900px) {
+        .dashboard-hero-strip {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .dashboard-hero-card {
+        display: grid;
+        gap: 8px;
+        padding: 18px;
+        border-radius: 18px;
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        box-shadow: var(--panel-shadow);
+      }
+      .dashboard-hero-card strong {
+        font-size: 0.95rem;
+      }
+      .dashboard-hero-card span {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        line-height: 1.45;
       }
 
       .login-actions button {
@@ -2738,7 +2811,13 @@
       </button>
 
       <header>
-        <h1>Plex Donate Control Center</h1>
+        <div class="page-title-group">
+          <span class="page-kicker">Admin Workspace</span>
+          <h1>Plex Donate Control Center</h1>
+          <p class="page-subtitle">
+            Manage subscriber access, billing-linked invites, support requests, and system settings from one place.
+          </p>
+        </div>
         <div class="header-actions">
           <button id="logout-button" class="hidden" type="button">Log out</button>
         </div>
@@ -2755,9 +2834,23 @@
             </div>
             <h2>Admin Sign In</h2>
             <p class="login-description" id="login-help">
-              Sign in to manage your Plex Donate server
+              Sign in to manage donors, Plex access, support, and service configuration.
             </p>
           </div>
+          <ul class="login-helper-list">
+            <li>
+              <strong>Subscribers</strong>
+              <span>Review billing state, invite history, and current Plex access from one view.</span>
+            </li>
+            <li>
+              <strong>Integrations</strong>
+              <span>Update Plex, PayPal, SMTP, and announcement settings without editing environment files.</span>
+            </li>
+            <li>
+              <strong>Support</strong>
+              <span>Keep support replies and account actions in the same workspace so context is easy to follow.</span>
+            </li>
+          </ul>
           <form id="login-form" class="login-form" autocomplete="on">
             <label class="visually-hidden" for="username">Username</label>
             <div class="input-shell">
@@ -2804,6 +2897,20 @@
       </div>
 
       <div id="dashboard" class="hidden">
+        <section class="dashboard-hero-strip" aria-label="Workspace overview">
+          <article class="dashboard-hero-card">
+            <strong>Subscribers first</strong>
+            <span>Start in the donor view when you need to verify access, refresh billing, or resend an invite link.</span>
+          </article>
+          <article class="dashboard-hero-card">
+            <strong>Settings stay grouped</strong>
+            <span>Integration, announcement, and notification controls are separated so each section has one job.</span>
+          </article>
+          <article class="dashboard-hero-card">
+            <strong>Support stays traceable</strong>
+            <span>Use the support view to reply in-thread instead of handling account issues over disconnected email chains.</span>
+          </article>
+        </section>
         <nav class="dashboard-legend" aria-label="Dashboard sections" data-dashboard-legend>
           <button
             type="button"
@@ -2815,7 +2922,7 @@
             aria-selected="true"
             tabindex="0"
           >
-            Donors
+            Subscribers
           </button>
           <button
             type="button"
@@ -2827,7 +2934,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Account
+            Admin
           </button>
           <button
             type="button"
@@ -2851,7 +2958,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Notifications
+            Notices
           </button>
           <button
             type="button"
@@ -2863,7 +2970,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Support requests
+            Support
           </button>
           <button
             type="button"
@@ -2875,7 +2982,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Logs
+            Activity
           </button>
         </nav>
         <div class="dashboard-views">
@@ -5321,6 +5428,59 @@
             toastTimerId = null;
           }, 350);
         }, duration);
+      }
+
+      async function copyTextToClipboard(text) {
+        const value = typeof text === 'string' ? text.trim() : '';
+        if (!value) {
+          return false;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          try {
+            await navigator.clipboard.writeText(value);
+            return true;
+          } catch (err) {
+            console.warn('Clipboard copy failed', err);
+          }
+        }
+
+        const helper = document.createElement('textarea');
+        helper.value = value;
+        helper.setAttribute('readonly', 'readonly');
+        helper.style.position = 'fixed';
+        helper.style.top = '-9999px';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.select();
+        helper.setSelectionRange(0, helper.value.length);
+
+        let copied = false;
+        try {
+          copied = document.execCommand('copy');
+        } catch (err) {
+          copied = false;
+        } finally {
+          document.body.removeChild(helper);
+        }
+
+        return copied;
+      }
+
+      async function copyShareUrlWithFeedback(shareUrl, successMessage) {
+        if (!shareUrl) {
+          showDashboardToast('Unable to determine invite page URL.', 'error');
+          return false;
+        }
+
+        const copied = await copyTextToClipboard(shareUrl);
+        if (copied) {
+          showDashboardToast(successMessage, 'success');
+          return true;
+        }
+
+        showDashboardToast(`Copy this invite page URL manually: ${shareUrl}`, 'info', 8000);
+        return false;
       }
 
       function getFormPayload(form) {
@@ -7900,22 +8060,15 @@
           if (!shareUrl) {
             return;
           }
-          let copied = false;
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            try {
-              await navigator.clipboard.writeText(shareUrl);
-              copied = true;
-            } catch (err) {
-              console.warn('Clipboard copy failed', err);
-            }
-          }
+          const copied = await copyTextToClipboard(shareUrl);
           if (copied) {
             setFormStatus(prospectShareForm, 'Invite page link copied to clipboard!', 'success');
             scheduleStatusClear(prospectShareForm, 4000);
           } else {
-            window.prompt(
-              'Copy this invite page link and share it with your supporter:',
-              shareUrl
+            setFormStatus(
+              prospectShareForm,
+              `Copy this invite page link manually: ${shareUrl}`,
+              'success'
             );
           }
         });
@@ -8189,30 +8342,14 @@
               if (!shareUrl) {
                 throw new Error('Unable to determine invite page URL');
               }
-              let copied = false;
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                try {
-                  await navigator.clipboard.writeText(shareUrl);
-                  copied = true;
-                } catch (err) {
-                  console.warn('Clipboard copy failed', err);
-                }
-              }
-              if (copied) {
-                alert(
-                  action === 'share-generate'
-                    ? 'New invite page link generated and copied to clipboard.'
-                    : regenerate
-                      ? 'Invite page link regenerated and copied to clipboard.'
-                      : 'Invite page link copied to clipboard.'
-                );
-              } else {
-                const promptMessage =
-                  action === 'share-generate'
-                    ? 'New invite page link generated. Share this link with the user:'
-                    : 'Share this invite page link with the user:';
-                window.prompt(promptMessage, shareUrl);
-              }
+              await copyShareUrlWithFeedback(
+                shareUrl,
+                action === 'share-generate'
+                  ? 'New invite page link generated and copied to clipboard.'
+                  : regenerate
+                    ? 'Invite page link regenerated and copied to clipboard.'
+                    : 'Invite page link copied to clipboard.'
+              );
             } else if (action === 'refresh') {
               requiresReload = false;
               const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
@@ -8299,14 +8436,17 @@
           const links = Array.isArray(state.shareLinks) ? state.shareLinks : [];
           const link = links.find((item) => String(item.id) === String(linkId));
           if (!link) {
-            alert('Unable to locate this invite link.');
+            showDashboardToast('Unable to locate this invite link.', 'error');
             return;
           }
 
           if (action === 'open') {
             const shareUrl = buildShareUrl(link);
             if (!shareUrl) {
-              alert('This invite link does not have a shareable URL yet.');
+              showDashboardToast(
+                'This invite link does not have a shareable URL yet.',
+                'error'
+              );
               return;
             }
             const newWindow = window.open(shareUrl, '_blank', 'noopener');
@@ -8321,23 +8461,16 @@
           if (action === 'copy') {
             const shareUrl = buildShareUrl(link);
             if (!shareUrl) {
-              alert('This invite link does not have a shareable URL yet.');
+              showDashboardToast(
+                'This invite link does not have a shareable URL yet.',
+                'error'
+              );
               return;
             }
-            let copied = false;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-              try {
-                await navigator.clipboard.writeText(shareUrl);
-                copied = true;
-              } catch (err) {
-                console.warn('Clipboard copy failed', err);
-              }
-            }
-            if (copied) {
-              alert('Invite link copied to clipboard.');
-            } else {
-              window.prompt('Copy this invite page URL:', shareUrl);
-            }
+            await copyShareUrlWithFeedback(
+              shareUrl,
+              'Invite link copied to clipboard.'
+            );
             return;
           }
 
@@ -8356,7 +8489,7 @@
               await refreshShareLinks();
               renderShareLinks();
             } catch (err) {
-              alert(err.message);
+              showDashboardToast(err.message || 'Failed to remove invite link.', 'error');
             } finally {
               button.disabled = previousDisabledState;
             }
@@ -8459,30 +8592,14 @@
               if (!shareUrl) {
                 throw new Error('Unable to determine invite page URL');
               }
-              let copied = false;
-              if (navigator.clipboard && navigator.clipboard.writeText) {
-                try {
-                  await navigator.clipboard.writeText(shareUrl);
-                  copied = true;
-                } catch (err) {
-                  console.warn('Clipboard copy failed', err);
-                }
-              }
-              if (copied) {
-                alert(
-                  action === 'share-generate'
-                    ? 'New invite page link generated and copied to clipboard.'
-                    : regenerate
-                      ? 'Invite page link regenerated and copied to clipboard.'
-                      : 'Invite page link copied to clipboard.'
-                );
-              } else {
-                const promptMessage =
-                  action === 'share-generate'
-                    ? 'New invite page link generated. Share this link with the user:'
-                    : 'Share this invite page link with the user:';
-                window.prompt(promptMessage, shareUrl);
-              }
+              await copyShareUrlWithFeedback(
+                shareUrl,
+                action === 'share-generate'
+                  ? 'New invite page link generated and copied to clipboard.'
+                  : regenerate
+                    ? 'Invite page link regenerated and copied to clipboard.'
+                    : 'Invite page link copied to clipboard.'
+              );
             } else if (action === 'refresh') {
               requiresReload = false;
               const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
@@ -8570,7 +8687,7 @@
             }
             renderSubscribers();
           } catch (err) {
-            alert(err.message || 'An error occurred');
+            showDashboardToast(err.message || 'An error occurred', 'error');
             button.disabled = false;
           } finally {
             if (!requiresReload) {

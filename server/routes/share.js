@@ -200,6 +200,35 @@ function getMostRecentInvite(activeInvite, latestInvite) {
   return activeInvite || latestInvite || null;
 }
 
+function resolveShareInviteLinkFromInvite(invite) {
+  if (!invite) {
+    return null;
+  }
+
+  const tokenCandidates = [];
+  const plexInviteId = invite.plexInviteId ? String(invite.plexInviteId).trim() : '';
+  if (plexInviteId) {
+    tokenCandidates.push(plexInviteId);
+  }
+
+  const inviteUrl = invite.inviteUrl ? String(invite.inviteUrl).trim() : '';
+  if (inviteUrl) {
+    const sharePathMatch = inviteUrl.match(/\/share\/([^/?#]+)/i);
+    if (sharePathMatch && sharePathMatch[1]) {
+      tokenCandidates.push(sharePathMatch[1]);
+    }
+  }
+
+  for (const token of tokenCandidates) {
+    const shareLink = getShareLinkByToken(token);
+    if (shareLink) {
+      return shareLink;
+    }
+  }
+
+  return null;
+}
+
 function getInviteState(donorId) {
   const activeInvite = getLatestActiveInviteForDonor(donorId);
   const latestInviteRecord = getLatestInviteForDonor(donorId);
@@ -212,9 +241,7 @@ function getInviteState(donorId) {
       ? Boolean(activeInvite)
       : cooldownActive
     : false;
-  const shareInviteLink = mostRecentInvite && mostRecentInvite.plexInviteId
-    ? getShareLinkByToken(mostRecentInvite.plexInviteId)
-    : null;
+  const shareInviteLink = resolveShareInviteLinkFromInvite(mostRecentInvite);
 
   return {
     activeInvite: activeInvite || null,

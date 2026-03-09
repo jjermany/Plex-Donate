@@ -555,14 +555,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   plexService.listSharedServerMembers = async () => [];
   plexService.getCurrentPlexShares = async () => ({
     success: true,
-    shares: [
-      {
-        emails: [donor.email],
-        userIds: ['plex-123'],
-        pending: true,
-        status: 'pending',
-      },
-    ],
+    shares: [],
   });
   t.after(() => {
     plexService.createInvite = originalCreateInvite;
@@ -603,7 +596,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
 
   assert.ok(body.donor);
   assert.equal(body.donor.needsPlexInvite, false);
-  assert.equal(body.donor.plexPending, true);
+  assert.equal(body.donor.plexPending, false);
 
   const events = getRecentEvents(1);
   assert.equal(events[0].eventType, 'plex.invite.admin_sent');
