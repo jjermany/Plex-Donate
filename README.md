@@ -115,6 +115,12 @@ npm run dev    # start with hot reload
 npm start      # production mode
 ```
 
+### Unraid template icon
+
+Use the raw GitHub asset URL for the Unraid template icon:
+
+`https://raw.githubusercontent.com/jjermany/Plex-Donate/main/public/icons/plex-donate-unraid-icon.png`
+
 ### Tests and diagnostics
 
 Automated tests stay colocated with the server code as `*.test.js` files under `server/` and run with:
