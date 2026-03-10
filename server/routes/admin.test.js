@@ -81,6 +81,26 @@ function seedAdminCredentialsWithTwoFactor(
   fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
+function seedLegacyPromptFlagCredentials(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    passwordHash: hashPasswordSync(password),
+    twoFactor: {
+      enabled: false,
+      secret: '',
+      setupCompletedAt: '',
+      setupSkippedAt: '',
+      setupPromptPending: true,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
 function seedHybridLegacyCredentials(
   username = process.env.ADMIN_USERNAME,
   password = TEST_ADMIN_PASSWORD
@@ -406,6 +426,26 @@ test('existing admin credentials do not trigger the first-login 2FA setup prompt
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
+  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
+});
+
+test('legacy prompt flags without a version marker do not trigger the setup modal', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: seedLegacyPromptFlagCredentials,
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
   assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
 });
 

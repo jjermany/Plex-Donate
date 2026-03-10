@@ -20,6 +20,7 @@ const DEFAULT_TWO_FACTOR = Object.freeze({
   setupCompletedAt: '',
   setupSkippedAt: '',
   setupPromptPending: false,
+  setupPromptVersion: 0,
 });
 
 function normalizeUsername(username) {
@@ -74,7 +75,12 @@ function normalizeTwoFactor(value) {
       typeof raw.setupCompletedAt === 'string' ? raw.setupCompletedAt.trim() : '',
     setupSkippedAt:
       typeof raw.setupSkippedAt === 'string' ? raw.setupSkippedAt.trim() : '',
-    setupPromptPending: hasExplicitConfig && !enabled && Boolean(raw.setupPromptPending),
+    setupPromptPending:
+      hasExplicitConfig &&
+      !enabled &&
+      Number(raw.setupPromptVersion) === 1 &&
+      Boolean(raw.setupPromptPending),
+    setupPromptVersion: Number(raw.setupPromptVersion) === 1 ? 1 : 0,
   };
 }
 
@@ -193,6 +199,7 @@ function ensureCache() {
         : {
             ...DEFAULT_TWO_FACTOR,
             setupPromptPending: true,
+            setupPromptVersion: 1,
           },
   };
 
@@ -312,6 +319,7 @@ function enableAdminTwoFactor(secret) {
       setupCompletedAt: new Date().toISOString(),
       setupSkippedAt: '',
       setupPromptPending: false,
+      setupPromptVersion: 1,
     },
   });
 
@@ -329,6 +337,7 @@ function skipAdminTwoFactorSetup() {
       setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
       setupSkippedAt: new Date().toISOString(),
       setupPromptPending: false,
+      setupPromptVersion: 1,
     },
   });
 
@@ -348,6 +357,7 @@ function disableAdminTwoFactor() {
         (details.twoFactor && details.twoFactor.setupSkippedAt) ||
         new Date().toISOString(),
       setupPromptPending: false,
+      setupPromptVersion: 1,
     },
   });
 
