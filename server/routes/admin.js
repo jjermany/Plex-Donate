@@ -622,9 +622,6 @@ router.post(
           csrfToken,
           adminUsername: account.username,
           twoFactor: account.twoFactor,
-          promptTwoFactorSetup: Boolean(
-            account.twoFactor && account.twoFactor.setupRequired
-          ),
           timezone: resolveEnvironmentTimezone(),
         });
       });

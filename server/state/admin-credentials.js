@@ -168,11 +168,22 @@ function ensureCache() {
 
   const stored = readCredentialsFile();
   if (stored) {
+    const migratedTwoFactor = clearTwoFactorSetupPrompt(stored.twoFactor);
     if (stored.passwordHash) {
+      if (
+        stored.twoFactor &&
+        normalizeTwoFactor(stored.twoFactor).setupPromptPending
+      ) {
+        writeCredentialsFile({
+          username: stored.username,
+          passwordHash: stored.passwordHash,
+          twoFactor: migratedTwoFactor,
+        });
+      }
       cache = {
         username: stored.username,
         passwordHash: stored.passwordHash,
-        twoFactor: normalizeTwoFactor(stored.twoFactor),
+        twoFactor: migratedTwoFactor,
       };
       return cache;
     }
@@ -182,12 +193,12 @@ function ensureCache() {
       writeCredentialsFile({
         username: stored.username,
         passwordHash,
-        twoFactor: stored.twoFactor,
+        twoFactor: migratedTwoFactor,
       });
       cache = {
         username: stored.username,
         passwordHash,
-        twoFactor: normalizeTwoFactor(stored.twoFactor),
+        twoFactor: migratedTwoFactor,
       };
 
       logger.info(
@@ -205,19 +216,18 @@ function ensureCache() {
   writeCredentialsFile({
     username,
     passwordHash,
-    twoFactor: existing && existing.twoFactor ? existing.twoFactor : undefined,
+    twoFactor:
+      existing && existing.twoFactor
+        ? clearTwoFactorSetupPrompt(existing.twoFactor)
+        : undefined,
   });
   cache = {
     username,
     passwordHash,
     twoFactor:
       existing && existing.twoFactor
-        ? normalizeTwoFactor(existing.twoFactor)
-        : {
-            ...DEFAULT_TWO_FACTOR,
-            setupPromptPending: true,
-            setupPromptVersion: 1,
-          },
+        ? clearTwoFactorSetupPrompt(existing.twoFactor)
+        : { ...DEFAULT_TWO_FACTOR },
   };
 
   logger.info(
@@ -246,7 +256,7 @@ function getAdminTwoFactorStatus() {
     enabled: Boolean(twoFactor.enabled && twoFactor.secret),
     setupCompletedAt: twoFactor.setupCompletedAt || null,
     setupSkippedAt: twoFactor.setupSkippedAt || null,
-    setupRequired: Boolean(twoFactor.setupPromptPending && !twoFactor.enabled),
+    setupRequired: false,
   };
 }
 
