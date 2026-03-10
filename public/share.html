@@ -1037,19 +1037,6 @@
         });
       }
 
-      function registerServiceWorker() {
-        if (!('serviceWorker' in navigator)) {
-          return;
-        }
-        window.addEventListener('load', () => {
-          navigator.serviceWorker
-            .register('/service-worker.js')
-            .catch((err) => {
-              console.warn('Service worker registration failed', err);
-            });
-        });
-      }
-
       function isAppleRelayEmail(email) {
         const normalized = (email || '').trim().toLowerCase();
         return normalized.endsWith('@privaterelay.appleid.com');
@@ -2035,7 +2022,6 @@
         }
       });
 
-      registerServiceWorker();
       if (!state.token) {
         showError('Invite link token missing. Double-check the link you used.');
       } else {

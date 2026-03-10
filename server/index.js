@@ -158,6 +158,22 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+app.use((req, res, next) => {
+  if (
+    req.path === '/service-worker.js' ||
+    req.path === '/' ||
+    req.path === '/index.html' ||
+    req.path === '/share.html' ||
+    req.path === '/dashboard.html' ||
+    req.path === '/manifest.webmanifest'
+  ) {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+  }
+  next();
+});
+
 app.use('/api/paypal/webhook', webhookRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/share', shareRouter);

@@ -4852,19 +4852,6 @@
         });
       }
 
-      function registerServiceWorker() {
-        if (!('serviceWorker' in navigator)) {
-          return;
-        }
-        window.addEventListener('load', () => {
-          navigator.serviceWorker
-            .register('/service-worker.js')
-            .catch((err) => {
-              console.warn('Service worker registration failed', err);
-            });
-        });
-      }
-
       function escapeHtml(value) {
         return String(value)
           .replace(/&/g, '&amp;')
@@ -9549,7 +9536,6 @@
         updateBackButtonVisibility();
       }
 
-      registerServiceWorker();
       checkSession();
 
       // Initialize Lucide icons on page load
