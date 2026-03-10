@@ -14,6 +14,12 @@ const CREDENTIALS_FILE = path.join(config.dataDir, 'admin-credentials.json');
 const MIN_PASSWORD_LENGTH = 12;
 
 let cache = null;
+const DEFAULT_TWO_FACTOR = Object.freeze({
+  enabled: false,
+  secret: '',
+  setupCompletedAt: '',
+  setupSkippedAt: '',
+});
 
 function normalizeUsername(username) {
   if (typeof username !== 'string') {
@@ -35,8 +41,9 @@ function readCredentialsFile() {
         ? parsed.passwordHash.trim()
         : '';
     const passwordHash = rawHash && isSerializedHash(rawHash) ? rawHash : '';
+    const twoFactor = normalizeTwoFactor(parsed.twoFactor);
     if (passwordHash) {
-      return { username, passwordHash };
+      return { username, passwordHash, twoFactor };
     }
 
     const legacyPassword =
@@ -44,7 +51,7 @@ function readCredentialsFile() {
         ? parsed.password
         : '';
     if (legacyPassword) {
-      return { username, legacyPassword };
+      return { username, legacyPassword, twoFactor };
     }
 
     return null;
@@ -53,10 +60,26 @@ function readCredentialsFile() {
   }
 }
 
-function writeCredentialsFile({ username, passwordHash }) {
+function normalizeTwoFactor(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  const secret =
+    typeof raw.secret === 'string' ? raw.secret.trim().toUpperCase() : '';
+  const enabled = Boolean(raw.enabled && secret);
+  return {
+    enabled,
+    secret: enabled ? secret : '',
+    setupCompletedAt:
+      typeof raw.setupCompletedAt === 'string' ? raw.setupCompletedAt.trim() : '',
+    setupSkippedAt:
+      typeof raw.setupSkippedAt === 'string' ? raw.setupSkippedAt.trim() : '',
+  };
+}
+
+function writeCredentialsFile({ username, passwordHash, twoFactor }) {
   const payload = {
     username,
     passwordHash,
+    twoFactor: normalizeTwoFactor(twoFactor),
     updatedAt: new Date().toISOString(),
   };
   fs.mkdirSync(path.dirname(CREDENTIALS_FILE), { recursive: true });
@@ -90,10 +113,19 @@ function resetAdminCredentials({ username, password } = {}) {
   }
 
   const passwordHash = hashPasswordSync(nextPassword);
-  writeCredentialsFile({ username: nextUsername, passwordHash });
+  const existing = readCredentialsFile();
+  writeCredentialsFile({
+    username: nextUsername,
+    passwordHash,
+    twoFactor: existing && existing.twoFactor ? existing.twoFactor : undefined,
+  });
   cache = {
     username: nextUsername,
     passwordHash,
+    twoFactor:
+      existing && existing.twoFactor
+        ? normalizeTwoFactor(existing.twoFactor)
+        : { ...DEFAULT_TWO_FACTOR },
   };
 
   return {
@@ -114,16 +146,22 @@ function ensureCache() {
       cache = {
         username: stored.username,
         passwordHash: stored.passwordHash,
+        twoFactor: normalizeTwoFactor(stored.twoFactor),
       };
       return cache;
     }
 
     if (stored.legacyPassword) {
       const passwordHash = hashPasswordSync(stored.legacyPassword);
-      writeCredentialsFile({ username: stored.username, passwordHash });
+      writeCredentialsFile({
+        username: stored.username,
+        passwordHash,
+        twoFactor: stored.twoFactor,
+      });
       cache = {
         username: stored.username,
         passwordHash,
+        twoFactor: normalizeTwoFactor(stored.twoFactor),
       };
 
       logger.info(
@@ -137,11 +175,19 @@ function ensureCache() {
   const username = normalizeUsername(config.adminUsername) || 'admin';
   const password = generateRandomPassword();
   const passwordHash = hashPasswordSync(password);
-
-  writeCredentialsFile({ username, passwordHash });
+  const existing = readCredentialsFile();
+  writeCredentialsFile({
+    username,
+    passwordHash,
+    twoFactor: existing && existing.twoFactor ? existing.twoFactor : undefined,
+  });
   cache = {
     username,
     passwordHash,
+    twoFactor:
+      existing && existing.twoFactor
+        ? normalizeTwoFactor(existing.twoFactor)
+        : { ...DEFAULT_TWO_FACTOR },
   };
 
   logger.info(
@@ -159,7 +205,38 @@ function getAdminAccount() {
   const details = ensureCache();
   return {
     username: details.username,
+    twoFactor: getAdminTwoFactorStatus(),
   };
+}
+
+function getAdminTwoFactorStatus() {
+  const details = ensureCache();
+  const twoFactor = normalizeTwoFactor(details.twoFactor);
+  return {
+    enabled: Boolean(twoFactor.enabled && twoFactor.secret),
+    setupCompletedAt: twoFactor.setupCompletedAt || null,
+    setupSkippedAt: twoFactor.setupSkippedAt || null,
+    setupRequired:
+      !twoFactor.enabled &&
+      !twoFactor.setupCompletedAt &&
+      !twoFactor.setupSkippedAt,
+  };
+}
+
+function getAdminTwoFactorSecret() {
+  const details = ensureCache();
+  const twoFactor = normalizeTwoFactor(details.twoFactor);
+  return twoFactor.enabled ? twoFactor.secret : '';
+}
+
+function persistCredentials(nextDetails) {
+  writeCredentialsFile(nextDetails);
+  cache = {
+    username: nextDetails.username,
+    passwordHash: nextDetails.passwordHash,
+    twoFactor: normalizeTwoFactor(nextDetails.twoFactor),
+  };
+  return cache;
 }
 
 function verifyAdminCredentials(username, password) {
@@ -201,11 +278,11 @@ function updateAdminCredentials({ currentPassword, username, newPassword }) {
     passwordHash = hashPasswordSync(proposedPassword);
   }
 
-  writeCredentialsFile({ username: nextUsername, passwordHash });
-  cache = {
+  persistCredentials({
     username: nextUsername,
     passwordHash,
-  };
+    twoFactor: details.twoFactor,
+  });
 
   return {
     username: nextUsername,
@@ -213,9 +290,72 @@ function updateAdminCredentials({ currentPassword, username, newPassword }) {
   };
 }
 
+function enableAdminTwoFactor(secret) {
+  const details = ensureCache();
+  const normalizedSecret =
+    typeof secret === 'string' ? secret.trim().toUpperCase() : '';
+  if (!normalizedSecret) {
+    const err = new Error('A two-factor secret is required.');
+    err.code = 'TWO_FACTOR_SECRET_REQUIRED';
+    throw err;
+  }
+
+  persistCredentials({
+    username: details.username,
+    passwordHash: details.passwordHash,
+    twoFactor: {
+      enabled: true,
+      secret: normalizedSecret,
+      setupCompletedAt: new Date().toISOString(),
+      setupSkippedAt: '',
+    },
+  });
+
+  return getAdminTwoFactorStatus();
+}
+
+function skipAdminTwoFactorSetup() {
+  const details = ensureCache();
+  persistCredentials({
+    username: details.username,
+    passwordHash: details.passwordHash,
+    twoFactor: {
+      enabled: false,
+      secret: '',
+      setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
+      setupSkippedAt: new Date().toISOString(),
+    },
+  });
+
+  return getAdminTwoFactorStatus();
+}
+
+function disableAdminTwoFactor() {
+  const details = ensureCache();
+  persistCredentials({
+    username: details.username,
+    passwordHash: details.passwordHash,
+    twoFactor: {
+      enabled: false,
+      secret: '',
+      setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
+      setupSkippedAt:
+        (details.twoFactor && details.twoFactor.setupSkippedAt) ||
+        new Date().toISOString(),
+    },
+  });
+
+  return getAdminTwoFactorStatus();
+}
+
 module.exports = {
+  disableAdminTwoFactor,
+  enableAdminTwoFactor,
+  getAdminTwoFactorSecret,
+  getAdminTwoFactorStatus,
   initializeAdminCredentials,
   getAdminAccount,
+  skipAdminTwoFactorSetup,
   verifyAdminCredentials,
   updateAdminCredentials,
   resetAdminCredentials,

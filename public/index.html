@@ -3004,8 +3004,65 @@
               <button id="login-submit" type="submit">Sign in</button>
             </div>
           </form>
+          <form id="login-totp-form" class="login-form hidden" autocomplete="one-time-code">
+            <label for="login-totp-code">
+              Authenticator code
+              <input
+                id="login-totp-code"
+                name="code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="123456"
+                maxlength="8"
+              />
+            </label>
+            <div class="login-actions">
+              <button id="login-totp-submit" type="submit">Verify code</button>
+              <button id="login-totp-cancel" type="button" class="secondary">Back</button>
+            </div>
+          </form>
           <p id="status-message" class="form-status-text"></p>
         </section>
+      </div>
+
+      <div id="two-factor-setup-modal" class="confirm-backdrop hidden" aria-hidden="true">
+        <div class="confirm-dialog">
+          <h3>Set up authenticator app</h3>
+          <p class="muted-text" id="two-factor-setup-description">
+            Protect the admin dashboard with a six-digit code from any TOTP authenticator app.
+          </p>
+          <div id="two-factor-setup-content" class="hidden">
+            <div style="display:flex; justify-content:center; margin: 12px 0 16px;">
+              <img
+                id="two-factor-setup-qr"
+                alt="Authenticator setup QR code"
+                style="width: 240px; max-width: 100%; border-radius: 16px; background: white; padding: 12px;"
+              />
+            </div>
+            <label>
+              Manual setup key
+              <input id="two-factor-manual-key" type="text" readonly />
+            </label>
+            <label>
+              Enter the 6-digit code
+              <input
+                id="two-factor-verify-code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                placeholder="123456"
+                maxlength="8"
+              />
+            </label>
+          </div>
+          <p id="two-factor-setup-status" class="form-status-text"></p>
+          <div class="form-actions">
+            <button id="two-factor-start-setup" type="button">Generate QR code</button>
+            <button id="two-factor-verify-setup" type="button" class="secondary" disabled>Enable 2FA</button>
+            <button id="two-factor-skip-setup" type="button" class="secondary">Skip for now</button>
+          </div>
+        </div>
       </div>
 
       <div id="dashboard" class="hidden">
@@ -3129,6 +3186,42 @@
                 <p class="form-status" data-status-for="admin-credentials"></p>
                 <div class="form-actions">
                   <button type="submit">Save admin credentials</button>
+                </div>
+              </form>
+              <form id="admin-two-factor-form" class="settings-form">
+                <h3>Authenticator app 2FA</h3>
+                <p class="muted-text" id="admin-two-factor-description" style="margin:0 0 16px;">
+                  Add a QR-based authenticator app check for admin sign-in.
+                </p>
+                <div id="admin-two-factor-setup-panel" class="hidden">
+                  <div style="display:flex; justify-content:center; margin: 8px 0 16px;">
+                    <img
+                      id="admin-two-factor-qr"
+                      alt="Authenticator setup QR code"
+                      style="width: 220px; max-width: 100%; border-radius: 16px; background: white; padding: 12px;"
+                    />
+                  </div>
+                  <label>
+                    Manual setup key
+                    <input id="admin-two-factor-manual-key" type="text" readonly />
+                  </label>
+                  <label>
+                    Verification code
+                    <input
+                      id="admin-two-factor-code"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      placeholder="123456"
+                      maxlength="8"
+                    />
+                  </label>
+                </div>
+                <p class="form-status" data-status-for="admin-two-factor"></p>
+                <div class="form-actions">
+                  <button id="admin-two-factor-start" type="button">Set up 2FA</button>
+                  <button id="admin-two-factor-verify" type="button" class="secondary" disabled>Verify and enable</button>
+                  <button id="admin-two-factor-disable" type="button" class="secondary">Turn off 2FA</button>
                 </div>
               </form>
             </section>
@@ -4036,16 +4129,38 @@
       const loginForm = document.getElementById('login-form');
       const loginUsernameInput = document.getElementById('username');
       const loginPasswordInput = document.getElementById('password');
+      const loginTotpForm = document.getElementById('login-totp-form');
+      const loginTotpCodeInput = document.getElementById('login-totp-code');
+      const loginTotpSubmitButton = document.getElementById('login-totp-submit');
+      const loginTotpCancelButton = document.getElementById('login-totp-cancel');
       const loginSubmitButton = document.getElementById('login-submit');
       const loginHelp = document.getElementById('login-help');
       const togglePasswordVisibilityButton = document.getElementById('toggle-password-visibility');
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
+      const twoFactorSetupModal = document.getElementById('two-factor-setup-modal');
+      const twoFactorSetupContent = document.getElementById('two-factor-setup-content');
+      const twoFactorSetupQr = document.getElementById('two-factor-setup-qr');
+      const twoFactorManualKey = document.getElementById('two-factor-manual-key');
+      const twoFactorVerifyCode = document.getElementById('two-factor-verify-code');
+      const twoFactorSetupStatus = document.getElementById('two-factor-setup-status');
+      const twoFactorStartSetupButton = document.getElementById('two-factor-start-setup');
+      const twoFactorVerifySetupButton = document.getElementById('two-factor-verify-setup');
+      const twoFactorSkipSetupButton = document.getElementById('two-factor-skip-setup');
       const dashboardToast = document.getElementById('dashboard-toast');
       const adminAccountPanel = document.getElementById('admin-account-panel');
       const adminCredentialsForm = document.getElementById('admin-credentials-form');
+      const adminTwoFactorForm = document.getElementById('admin-two-factor-form');
       const adminAccountDescription = document.getElementById('admin-account-description');
+      const adminTwoFactorDescription = document.getElementById('admin-two-factor-description');
+      const adminTwoFactorSetupPanel = document.getElementById('admin-two-factor-setup-panel');
+      const adminTwoFactorQr = document.getElementById('admin-two-factor-qr');
+      const adminTwoFactorManualKey = document.getElementById('admin-two-factor-manual-key');
+      const adminTwoFactorCode = document.getElementById('admin-two-factor-code');
+      const adminTwoFactorStartButton = document.getElementById('admin-two-factor-start');
+      const adminTwoFactorVerifyButton = document.getElementById('admin-two-factor-verify');
+      const adminTwoFactorDisableButton = document.getElementById('admin-two-factor-disable');
       const subscribersTable = document.querySelector('#subscribers-table tbody');
       const plexStatusNote = document.getElementById('plex-status-note');
 
@@ -4633,6 +4748,7 @@
 
       let state = {
         authenticated: false,
+        twoFactorPending: false,
         donors: [],
         shareLinks: [],
         events: [],
@@ -4644,6 +4760,8 @@
         paypalPlanManageUrl: '',
         paypalPlanLoading: false,
         adminUsername: 'admin',
+        adminTwoFactor: null,
+        pendingTwoFactorSetup: null,
         timezone: null,
         plex: null,
         plexLibraries: null,
@@ -5419,6 +5537,103 @@
         }
       }
 
+      function setTwoFactorSetupStatus(message = '', stateAttr = '') {
+        if (!twoFactorSetupStatus) {
+          return;
+        }
+        twoFactorSetupStatus.textContent = message;
+        twoFactorSetupStatus.classList.remove('error', 'success');
+        if (stateAttr) {
+          twoFactorSetupStatus.classList.add(stateAttr);
+        }
+      }
+
+      function resetPendingTwoFactorSetup() {
+        state.pendingTwoFactorSetup = null;
+        if (twoFactorSetupContent) {
+          twoFactorSetupContent.classList.add('hidden');
+        }
+        if (twoFactorSetupQr) {
+          twoFactorSetupQr.removeAttribute('src');
+        }
+        if (twoFactorManualKey) {
+          twoFactorManualKey.value = '';
+        }
+        if (twoFactorVerifyCode) {
+          twoFactorVerifyCode.value = '';
+        }
+        if (twoFactorVerifySetupButton) {
+          twoFactorVerifySetupButton.disabled = true;
+        }
+        if (adminTwoFactorSetupPanel) {
+          adminTwoFactorSetupPanel.classList.add('hidden');
+        }
+        if (adminTwoFactorQr) {
+          adminTwoFactorQr.removeAttribute('src');
+        }
+        if (adminTwoFactorManualKey) {
+          adminTwoFactorManualKey.value = '';
+        }
+        if (adminTwoFactorCode) {
+          adminTwoFactorCode.value = '';
+        }
+        if (adminTwoFactorVerifyButton) {
+          adminTwoFactorVerifyButton.disabled = true;
+        }
+      }
+
+      function applyTwoFactorState(twoFactor) {
+        state.adminTwoFactor =
+          twoFactor && typeof twoFactor === 'object'
+            ? {
+                enabled: Boolean(twoFactor.enabled),
+                setupCompletedAt: twoFactor.setupCompletedAt || null,
+                setupSkippedAt: twoFactor.setupSkippedAt || null,
+                setupRequired: Boolean(twoFactor.setupRequired),
+              }
+            : {
+                enabled: false,
+                setupCompletedAt: null,
+                setupSkippedAt: null,
+                setupRequired: false,
+              };
+      }
+
+      function showLoginTotpForm() {
+        state.twoFactorPending = true;
+        if (loginForm) {
+          loginForm.classList.add('hidden');
+        }
+        if (loginTotpForm) {
+          loginTotpForm.classList.remove('hidden');
+        }
+        if (loginHelp) {
+          loginHelp.textContent =
+            'Enter the rotating code from your authenticator app to finish signing in.';
+        }
+        if (loginTotpCodeInput) {
+          loginTotpCodeInput.value = '';
+          loginTotpCodeInput.focus();
+        }
+      }
+
+      function showLoginPasswordForm() {
+        state.twoFactorPending = false;
+        if (loginForm) {
+          loginForm.classList.remove('hidden');
+        }
+        if (loginTotpForm) {
+          loginTotpForm.classList.add('hidden');
+        }
+        if (loginHelp) {
+          loginHelp.innerHTML =
+            'Use your Plex Donate admin username and password to sign in. The default username is <code>admin</code>. On first run a temporary password is written to your server logs.';
+        }
+        if (loginPasswordInput) {
+          loginPasswordInput.value = '';
+        }
+      }
+
       function setServiceSummaryCard(stateEl, copyEl, configured, configuredText, missingText) {
         if (!stateEl || !copyEl) {
           return;
@@ -5556,10 +5771,22 @@
         renderProspectSharePanel();
         renderShareLinks();
         if (state.authenticated) {
+          showLoginPasswordForm();
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
           logoutButton.classList.remove('hidden');
           setLoginStatus('', '');
+          if (
+            twoFactorSetupModal &&
+            state.adminTwoFactor &&
+            state.adminTwoFactor.setupRequired
+          ) {
+            twoFactorSetupModal.classList.remove('hidden');
+            twoFactorSetupModal.setAttribute('aria-hidden', 'false');
+          } else if (twoFactorSetupModal) {
+            twoFactorSetupModal.classList.add('hidden');
+            twoFactorSetupModal.setAttribute('aria-hidden', 'true');
+          }
           renderSubscribers();
           renderEvents();
           renderSettings();
@@ -5568,12 +5795,17 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
+          if (twoFactorSetupModal) {
+            twoFactorSetupModal.classList.add('hidden');
+            twoFactorSetupModal.setAttribute('aria-hidden', 'true');
+          }
           updateIntegrationBadge(null);
           updateSupportBadge();
           setLoginStatus('', '');
-          if (loginHelp) {
-            loginHelp.innerHTML =
-              'Use your Plex Donate admin username and password to sign in. The default username is <code>admin</code>. On first run a temporary password is written to your server logs.';
+          if (state.twoFactorPending) {
+            showLoginTotpForm();
+          } else {
+            showLoginPasswordForm();
           }
           if (loginUsernameInput && document.activeElement !== loginUsernameInput) {
             loginUsernameInput.value = state.adminUsername || '';
@@ -7554,10 +7786,10 @@
       }
     }
 
-    function renderAdminAccountPanel() {
-      if (!adminAccountPanel) {
-        return;
-      }
+      function renderAdminAccountPanel() {
+        if (!adminAccountPanel) {
+          return;
+        }
       if (!state.authenticated) {
         adminAccountPanel.classList.add('hidden');
         if (adminCredentialsForm) {
@@ -7567,6 +7799,11 @@
           adminAccountDescription.textContent =
             'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
         }
+        if (adminTwoFactorDescription) {
+          adminTwoFactorDescription.textContent =
+            'Add a QR-based authenticator app check for admin sign-in.';
+        }
+        resetPendingTwoFactorSetup();
         return;
       }
 
@@ -7575,6 +7812,26 @@
       if (adminAccountDescription) {
         adminAccountDescription.textContent =
           'Update the username and password used to access this dashboard. Password changes require at least 12 characters.';
+      }
+
+      const twoFactorEnabled = Boolean(
+        state.adminTwoFactor && state.adminTwoFactor.enabled
+      );
+      if (adminTwoFactorDescription) {
+        adminTwoFactorDescription.textContent = twoFactorEnabled
+          ? 'Authenticator app 2FA is enabled for admin sign-in.'
+          : 'Authenticator app 2FA is currently off. Scan a QR code to enable it.';
+      }
+      if (adminTwoFactorStartButton) {
+        adminTwoFactorStartButton.textContent = twoFactorEnabled
+          ? 'Generate new QR code'
+          : 'Set up 2FA';
+      }
+      if (adminTwoFactorDisableButton) {
+        adminTwoFactorDisableButton.disabled = !twoFactorEnabled;
+      }
+      if (adminTwoFactorForm && !state.pendingTwoFactorSetup) {
+        setFormStatus(adminTwoFactorForm, '');
       }
 
       if (adminCredentialsForm) {
@@ -7587,6 +7844,24 @@
           input.disabled = false;
         });
       }
+
+      if (adminTwoFactorSetupPanel && state.pendingTwoFactorSetup) {
+        adminTwoFactorSetupPanel.classList.remove('hidden');
+      } else if (adminTwoFactorSetupPanel) {
+        adminTwoFactorSetupPanel.classList.add('hidden');
+      }
+      if (adminTwoFactorQr && state.pendingTwoFactorSetup && state.pendingTwoFactorSetup.qrCodeDataUrl) {
+        adminTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl;
+      }
+      if (adminTwoFactorManualKey) {
+        adminTwoFactorManualKey.value =
+          state.pendingTwoFactorSetup && state.pendingTwoFactorSetup.manualEntryKey
+            ? state.pendingTwoFactorSetup.manualEntryKey
+            : '';
+      }
+      if (adminTwoFactorVerifyButton) {
+        adminTwoFactorVerifyButton.disabled = !state.pendingTwoFactorSetup;
+      }
     }
 
     async function loadAdminAccount() {
@@ -7598,6 +7873,7 @@
         if (response && response.username) {
           state.adminUsername = response.username;
         }
+        applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
       } catch (err) {
         console.error('Failed to load admin account details', err);
       }
@@ -7619,6 +7895,7 @@
             if (response.adminUsername) {
               state.adminUsername = response.adminUsername;
             }
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             const previousErrors = new Map(
               (Array.isArray(state.donors) ? state.donors : []).map((existing) => [
                 String(existing.id),
@@ -7761,9 +8038,11 @@
         const data = await api('/api/admin/session');
         csrfToken = data.csrfToken;
         state.authenticated = data.authenticated;
+        state.twoFactorPending = Boolean(data && data.twoFactorPending);
         const timezoneValue =
           data && typeof data.timezone === 'string' ? data.timezone.trim() : '';
         state.timezone = timezoneValue ? timezoneValue : null;
+        applyTwoFactorState(data && data.twoFactor ? data.twoFactor : null);
         if (data.adminUsername) {
           state.adminUsername = data.adminUsername;
         } else if (!state.authenticated && !state.adminUsername) {
@@ -7774,6 +8053,7 @@
           startDashboardAutoRefresh();
         } else {
           stopDashboardAutoRefresh();
+          resetPendingTwoFactorSetup();
           state.settings = null;
           clearSettingsFormDirtyFlags();
           state.paypalPlan = null;
@@ -7973,10 +8253,8 @@
               body: { username, password },
             });
             csrfToken = response.csrfToken;
-            state.authenticated = true;
             state.adminUsername = response.adminUsername || username;
-            // Reset session expiring flag on successful login
-            isSessionExpiring = false;
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             const loginTimezone =
               response && typeof response.timezone === 'string'
                 ? response.timezone.trim()
@@ -7985,11 +8263,20 @@
               state.timezone = loginTimezone;
             }
             loginPasswordInput.value = '';
-            // Clear rate limit cooldown on successful login
-            loginRateLimitedUntil = null;
-            await loadDashboardData();
-            startDashboardAutoRefresh();
-            setLoginStatus('');
+            if (response && response.requiresTwoFactor) {
+              state.authenticated = false;
+              state.twoFactorPending = true;
+              showLoginTotpForm();
+              setLoginStatus('Enter the code from your authenticator app.');
+            } else {
+              state.authenticated = true;
+              state.twoFactorPending = false;
+              isSessionExpiring = false;
+              loginRateLimitedUntil = null;
+              await loadDashboardData();
+              startDashboardAutoRefresh();
+              setLoginStatus('');
+            }
           } catch (err) {
             const errorMessage = err.message || 'Sign in failed';
             setLoginStatus(errorMessage, 'error');
@@ -8208,6 +8495,7 @@
           stopDashboardAutoRefresh();
           setSessionToken(null);
           state.authenticated = false;
+          state.twoFactorPending = false;
           state.donors = [];
           state.shareLinks = [];
           state.events = [];
@@ -8220,6 +8508,8 @@
           state.paypalPlanLoading = false;
           state.prospectShare = null;
           state.adminUsername = 'admin';
+          applyTwoFactorState(null);
+          resetPendingTwoFactorSetup();
           state.support = {
             threads: [],
             activeThreadId: null,
@@ -8256,6 +8546,56 @@
         prospectShareModal.addEventListener('keydown', (event) => {
           if (event.key === 'Escape') {
             closeProspectShareModal();
+          }
+        });
+      }
+
+      if (loginTotpForm) {
+        loginTotpForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const code = loginTotpCodeInput ? loginTotpCodeInput.value.trim() : '';
+          if (!code) {
+            setLoginStatus('Authentication code is required.', 'error');
+            return;
+          }
+          setLoginStatus('Verifying code...');
+          if (loginTotpSubmitButton) {
+            loginTotpSubmitButton.disabled = true;
+          }
+          try {
+            const response = await api('/api/admin/login/totp', {
+              method: 'POST',
+              body: { code },
+            });
+            csrfToken = response.csrfToken;
+            state.authenticated = true;
+            state.twoFactorPending = false;
+            state.adminUsername = response.adminUsername || state.adminUsername;
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            loginRateLimitedUntil = null;
+            isSessionExpiring = false;
+            await loadDashboardData();
+            startDashboardAutoRefresh();
+            setLoginStatus('');
+          } catch (err) {
+            setLoginStatus(err.message || 'Verification failed', 'error');
+          } finally {
+            if (loginTotpSubmitButton) {
+              loginTotpSubmitButton.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (loginTotpCancelButton) {
+        loginTotpCancelButton.addEventListener('click', async () => {
+          try {
+            await api('/api/admin/login/totp/cancel', { method: 'POST' });
+          } catch (err) {
+            console.error('Failed to cancel pending two-factor login', err);
+          } finally {
+            showLoginPasswordForm();
+            setLoginStatus('');
           }
         });
       }
@@ -8377,6 +8717,155 @@
               prospectShareForm,
               `Copy this invite page link manually: ${shareUrl}`,
               'success'
+            );
+          }
+        });
+      }
+
+      async function beginTwoFactorSetup({ source = 'settings' } = {}) {
+        const targetForm = source === 'modal' ? null : adminTwoFactorForm;
+        if (targetForm) {
+          setFormStatus(targetForm, 'Generating QR code...', 'pending');
+        } else {
+          setTwoFactorSetupStatus('Generating QR code...');
+        }
+        try {
+          const response = await api('/api/admin/2fa/setup', { method: 'POST' });
+          state.pendingTwoFactorSetup = response && response.setup ? response.setup : null;
+          applyTwoFactorState(response && response.twoFactor ? response.twoFactor : state.adminTwoFactor);
+          if (source === 'modal') {
+            if (twoFactorSetupContent) {
+              twoFactorSetupContent.classList.remove('hidden');
+            }
+            if (twoFactorSetupQr && state.pendingTwoFactorSetup) {
+              twoFactorSetupQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
+            }
+            if (twoFactorManualKey && state.pendingTwoFactorSetup) {
+              twoFactorManualKey.value = state.pendingTwoFactorSetup.manualEntryKey || '';
+            }
+            if (twoFactorVerifySetupButton) {
+              twoFactorVerifySetupButton.disabled = !state.pendingTwoFactorSetup;
+            }
+            setTwoFactorSetupStatus('Scan the QR code, then enter the 6-digit code from your app.');
+          } else {
+            if (adminTwoFactorQr && state.pendingTwoFactorSetup) {
+              adminTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
+            }
+            if (adminTwoFactorManualKey && state.pendingTwoFactorSetup) {
+              adminTwoFactorManualKey.value = state.pendingTwoFactorSetup.manualEntryKey || '';
+            }
+            if (adminTwoFactorSetupPanel) {
+              adminTwoFactorSetupPanel.classList.remove('hidden');
+            }
+            if (adminTwoFactorVerifyButton) {
+              adminTwoFactorVerifyButton.disabled = !state.pendingTwoFactorSetup;
+            }
+            setFormStatus(adminTwoFactorForm, 'Scan the QR code, then enter the 6-digit code from your app.', 'success');
+          }
+          renderAdminAccountPanel();
+        } catch (err) {
+          const message = err && err.message ? err.message : 'Failed to generate setup QR code.';
+          if (targetForm) {
+            setFormStatus(targetForm, message, 'error');
+          } else {
+            setTwoFactorSetupStatus(message, 'error');
+          }
+        }
+      }
+
+      async function verifyTwoFactorSetup(code, { source = 'settings' } = {}) {
+        if (!code) {
+          if (source === 'modal') {
+            setTwoFactorSetupStatus('Authentication code is required.', 'error');
+          } else {
+            setFormStatus(adminTwoFactorForm, 'Authentication code is required.', 'error');
+          }
+          return;
+        }
+        try {
+          const response = await api('/api/admin/2fa/setup/verify', {
+            method: 'POST',
+            body: { code },
+          });
+          applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+          resetPendingTwoFactorSetup();
+          render();
+          if (source === 'modal') {
+            setTwoFactorSetupStatus('Two-factor authentication enabled.', 'success');
+          } else {
+            setFormStatus(adminTwoFactorForm, 'Two-factor authentication enabled.', 'success');
+            scheduleStatusClear(adminTwoFactorForm, 4000);
+          }
+        } catch (err) {
+          const message = err && err.message ? err.message : 'Failed to verify authentication code.';
+          if (source === 'modal') {
+            setTwoFactorSetupStatus(message, 'error');
+          } else {
+            setFormStatus(adminTwoFactorForm, message, 'error');
+          }
+        }
+      }
+
+      if (twoFactorStartSetupButton) {
+        twoFactorStartSetupButton.addEventListener('click', async () => {
+          await beginTwoFactorSetup({ source: 'modal' });
+        });
+      }
+
+      if (twoFactorVerifySetupButton) {
+        twoFactorVerifySetupButton.addEventListener('click', async () => {
+          const code = twoFactorVerifyCode ? twoFactorVerifyCode.value.trim() : '';
+          await verifyTwoFactorSetup(code, { source: 'modal' });
+        });
+      }
+
+      if (twoFactorSkipSetupButton) {
+        twoFactorSkipSetupButton.addEventListener('click', async () => {
+          try {
+            const response = await api('/api/admin/2fa/setup/skip', { method: 'POST' });
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            resetPendingTwoFactorSetup();
+            render();
+          } catch (err) {
+            setTwoFactorSetupStatus(err.message || 'Failed to skip setup.', 'error');
+          }
+        });
+      }
+
+      if (adminTwoFactorStartButton) {
+        adminTwoFactorStartButton.addEventListener('click', async () => {
+          await beginTwoFactorSetup({ source: 'settings' });
+        });
+      }
+
+      if (adminTwoFactorVerifyButton) {
+        adminTwoFactorVerifyButton.addEventListener('click', async () => {
+          const code = adminTwoFactorCode ? adminTwoFactorCode.value.trim() : '';
+          await verifyTwoFactorSetup(code, { source: 'settings' });
+        });
+      }
+
+      if (adminTwoFactorDisableButton) {
+        adminTwoFactorDisableButton.addEventListener('click', async () => {
+          const currentPassword = window.prompt('Enter your current admin password to turn off 2FA:');
+          if (currentPassword === null) {
+            return;
+          }
+          try {
+            const response = await api('/api/admin/2fa', {
+              method: 'DELETE',
+              body: { currentPassword },
+            });
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            resetPendingTwoFactorSetup();
+            renderAdminAccountPanel();
+            setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');
+            scheduleStatusClear(adminTwoFactorForm, 4000);
+          } catch (err) {
+            setFormStatus(
+              adminTwoFactorForm,
+              err && err.message ? err.message : 'Failed to turn off 2FA.',
+              'error'
             );
           }
         });

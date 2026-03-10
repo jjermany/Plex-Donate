@@ -30,8 +30,10 @@ const testDataDir = fs.mkdtempSync(
 config.dataDir = testDataDir;
 
 const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
+const { totp } = require('../utils/totp');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const TEST_ADMIN_PASSWORD = 'AdminRouterTest123!';
+const TEST_TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
 const credentialsFile = path.join(config.dataDir, 'admin-credentials.json');
 
 function seedAdminCredentials(
@@ -54,6 +56,25 @@ function seedLegacyAdminCredentials(
   const payload = {
     username,
     password,
+    updatedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+
+function seedAdminCredentialsWithTwoFactor(
+  username = process.env.ADMIN_USERNAME,
+  password = TEST_ADMIN_PASSWORD
+) {
+  const payload = {
+    username,
+    passwordHash: hashPasswordSync(password),
+    twoFactor: {
+      enabled: true,
+      secret: TEST_TOTP_SECRET,
+      setupCompletedAt: new Date().toISOString(),
+      setupSkippedAt: '',
+    },
     updatedAt: new Date().toISOString(),
   };
   fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
@@ -367,6 +388,84 @@ test('ignores invalid stored hash when migrating legacy credentials', async (t) 
   assert.equal(Object.prototype.hasOwnProperty.call(stored, 'password'), false);
   assert.ok(stored.passwordHash.startsWith('pbkdf2$'));
   assert.ok(verifyPasswordSync(TEST_ADMIN_PASSWORD, stored.passwordHash));
+});
+
+test('POST /api/admin/login requires a TOTP code when two-factor auth is enabled', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: seedAdminCredentialsWithTwoFactor,
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(loginBody.requiresTwoFactor, true);
+  assert.equal(loginBody.success, false);
+
+  const dashboardResponse = await agent.get('/api/admin/dashboard');
+  assert.equal(dashboardResponse.status, 401);
+
+  const verifyResponse = await agent.post('/api/admin/login/totp', {
+    body: {
+      code: totp(TEST_TOTP_SECRET),
+      _csrf: loginBody.csrfToken,
+    },
+  });
+  assert.equal(verifyResponse.status, 200);
+  const verifyBody = await verifyResponse.json();
+  assert.equal(verifyBody.success, true);
+
+  const dashboardAfterVerify = await agent.get('/api/admin/dashboard');
+  assert.equal(dashboardAfterVerify.status, 200);
+});
+
+test('admin can enable and disable authenticator app 2FA from account settings', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const setupCsrf = await loginAgent(agent);
+  const setupResponse = await agent.post('/api/admin/2fa/setup', {
+    body: { _csrf: setupCsrf },
+  });
+  assert.equal(setupResponse.status, 200);
+  const setupBody = await setupResponse.json();
+  assert.ok(setupBody.setup);
+  assert.ok(setupBody.setup.manualEntryKey);
+  assert.match(setupBody.setup.otpauthUrl, /^otpauth:\/\/totp\//);
+  assert.match(setupBody.setup.qrCodeDataUrl, /^data:image\/png;base64,/);
+
+  const verifyResponse = await agent.post('/api/admin/2fa/setup/verify', {
+    body: {
+      code: totp(setupBody.setup.manualEntryKey),
+      _csrf: setupBody.csrfToken,
+    },
+  });
+  assert.equal(verifyResponse.status, 200);
+  const verifyBody = await verifyResponse.json();
+  assert.equal(verifyBody.twoFactor.enabled, true);
+
+  const accountResponse = await agent.get('/api/admin/account');
+  assert.equal(accountResponse.status, 200);
+  const accountBody = await accountResponse.json();
+  assert.equal(accountBody.twoFactor.enabled, true);
+
+  const disableResponse = await agent.request('/api/admin/2fa', {
+    method: 'DELETE',
+    body: {
+      currentPassword: TEST_ADMIN_PASSWORD,
+      _csrf: verifyBody.csrfToken,
+    },
+  });
+  assert.equal(disableResponse.status, 200);
+  const disableBody = await disableResponse.json();
+  assert.equal(disableBody.twoFactor.enabled, false);
 });
 
 test('GET /api/admin/subscribers annotates Plex status for donors', async (t) => {

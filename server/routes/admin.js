@@ -1,5 +1,6 @@
 const express = require('express');
 const csurf = require('csurf');
+const QRCode = require('qrcode');
 const { authLimiter } = require('../middleware/rate-limit');
 const { nanoid } = require('../utils/nanoid-shim');
 const {
@@ -39,7 +40,12 @@ const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const settingsStore = require('../state/settings');
 const {
+  disableAdminTwoFactor,
+  enableAdminTwoFactor,
   getAdminAccount,
+  getAdminTwoFactorSecret,
+  getAdminTwoFactorStatus,
+  skipAdminTwoFactorSetup,
   verifyAdminCredentials,
   updateAdminCredentials,
 } = require('../state/admin-credentials');
@@ -55,7 +61,15 @@ const {
 } = require('../utils/plex');
 const { getInviteEmailDiagnostics } = require('../utils/validation');
 const { resolvePublicBaseUrl } = require('../utils/public-base-url');
+const {
+  buildOtpAuthUrl,
+  DEFAULT_ISSUER,
+  generateSecret,
+  normalizeBase32,
+  verifyTotp,
+} = require('../utils/totp');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
+const PENDING_ADMIN_LOGIN_TTL_MS = 10 * 60 * 1000;
 
 function notifyDonorOfSupportReply(thread) {
   if (!thread || !thread.request || !Array.isArray(thread.messages)) {
@@ -98,6 +112,84 @@ const {
 function asyncHandler(handler) {
   return (req, res, next) => {
     Promise.resolve(handler(req, res, next)).catch(next);
+  };
+}
+
+function getPendingAdminLogin(req) {
+  const pending =
+    req &&
+    req.session &&
+    req.session.pendingAdminLogin &&
+    typeof req.session.pendingAdminLogin === 'object'
+      ? req.session.pendingAdminLogin
+      : null;
+  if (!pending) {
+    return null;
+  }
+
+  const createdAt = Number(pending.createdAt) || 0;
+  if (!createdAt || Date.now() - createdAt > PENDING_ADMIN_LOGIN_TTL_MS) {
+    delete req.session.pendingAdminLogin;
+    return null;
+  }
+
+  return pending;
+}
+
+function clearPendingAdminLogin(req) {
+  if (req && req.session) {
+    delete req.session.pendingAdminLogin;
+  }
+}
+
+function getPendingTwoFactorSetup(req) {
+  const pending =
+    req &&
+    req.session &&
+    req.session.pendingAdminTwoFactorSetup &&
+    typeof req.session.pendingAdminTwoFactorSetup === 'object'
+      ? req.session.pendingAdminTwoFactorSetup
+      : null;
+  if (!pending) {
+    return null;
+  }
+
+  const createdAt = Number(pending.createdAt) || 0;
+  if (!createdAt || Date.now() - createdAt > PENDING_ADMIN_LOGIN_TTL_MS) {
+    delete req.session.pendingAdminTwoFactorSetup;
+    return null;
+  }
+
+  return pending;
+}
+
+function clearPendingTwoFactorSetup(req) {
+  if (req && req.session) {
+    delete req.session.pendingAdminTwoFactorSetup;
+  }
+}
+
+async function buildTwoFactorSetupPayload(username, secret) {
+  const normalizedUsername =
+    typeof username === 'string' && username.trim() ? username.trim() : 'admin';
+  const normalizedSecret = normalizeBase32(secret);
+  const otpauthUrl = buildOtpAuthUrl({
+    secret: normalizedSecret,
+    accountName: normalizedUsername,
+    issuer: DEFAULT_ISSUER,
+  });
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 240,
+  });
+
+  return {
+    issuer: DEFAULT_ISSUER,
+    accountName: normalizedUsername,
+    manualEntryKey: normalizedSecret,
+    otpauthUrl,
+    qrCodeDataUrl,
   };
 }
 
@@ -435,6 +527,7 @@ router.use((req, res, next) => {
 
 router.get('/session', (req, res) => {
   const authenticated = Boolean(req.session && req.session.isAdmin);
+  const pendingTwoFactor = Boolean(!authenticated && getPendingAdminLogin(req));
   if (authenticated) {
     res.locals.sessionToken = ensureSessionToken(req);
   } else {
@@ -444,8 +537,11 @@ router.get('/session', (req, res) => {
   const timezone = resolveEnvironmentTimezone();
   res.json({
     authenticated,
+    twoFactorPending: pendingTwoFactor,
     csrfToken: res.locals.csrfToken,
-    adminUsername: authenticated ? account.username : null,
+    adminUsername:
+      authenticated || pendingTwoFactor ? account.username : null,
+    twoFactor: account.twoFactor,
     timezone,
   });
 });
@@ -476,6 +572,36 @@ router.post(
         return res.status(500).json({ error: 'Failed to establish session' });
       }
 
+      const twoFactor = getAdminTwoFactorStatus();
+      if (twoFactor.enabled) {
+        req.session.pendingAdminLogin = {
+          username: normalizedUsername,
+          createdAt: Date.now(),
+        };
+        req.session.isAdmin = false;
+        clearPendingTwoFactorSetup(req);
+
+        let csrfToken;
+        try {
+          csrfToken = req.csrfToken();
+        } catch (tokenError) {
+          logger.error('Failed to refresh CSRF token during admin 2FA login', tokenError);
+          return res.status(500).json({ error: 'Failed to establish session' });
+        }
+
+        res.locals.csrfToken = csrfToken;
+        res.locals.sessionToken = null;
+        return res.json({
+          success: false,
+          requiresTwoFactor: true,
+          csrfToken,
+          adminUsername: normalizedUsername,
+          twoFactor,
+          timezone: resolveEnvironmentTimezone(),
+        });
+      }
+
+      clearPendingAdminLogin(req);
       req.session.isAdmin = true;
 
       res.locals.sessionToken = ensureSessionToken(req);
@@ -495,9 +621,69 @@ router.post(
         success: true,
         csrfToken,
         adminUsername: account.username,
+        twoFactor: account.twoFactor,
         timezone: resolveEnvironmentTimezone(),
       });
     });
+  })
+);
+
+router.post(
+  '/login/totp',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const pending = getPendingAdminLogin(req);
+    if (!pending) {
+      return res.status(401).json({ error: 'Two-factor verification has expired. Please sign in again.' });
+    }
+
+    const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    if (!code) {
+      return res.status(400).json({ error: 'Authentication code is required.' });
+    }
+
+    const secret = getAdminTwoFactorSecret();
+    if (!secret) {
+      clearPendingAdminLogin(req);
+      return res.status(400).json({ error: 'Two-factor authentication is not configured.' });
+    }
+
+    if (!verifyTotp(code, secret, { window: 1 })) {
+      return res.status(401).json({ error: 'Invalid authentication code.' });
+    }
+
+    clearPendingAdminLogin(req);
+    req.session.isAdmin = true;
+    res.locals.sessionToken = ensureSessionToken(req);
+
+    let csrfToken;
+    try {
+      csrfToken = req.csrfToken();
+    } catch (tokenError) {
+      logger.error('Failed to refresh CSRF token after admin 2FA verification', tokenError);
+      return res.status(500).json({ error: 'Failed to establish session' });
+    }
+
+    res.locals.csrfToken = csrfToken;
+    const account = getAdminAccount();
+    logger.info('Admin completed two-factor login');
+    return res.json({
+      success: true,
+      csrfToken,
+      adminUsername: account.username,
+      twoFactor: account.twoFactor,
+      timezone: resolveEnvironmentTimezone(),
+    });
+  })
+);
+
+router.post(
+  '/login/totp/cancel',
+  asyncHandler(async (req, res) => {
+    clearPendingAdminLogin(req);
+    clearPendingTwoFactorSetup(req);
+    res.locals.sessionToken = null;
+    return res.json({ success: true, csrfToken: res.locals.csrfToken });
   })
 );
 
@@ -508,6 +694,7 @@ router.get(
     const account = getAdminAccount();
     res.json({
       username: account.username,
+      twoFactor: account.twoFactor,
       csrfToken: res.locals.csrfToken,
     });
   })
@@ -623,6 +810,98 @@ router.get(
       },
       paypalPlan,
       adminUsername: account.username,
+      twoFactor: account.twoFactor,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/2fa/setup',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const account = getAdminAccount();
+    const secret = generateSecret();
+    req.session.pendingAdminTwoFactorSetup = {
+      secret,
+      createdAt: Date.now(),
+      username: account.username,
+    };
+    const setup = await buildTwoFactorSetupPayload(account.username, secret);
+
+    return res.json({
+      success: true,
+      setup,
+      twoFactor: account.twoFactor,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/2fa/setup/verify',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const pending = getPendingTwoFactorSetup(req);
+    if (!pending || !pending.secret) {
+      return res.status(400).json({ error: 'Start two-factor setup before verifying a code.' });
+    }
+
+    const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    if (!code) {
+      return res.status(400).json({ error: 'Authentication code is required.' });
+    }
+
+    if (!verifyTotp(code, pending.secret, { window: 1 })) {
+      return res.status(401).json({ error: 'Invalid authentication code.' });
+    }
+
+    clearPendingTwoFactorSetup(req);
+    const twoFactor = enableAdminTwoFactor(pending.secret);
+    logger.info('Admin enabled two-factor authentication');
+
+    return res.json({
+      success: true,
+      twoFactor,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/2fa/setup/skip',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    clearPendingTwoFactorSetup(req);
+    const twoFactor = skipAdminTwoFactorSetup();
+    return res.json({
+      success: true,
+      twoFactor,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.delete(
+  '/2fa',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const currentPassword =
+      typeof req.body.currentPassword === 'string' ? req.body.currentPassword : '';
+    const account = getAdminAccount();
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
+    if (!verifyAdminCredentials(account.username, currentPassword)) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    clearPendingTwoFactorSetup(req);
+    const twoFactor = disableAdminTwoFactor();
+    logger.info('Admin disabled two-factor authentication');
+    return res.json({
+      success: true,
+      twoFactor,
       csrfToken: res.locals.csrfToken,
     });
   })
