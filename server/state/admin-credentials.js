@@ -98,6 +98,20 @@ function writeCredentialsFile({ username, passwordHash, twoFactor }) {
   });
 }
 
+function clearTwoFactorSetupPrompt(twoFactor) {
+  const normalized = normalizeTwoFactor(twoFactor);
+  if (normalized.enabled) {
+    return normalized;
+  }
+
+  return {
+    ...normalized,
+    setupPromptPending: false,
+    setupPromptVersion: 1,
+    setupSkippedAt: normalized.setupSkippedAt || new Date().toISOString(),
+  };
+}
+
 function generateRandomPassword() {
   return crypto.randomBytes(18).toString('base64url');
 }
@@ -126,14 +140,17 @@ function resetAdminCredentials({ username, password } = {}) {
   writeCredentialsFile({
     username: nextUsername,
     passwordHash,
-    twoFactor: existing && existing.twoFactor ? existing.twoFactor : undefined,
+    twoFactor:
+      existing && existing.twoFactor
+        ? clearTwoFactorSetupPrompt(existing.twoFactor)
+        : undefined,
   });
   cache = {
     username: nextUsername,
     passwordHash,
     twoFactor:
       existing && existing.twoFactor
-        ? normalizeTwoFactor(existing.twoFactor)
+        ? clearTwoFactorSetupPrompt(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
   };
 
@@ -291,7 +308,7 @@ function updateAdminCredentials({ currentPassword, username, newPassword }) {
   persistCredentials({
     username: nextUsername,
     passwordHash,
-    twoFactor: details.twoFactor,
+    twoFactor: clearTwoFactorSetupPrompt(details.twoFactor),
   });
 
   return {

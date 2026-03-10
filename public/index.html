@@ -7822,6 +7822,8 @@
       if (adminTwoFactorDescription) {
         adminTwoFactorDescription.textContent = twoFactorEnabled
           ? 'Authenticator app 2FA is enabled for admin sign-in.'
+          : state.adminTwoFactor && state.adminTwoFactor.setupRequired
+          ? 'Authenticator app 2FA is currently off. A setup prompt was recorded for this admin account, but setup is available below and does not block sign-in.'
           : 'Authenticator app 2FA is currently off. Scan a QR code to enable it.';
       }
       if (adminTwoFactorStartButton) {
@@ -8278,12 +8280,8 @@
             } else {
               state.authenticated = true;
               state.twoFactorPending = false;
-              state.showTwoFactorEnrollmentModal = Boolean(
-                response && response.promptTwoFactorSetup
-              );
-              state.allowTwoFactorEnrollmentPrompt = Boolean(
-                response && response.promptTwoFactorSetup
-              );
+              state.showTwoFactorEnrollmentModal = false;
+              state.allowTwoFactorEnrollmentPrompt = false;
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
               await loadDashboardData();

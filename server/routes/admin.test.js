@@ -581,6 +581,71 @@ test('admin can skip the first-login 2FA enrollment prompt', async (t) => {
   assert.ok(accountBody.twoFactor.setupSkippedAt);
 });
 
+test('updating admin credentials clears the first-login 2FA enrollment prompt', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: () => {
+      const payload = {
+        username: process.env.ADMIN_USERNAME,
+        passwordHash: hashPasswordSync(TEST_ADMIN_PASSWORD),
+        twoFactor: {
+          enabled: false,
+          secret: '',
+          setupCompletedAt: '',
+          setupSkippedAt: '',
+          setupPromptPending: true,
+          setupPromptVersion: 1,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+      fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    },
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(Boolean(loginBody.promptTwoFactorSetup), true);
+
+  const updateResponse = await agent.request('/api/admin/account', {
+    method: 'PUT',
+    body: {
+      currentPassword: TEST_ADMIN_PASSWORD,
+      newPassword: 'AdminRouterChanged123!',
+      confirmPassword: 'AdminRouterChanged123!',
+      _csrf: loginBody.csrfToken,
+    },
+  });
+  assert.equal(updateResponse.status, 200);
+
+  const logoutResponse = await agent.post('/api/admin/logout', {
+    body: { _csrf: (await updateResponse.json()).csrfToken },
+  });
+  assert.equal(logoutResponse.status, 200);
+
+  const reloginSessionResponse = await agent.get('/api/admin/session');
+  const reloginSessionBody = await reloginSessionResponse.json();
+  const reloginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: 'AdminRouterChanged123!',
+      _csrf: reloginSessionBody.csrfToken,
+    },
+  });
+  assert.equal(reloginResponse.status, 200);
+  const reloginBody = await reloginResponse.json();
+  assert.equal(reloginBody.success, true);
+  assert.equal(Boolean(reloginBody.promptTwoFactorSetup), false);
+});
+
 test('admin session token alone does not authenticate without the session cookie', async (t) => {
   const agent = await startServer(t);
   const csrfToken = await loginAgent(agent);
