@@ -828,6 +828,10 @@
         flex-wrap: wrap;
       }
 
+      .donors-action-button {
+        flex-shrink: 0;
+      }
+
       .donors-search-input {
         padding: 6px 10px;
         border: 1px solid var(--input-border);
@@ -2432,6 +2436,64 @@
         font-size: 0.9rem;
       }
 
+      .invite-supporter-modal {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.72);
+        backdrop-filter: blur(8px);
+        z-index: 60;
+      }
+
+      .invite-supporter-modal[hidden] {
+        display: none !important;
+      }
+
+      .invite-supporter-modal-panel {
+        width: min(640px, 100%);
+        max-height: min(90vh, 860px);
+        overflow-y: auto;
+        background: var(--panel-background);
+        border: 1px solid var(--panel-border-color);
+        border-radius: 20px;
+        padding: 24px;
+        box-shadow: var(--panel-shadow);
+        display: grid;
+        gap: 16px;
+      }
+
+      .invite-supporter-modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .invite-supporter-modal-header h3 {
+        margin: 0 0 4px;
+      }
+
+      .invite-supporter-modal-close {
+        min-width: auto;
+        padding-inline: 14px;
+      }
+
+      @media (max-width: 768px) {
+        .invite-supporter-modal {
+          padding: 16px;
+          align-items: flex-end;
+        }
+
+        .invite-supporter-modal-panel {
+          width: 100%;
+          max-height: 88vh;
+          border-radius: 20px 20px 0 0;
+        }
+      }
+
       .badge {
         background: var(--badge-bg);
         color: var(--badge-color);
@@ -3237,8 +3299,15 @@
                     <h2 style="margin:0 0 4px;">Subscribers</h2>
                     <p class="muted-text" style="margin:0;">Open a subscriber to manage access, billing, invite recovery, and status notes from one place.</p>
                   </div>
-                  <div class="donors-controls">
-                    <input
+                <div class="donors-controls">
+                  <button
+                    id="prospect-share-open"
+                    type="button"
+                    class="secondary donors-action-button"
+                  >
+                    Invite supporter
+                  </button>
+                  <input
                       type="search"
                       id="donors-search"
                       placeholder="Search donors..."
@@ -3390,70 +3459,6 @@
                 </div>
               </section>
             </div>
-            <section class="panel" id="prospect-share-panel">
-              <details class="panel-disclosure">
-                <summary>
-                  <span>Invite a new supporter</span>
-                  <span class="muted-text">Secondary task</span>
-                </summary>
-                <div class="panel-disclosure-body">
-                  <p class="muted-text" style="margin:0 0 16px;">
-                    Generate a share page for someone who is not subscribed yet.
-                  </p>
-                  <form id="prospect-share-form">
-                    <input type="hidden" name="prospectId" />
-                    <div class="field-grid">
-                      <label>
-                        Contact email
-                        <input
-                          name="email"
-                          type="email"
-                          autocomplete="off"
-                          placeholder="future.supporter@example.com"
-                        />
-                      </label>
-                      <label>
-                        Display name
-                        <input
-                          name="name"
-                          type="text"
-                          autocomplete="off"
-                          placeholder="Future Supporter"
-                        />
-                      </label>
-                    </div>
-                    <label>
-                      Internal notes
-                      <textarea name="note" placeholder="Optional details for other admins"></textarea>
-                    </label>
-                    <p class="form-status" data-status-for="prospect-share"></p>
-                    <div class="form-actions">
-                      <button type="submit">Generate invite page link</button>
-                      <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
-                    </div>
-                  </form>
-                  <div class="share-output hidden" id="prospect-share-result">
-                    <div>
-                      <div class="share-output-meta" id="prospect-share-summary"></div>
-                      <a
-                        id="prospect-share-url"
-                        class="share-url"
-                        href="#"
-                        target="_blank"
-                        rel="noopener"
-                      ></a>
-                    </div>
-                    <div class="share-output-actions">
-                      <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
-                      <button type="button" class="secondary" id="prospect-share-regenerate">
-                        Generate new link
-                      </button>
-                    </div>
-                    <div class="share-output-meta" id="prospect-share-note"></div>
-                  </div>
-                </div>
-              </details>
-            </section>
           </div>
           <div
             class="dashboard-view"
@@ -3897,6 +3902,85 @@
       </tr>
     </template>
 
+    <div
+      class="invite-supporter-modal"
+      id="prospect-share-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="prospect-share-modal-title"
+      hidden
+    >
+      <div class="invite-supporter-modal-panel">
+        <div class="invite-supporter-modal-header">
+          <div>
+            <h3 id="prospect-share-modal-title">Invite a new supporter</h3>
+            <p class="muted-text" style="margin:0;">
+              Generate a share page for someone who is not subscribed yet.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="secondary invite-supporter-modal-close"
+            id="prospect-share-close"
+            aria-label="Close invite supporter dialog"
+          >
+            Close
+          </button>
+        </div>
+        <form id="prospect-share-form">
+          <input type="hidden" name="prospectId" />
+          <div class="field-grid">
+            <label>
+              Contact email
+              <input
+                name="email"
+                type="email"
+                autocomplete="off"
+                placeholder="future.supporter@example.com"
+              />
+            </label>
+            <label>
+              Display name
+              <input
+                name="name"
+                type="text"
+                autocomplete="off"
+                placeholder="Future Supporter"
+              />
+            </label>
+          </div>
+          <label>
+            Internal notes
+            <textarea name="note" placeholder="Optional details for other admins"></textarea>
+          </label>
+          <p class="form-status" data-status-for="prospect-share"></p>
+          <div class="form-actions">
+            <button type="submit">Generate invite page link</button>
+            <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
+          </div>
+        </form>
+        <div class="share-output hidden" id="prospect-share-result">
+          <div>
+            <div class="share-output-meta" id="prospect-share-summary"></div>
+            <a
+              id="prospect-share-url"
+              class="share-url"
+              href="#"
+              target="_blank"
+              rel="noopener"
+            ></a>
+          </div>
+          <div class="share-output-actions">
+            <button type="button" class="secondary" id="prospect-share-copy">Copy link</button>
+            <button type="button" class="secondary" id="prospect-share-regenerate">
+              Generate new link
+            </button>
+          </div>
+          <div class="share-output-meta" id="prospect-share-note"></div>
+        </div>
+      </div>
+    </div>
+
     <script>
       /* ── Styled confirmation modal (replaces native confirm()) ── */
       function showConfirmModal(title, message) {
@@ -4087,7 +4171,9 @@
       const announcementEmailButton = announcementSettingsPanel
         ? announcementSettingsPanel.querySelector('[data-announcement-email-send]')
         : null;
-      const prospectSharePanel = document.getElementById('prospect-share-panel');
+      const prospectShareOpen = document.getElementById('prospect-share-open');
+      const prospectShareModal = document.getElementById('prospect-share-modal');
+      const prospectShareClose = document.getElementById('prospect-share-close');
       const prospectShareForm = document.getElementById('prospect-share-form');
       const prospectShareResult = document.getElementById('prospect-share-result');
       const prospectShareSummary = document.getElementById('prospect-share-summary');
@@ -4164,6 +4250,7 @@
       let loginRateLimitedUntil = null; // Timestamp when rate limit cooldown expires
 
       let openSubscriberActionMenu = null;
+      let lastProspectShareTrigger = null;
 
       let activeDashboardView = DASHBOARD_VIEW_DEFAULT;
       let dashboardViewPreferenceLocked = hasDashboardPreference;
@@ -5491,8 +5578,9 @@
           if (loginUsernameInput && document.activeElement !== loginUsernameInput) {
             loginUsernameInput.value = state.adminUsername || '';
           }
-          if (prospectSharePanel) {
-            prospectSharePanel.classList.add('hidden');
+          if (prospectShareModal) {
+            prospectShareModal.hidden = true;
+            document.body.style.overflow = '';
           }
         }
         applyActiveDashboardView();
@@ -6205,14 +6293,46 @@
         );
       }
 
-      function renderProspectSharePanel() {
-        if (!prospectSharePanel) {
+      function openProspectShareModal(trigger = null) {
+        if (!prospectShareModal || !state.authenticated) {
           return;
         }
-        const disclosure = prospectSharePanel.querySelector('.panel-disclosure');
+        if (trigger) {
+          lastProspectShareTrigger = trigger;
+        }
+        prospectShareModal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        const preferredFocusTarget =
+          prospectShareForm &&
+          (prospectShareForm.querySelector('[name="email"]') ||
+            prospectShareForm.querySelector('button[type="submit"]'));
+        if (preferredFocusTarget) {
+          window.requestAnimationFrame(() => preferredFocusTarget.focus());
+        }
+      }
+
+      function closeProspectShareModal() {
+        if (!prospectShareModal || prospectShareModal.hidden) {
+          return;
+        }
+        prospectShareModal.hidden = true;
+        document.body.style.overflow = '';
+        if (lastProspectShareTrigger && typeof lastProspectShareTrigger.focus === 'function') {
+          lastProspectShareTrigger.focus();
+        }
+      }
+
+      function renderProspectSharePanel() {
+        if (!prospectShareModal) {
+          return;
+        }
 
         if (!state.authenticated) {
-          prospectSharePanel.classList.add('hidden');
+          prospectShareModal.hidden = true;
+          document.body.style.overflow = '';
+          if (prospectShareOpen) {
+            prospectShareOpen.disabled = true;
+          }
           if (prospectShareResult) {
             prospectShareResult.classList.add('hidden');
           }
@@ -6225,7 +6345,9 @@
           return;
         }
 
-        prospectSharePanel.classList.remove('hidden');
+        if (prospectShareOpen) {
+          prospectShareOpen.disabled = false;
+        }
 
         const shareData = state.prospectShare || null;
         const prospect = shareData && shareData.prospect ? shareData.prospect : null;
@@ -6273,9 +6395,6 @@
           if (prospectShareResult) {
             prospectShareResult.classList.add('hidden');
           }
-          if (disclosure && !state.prospectShare) {
-            disclosure.open = false;
-          }
           if (prospectShareCopy) {
             prospectShareCopy.disabled = true;
           }
@@ -6287,9 +6406,6 @@
 
         if (prospectShareResult) {
           prospectShareResult.classList.remove('hidden');
-        }
-        if (disclosure) {
-          disclosure.open = true;
         }
         if (prospectShareCopy) {
           prospectShareCopy.disabled = false;
@@ -6392,6 +6508,7 @@
               : 'Invite page link ready! Use the buttons below to share.',
             'success'
           );
+          openProspectShareModal();
           scheduleStatusClear(prospectShareForm, 4000);
         } catch (err) {
           setFormStatus(prospectShareForm, err.message, 'error');
@@ -8117,6 +8234,31 @@
       });
 
       refreshButton.addEventListener('click', handleManualRefresh);
+
+      if (prospectShareOpen) {
+        prospectShareOpen.addEventListener('click', (event) => {
+          openProspectShareModal(event.currentTarget);
+        });
+      }
+
+      if (prospectShareClose) {
+        prospectShareClose.addEventListener('click', () => {
+          closeProspectShareModal();
+        });
+      }
+
+      if (prospectShareModal) {
+        prospectShareModal.addEventListener('click', (event) => {
+          if (event.target === prospectShareModal) {
+            closeProspectShareModal();
+          }
+        });
+        prospectShareModal.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            closeProspectShareModal();
+          }
+        });
+      }
 
       if (prospectShareForm) {
         prospectShareForm.addEventListener('submit', async (event) => {
