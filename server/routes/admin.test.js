@@ -73,27 +73,6 @@ function seedAdminCredentialsWithTwoFactor(
       enabled: true,
       secret: TEST_TOTP_SECRET,
       setupCompletedAt: new Date().toISOString(),
-      setupSkippedAt: '',
-    },
-    updatedAt: new Date().toISOString(),
-  };
-  fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
-  fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-}
-
-function seedLegacyPromptFlagCredentials(
-  username = process.env.ADMIN_USERNAME,
-  password = TEST_ADMIN_PASSWORD
-) {
-  const payload = {
-    username,
-    passwordHash: hashPasswordSync(password),
-    twoFactor: {
-      enabled: false,
-      secret: '',
-      setupCompletedAt: '',
-      setupSkippedAt: '',
-      setupPromptPending: true,
     },
     updatedAt: new Date().toISOString(),
   };
@@ -426,30 +405,9 @@ test('existing admin credentials do not trigger the first-login 2FA setup prompt
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
-  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
 });
 
-test('legacy prompt flags without a version marker do not trigger the setup modal', async (t) => {
-  const agent = await startServer(t, {
-    credentialsSeeder: seedLegacyPromptFlagCredentials,
-  });
-
-  const sessionResponse = await agent.get('/api/admin/session');
-  const sessionBody = await sessionResponse.json();
-  const loginResponse = await agent.post('/api/admin/login', {
-    body: {
-      username: process.env.ADMIN_USERNAME,
-      password: TEST_ADMIN_PASSWORD,
-      _csrf: sessionBody.csrfToken,
-    },
-  });
-
-  assert.equal(loginResponse.status, 200);
-  const loginBody = await loginResponse.json();
-  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
-});
-
-test('stored first-run 2FA prompt flags are migrated off at startup', async (t) => {
+test('legacy two-factor prompt fields are migrated away at startup', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: () => {
       const payload = {
@@ -472,11 +430,13 @@ test('stored first-run 2FA prompt flags are migrated off at startup', async (t) 
 
   const sessionResponse = await agent.get('/api/admin/session');
   const sessionBody = await sessionResponse.json();
-  assert.equal(sessionBody.twoFactor.setupRequired, false);
+  assert.equal(sessionBody.twoFactor.enabled, false);
+  assert.equal(Object.prototype.hasOwnProperty.call(sessionBody.twoFactor, 'setupRequired'), false);
 
   const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
-  assert.equal(Boolean(stored.twoFactor.setupPromptPending), false);
-  assert.ok(stored.twoFactor.setupSkippedAt);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupPromptPending'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupPromptVersion'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupSkippedAt'), false);
 
   const loginResponse = await agent.post('/api/admin/login', {
     body: {
@@ -488,7 +448,6 @@ test('stored first-run 2FA prompt flags are migrated off at startup', async (t) 
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
-  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
 });
 
 test('POST /api/admin/login requires a TOTP code when two-factor auth is enabled', async (t) => {
@@ -569,7 +528,7 @@ test('admin can enable and disable authenticator app 2FA from account settings',
   assert.equal(disableBody.twoFactor.enabled, false);
 });
 
-test('admin can skip the first-login 2FA enrollment prompt', async (t) => {
+test('updating admin credentials rewrites legacy two-factor prompt fields', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: () => {
       const payload = {
@@ -579,7 +538,6 @@ test('admin can skip the first-login 2FA enrollment prompt', async (t) => {
           enabled: false,
           secret: '',
           setupCompletedAt: '',
-          setupSkippedAt: '',
           setupPromptPending: true,
           setupPromptVersion: 1,
         },
@@ -599,63 +557,9 @@ test('admin can skip the first-login 2FA enrollment prompt', async (t) => {
       _csrf: sessionBody.csrfToken,
     },
   });
-
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
-  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
-
-  const skipResponse = await agent.post('/api/admin/2fa/setup/skip', {
-    body: { _csrf: loginBody.csrfToken },
-  });
-  assert.equal(skipResponse.status, 200);
-  const skipBody = await skipResponse.json();
-  assert.equal(skipBody.success, true);
-  assert.equal(skipBody.twoFactor.enabled, false);
-  assert.equal(skipBody.twoFactor.setupRequired, false);
-  assert.ok(skipBody.twoFactor.setupSkippedAt);
-
-  const accountResponse = await agent.get('/api/admin/account');
-  assert.equal(accountResponse.status, 200);
-  const accountBody = await accountResponse.json();
-  assert.equal(accountBody.twoFactor.enabled, false);
-  assert.equal(accountBody.twoFactor.setupRequired, false);
-  assert.ok(accountBody.twoFactor.setupSkippedAt);
-});
-
-test('updating admin credentials clears the first-login 2FA enrollment prompt', async (t) => {
-  const agent = await startServer(t, {
-    credentialsSeeder: () => {
-      const payload = {
-        username: process.env.ADMIN_USERNAME,
-        passwordHash: hashPasswordSync(TEST_ADMIN_PASSWORD),
-        twoFactor: {
-          enabled: false,
-          secret: '',
-          setupCompletedAt: '',
-          setupSkippedAt: '',
-          setupPromptPending: true,
-          setupPromptVersion: 1,
-        },
-        updatedAt: new Date().toISOString(),
-      };
-      fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
-      fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
-    },
-  });
-
-  const sessionResponse = await agent.get('/api/admin/session');
-  const sessionBody = await sessionResponse.json();
-  const loginResponse = await agent.post('/api/admin/login', {
-    body: {
-      username: process.env.ADMIN_USERNAME,
-      password: TEST_ADMIN_PASSWORD,
-      _csrf: sessionBody.csrfToken,
-    },
-  });
-  assert.equal(loginResponse.status, 200);
-  const loginBody = await loginResponse.json();
-  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
 
   const updateResponse = await agent.request('/api/admin/account', {
     method: 'PUT',
@@ -685,7 +589,11 @@ test('updating admin credentials clears the first-login 2FA enrollment prompt', 
   assert.equal(reloginResponse.status, 200);
   const reloginBody = await reloginResponse.json();
   assert.equal(reloginBody.success, true);
-  assert.equal(Boolean(reloginBody.promptTwoFactorSetup), false);
+
+  const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupPromptPending'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupPromptVersion'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupSkippedAt'), false);
 });
 
 test('admin session token alone does not authenticate without the session cookie', async (t) => {

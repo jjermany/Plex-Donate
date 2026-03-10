@@ -4701,8 +4701,6 @@
       let state = {
         authenticated: false,
         twoFactorPending: false,
-        showTwoFactorEnrollmentModal: false,
-        allowTwoFactorEnrollmentPrompt: false,
         donors: [],
         shareLinks: [],
         events: [],
@@ -5503,14 +5501,10 @@
             ? {
                 enabled: Boolean(twoFactor.enabled),
                 setupCompletedAt: twoFactor.setupCompletedAt || null,
-                setupSkippedAt: twoFactor.setupSkippedAt || null,
-                setupRequired: Boolean(twoFactor.setupRequired),
               }
             : {
                 enabled: false,
                 setupCompletedAt: null,
-                setupSkippedAt: null,
-                setupRequired: false,
               };
       }
 
@@ -7720,8 +7714,6 @@
       if (adminTwoFactorDescription) {
         adminTwoFactorDescription.textContent = twoFactorEnabled
           ? 'Authenticator app 2FA is enabled for admin sign-in.'
-          : state.adminTwoFactor && state.adminTwoFactor.setupRequired
-          ? 'Authenticator app 2FA is currently off. A setup prompt was recorded for this admin account, but setup is available below and does not block sign-in.'
           : 'Authenticator app 2FA is currently off. Scan a QR code to enable it.';
       }
       if (adminTwoFactorStartButton) {
@@ -7941,8 +7933,6 @@
         csrfToken = data.csrfToken;
         state.authenticated = data.authenticated;
         state.twoFactorPending = Boolean(data && data.twoFactorPending);
-        state.showTwoFactorEnrollmentModal = false;
-        state.allowTwoFactorEnrollmentPrompt = false;
         const timezoneValue =
           data && typeof data.timezone === 'string' ? data.timezone.trim() : '';
         state.timezone = timezoneValue ? timezoneValue : null;
@@ -7957,7 +7947,6 @@
           startDashboardAutoRefresh();
         } else {
           stopDashboardAutoRefresh();
-          state.showTwoFactorEnrollmentModal = false;
           resetPendingTwoFactorSetup();
           state.settings = null;
           clearSettingsFormDirtyFlags();
@@ -8171,15 +8160,11 @@
             if (response && response.requiresTwoFactor) {
               state.authenticated = false;
               state.twoFactorPending = true;
-              state.showTwoFactorEnrollmentModal = false;
-              state.allowTwoFactorEnrollmentPrompt = false;
               showLoginTotpForm();
               setLoginStatus('Enter the code from your authenticator app.');
             } else {
               state.authenticated = true;
               state.twoFactorPending = false;
-              state.showTwoFactorEnrollmentModal = false;
-              state.allowTwoFactorEnrollmentPrompt = false;
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
               await loadDashboardData();
@@ -8405,8 +8390,6 @@
           setSessionToken(null);
           state.authenticated = false;
           state.twoFactorPending = false;
-          state.showTwoFactorEnrollmentModal = false;
-          state.allowTwoFactorEnrollmentPrompt = false;
           state.donors = [];
           state.shareLinks = [];
           state.events = [];
@@ -8481,8 +8464,6 @@
             csrfToken = response.csrfToken;
             state.authenticated = true;
             state.twoFactorPending = false;
-            state.showTwoFactorEnrollmentModal = false;
-            state.allowTwoFactorEnrollmentPrompt = false;
             state.adminUsername = response.adminUsername || state.adminUsername;
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             loginRateLimitedUntil = null;
@@ -8677,8 +8658,6 @@
             body: { code },
           });
           applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
-          state.showTwoFactorEnrollmentModal = false;
-          state.allowTwoFactorEnrollmentPrompt = false;
           resetPendingTwoFactorSetup();
           render();
           setFormStatus(adminTwoFactorForm, 'Two-factor authentication enabled.', 'success');
@@ -8714,8 +8693,6 @@
               body: { currentPassword },
             });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
-            state.showTwoFactorEnrollmentModal = false;
-            state.allowTwoFactorEnrollmentPrompt = false;
             resetPendingTwoFactorSetup();
             renderAdminAccountPanel();
             setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');

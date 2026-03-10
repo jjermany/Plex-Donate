@@ -18,9 +18,6 @@ const DEFAULT_TWO_FACTOR = Object.freeze({
   enabled: false,
   secret: '',
   setupCompletedAt: '',
-  setupSkippedAt: '',
-  setupPromptPending: false,
-  setupPromptVersion: 0,
 });
 
 function normalizeUsername(username) {
@@ -64,7 +61,6 @@ function readCredentialsFile() {
 
 function normalizeTwoFactor(value) {
   const raw = value && typeof value === 'object' ? value : {};
-  const hasExplicitConfig = Boolean(value && typeof value === 'object');
   const secret =
     typeof raw.secret === 'string' ? raw.secret.trim().toUpperCase() : '';
   const enabled = Boolean(raw.enabled && secret);
@@ -73,14 +69,6 @@ function normalizeTwoFactor(value) {
     secret: enabled ? secret : '',
     setupCompletedAt:
       typeof raw.setupCompletedAt === 'string' ? raw.setupCompletedAt.trim() : '',
-    setupSkippedAt:
-      typeof raw.setupSkippedAt === 'string' ? raw.setupSkippedAt.trim() : '',
-    setupPromptPending:
-      hasExplicitConfig &&
-      !enabled &&
-      Number(raw.setupPromptVersion) === 1 &&
-      Boolean(raw.setupPromptPending),
-    setupPromptVersion: Number(raw.setupPromptVersion) === 1 ? 1 : 0,
   };
 }
 
@@ -96,20 +84,6 @@ function writeCredentialsFile({ username, passwordHash, twoFactor }) {
     encoding: 'utf8',
     mode: 0o600,
   });
-}
-
-function clearTwoFactorSetupPrompt(twoFactor) {
-  const normalized = normalizeTwoFactor(twoFactor);
-  if (normalized.enabled) {
-    return normalized;
-  }
-
-  return {
-    ...normalized,
-    setupPromptPending: false,
-    setupPromptVersion: 1,
-    setupSkippedAt: normalized.setupSkippedAt || new Date().toISOString(),
-  };
 }
 
 function generateRandomPassword() {
@@ -140,17 +114,14 @@ function resetAdminCredentials({ username, password } = {}) {
   writeCredentialsFile({
     username: nextUsername,
     passwordHash,
-    twoFactor:
-      existing && existing.twoFactor
-        ? clearTwoFactorSetupPrompt(existing.twoFactor)
-        : undefined,
+    twoFactor: existing && existing.twoFactor ? normalizeTwoFactor(existing.twoFactor) : undefined,
   });
   cache = {
     username: nextUsername,
     passwordHash,
     twoFactor:
       existing && existing.twoFactor
-        ? clearTwoFactorSetupPrompt(existing.twoFactor)
+        ? normalizeTwoFactor(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
   };
 
@@ -168,18 +139,14 @@ function ensureCache() {
 
   const stored = readCredentialsFile();
   if (stored) {
-    const migratedTwoFactor = clearTwoFactorSetupPrompt(stored.twoFactor);
+    const migratedTwoFactor = normalizeTwoFactor(stored.twoFactor);
     if (stored.passwordHash) {
-      if (
-        stored.twoFactor &&
-        normalizeTwoFactor(stored.twoFactor).setupPromptPending
-      ) {
-        writeCredentialsFile({
-          username: stored.username,
-          passwordHash: stored.passwordHash,
-          twoFactor: migratedTwoFactor,
-        });
-      }
+      // Rewrite legacy two-factor payloads without deprecated prompt fields.
+      writeCredentialsFile({
+        username: stored.username,
+        passwordHash: stored.passwordHash,
+        twoFactor: migratedTwoFactor,
+      });
       cache = {
         username: stored.username,
         passwordHash: stored.passwordHash,
@@ -216,17 +183,14 @@ function ensureCache() {
   writeCredentialsFile({
     username,
     passwordHash,
-    twoFactor:
-      existing && existing.twoFactor
-        ? clearTwoFactorSetupPrompt(existing.twoFactor)
-        : undefined,
+    twoFactor: existing && existing.twoFactor ? normalizeTwoFactor(existing.twoFactor) : undefined,
   });
   cache = {
     username,
     passwordHash,
     twoFactor:
       existing && existing.twoFactor
-        ? clearTwoFactorSetupPrompt(existing.twoFactor)
+        ? normalizeTwoFactor(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
   };
 
@@ -255,8 +219,6 @@ function getAdminTwoFactorStatus() {
   return {
     enabled: Boolean(twoFactor.enabled && twoFactor.secret),
     setupCompletedAt: twoFactor.setupCompletedAt || null,
-    setupSkippedAt: twoFactor.setupSkippedAt || null,
-    setupRequired: false,
   };
 }
 
@@ -318,7 +280,7 @@ function updateAdminCredentials({ currentPassword, username, newPassword }) {
   persistCredentials({
     username: nextUsername,
     passwordHash,
-    twoFactor: clearTwoFactorSetupPrompt(details.twoFactor),
+    twoFactor: normalizeTwoFactor(details.twoFactor),
   });
 
   return {
@@ -344,27 +306,6 @@ function enableAdminTwoFactor(secret) {
       enabled: true,
       secret: normalizedSecret,
       setupCompletedAt: new Date().toISOString(),
-      setupSkippedAt: '',
-      setupPromptPending: false,
-      setupPromptVersion: 1,
-    },
-  });
-
-  return getAdminTwoFactorStatus();
-}
-
-function skipAdminTwoFactorSetup() {
-  const details = ensureCache();
-  persistCredentials({
-    username: details.username,
-    passwordHash: details.passwordHash,
-    twoFactor: {
-      enabled: false,
-      secret: '',
-      setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
-      setupSkippedAt: new Date().toISOString(),
-      setupPromptPending: false,
-      setupPromptVersion: 1,
     },
   });
 
@@ -380,11 +321,6 @@ function disableAdminTwoFactor() {
       enabled: false,
       secret: '',
       setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
-      setupSkippedAt:
-        (details.twoFactor && details.twoFactor.setupSkippedAt) ||
-        new Date().toISOString(),
-      setupPromptPending: false,
-      setupPromptVersion: 1,
     },
   });
 
@@ -398,7 +334,6 @@ module.exports = {
   getAdminTwoFactorStatus,
   initializeAdminCredentials,
   getAdminAccount,
-  skipAdminTwoFactorSetup,
   verifyAdminCredentials,
   updateAdminCredentials,
   resetAdminCredentials,

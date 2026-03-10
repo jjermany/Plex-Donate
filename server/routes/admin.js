@@ -45,7 +45,6 @@ const {
   getAdminAccount,
   getAdminTwoFactorSecret,
   getAdminTwoFactorStatus,
-  skipAdminTwoFactorSetup,
   verifyAdminCredentials,
   updateAdminCredentials,
 } = require('../state/admin-credentials');
@@ -860,20 +859,6 @@ router.post(
     const twoFactor = enableAdminTwoFactor(pending.secret);
     logger.info('Admin enabled two-factor authentication');
 
-    return res.json({
-      success: true,
-      twoFactor,
-      csrfToken: res.locals.csrfToken,
-    });
-  })
-);
-
-router.post(
-  '/2fa/setup/skip',
-  requireAdmin,
-  asyncHandler(async (req, res) => {
-    clearPendingTwoFactorSetup(req);
-    const twoFactor = skipAdminTwoFactorSetup();
     return res.json({
       success: true,
       twoFactor,
