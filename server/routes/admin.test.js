@@ -390,6 +390,25 @@ test('ignores invalid stored hash when migrating legacy credentials', async (t) 
   assert.ok(verifyPasswordSync(TEST_ADMIN_PASSWORD, stored.passwordHash));
 });
 
+test('existing admin credentials do not trigger the first-login 2FA setup prompt', async (t) => {
+  const agent = await startServer(t);
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(loginBody.success, true);
+  assert.equal(Boolean(loginBody.promptTwoFactorSetup), false);
+});
+
 test('POST /api/admin/login requires a TOTP code when two-factor auth is enabled', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: seedAdminCredentialsWithTwoFactor,

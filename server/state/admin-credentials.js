@@ -19,6 +19,7 @@ const DEFAULT_TWO_FACTOR = Object.freeze({
   secret: '',
   setupCompletedAt: '',
   setupSkippedAt: '',
+  setupPromptPending: false,
 });
 
 function normalizeUsername(username) {
@@ -62,6 +63,7 @@ function readCredentialsFile() {
 
 function normalizeTwoFactor(value) {
   const raw = value && typeof value === 'object' ? value : {};
+  const hasExplicitConfig = Boolean(value && typeof value === 'object');
   const secret =
     typeof raw.secret === 'string' ? raw.secret.trim().toUpperCase() : '';
   const enabled = Boolean(raw.enabled && secret);
@@ -72,6 +74,7 @@ function normalizeTwoFactor(value) {
       typeof raw.setupCompletedAt === 'string' ? raw.setupCompletedAt.trim() : '',
     setupSkippedAt:
       typeof raw.setupSkippedAt === 'string' ? raw.setupSkippedAt.trim() : '',
+    setupPromptPending: hasExplicitConfig && !enabled && Boolean(raw.setupPromptPending),
   };
 }
 
@@ -187,7 +190,10 @@ function ensureCache() {
     twoFactor:
       existing && existing.twoFactor
         ? normalizeTwoFactor(existing.twoFactor)
-        : { ...DEFAULT_TWO_FACTOR },
+        : {
+            ...DEFAULT_TWO_FACTOR,
+            setupPromptPending: true,
+          },
   };
 
   logger.info(
@@ -216,10 +222,7 @@ function getAdminTwoFactorStatus() {
     enabled: Boolean(twoFactor.enabled && twoFactor.secret),
     setupCompletedAt: twoFactor.setupCompletedAt || null,
     setupSkippedAt: twoFactor.setupSkippedAt || null,
-    setupRequired:
-      !twoFactor.enabled &&
-      !twoFactor.setupCompletedAt &&
-      !twoFactor.setupSkippedAt,
+    setupRequired: Boolean(twoFactor.setupPromptPending && !twoFactor.enabled),
   };
 }
 
@@ -308,6 +311,7 @@ function enableAdminTwoFactor(secret) {
       secret: normalizedSecret,
       setupCompletedAt: new Date().toISOString(),
       setupSkippedAt: '',
+      setupPromptPending: false,
     },
   });
 
@@ -324,6 +328,7 @@ function skipAdminTwoFactorSetup() {
       secret: '',
       setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
       setupSkippedAt: new Date().toISOString(),
+      setupPromptPending: false,
     },
   });
 
@@ -342,6 +347,7 @@ function disableAdminTwoFactor() {
       setupSkippedAt:
         (details.twoFactor && details.twoFactor.setupSkippedAt) ||
         new Date().toISOString(),
+      setupPromptPending: false,
     },
   });
 

@@ -617,14 +617,17 @@ router.post(
       res.locals.csrfToken = csrfToken;
       const account = getAdminAccount();
       logger.info('Admin logged in');
-      return res.json({
-        success: true,
-        csrfToken,
-        adminUsername: account.username,
-        twoFactor: account.twoFactor,
-        timezone: resolveEnvironmentTimezone(),
+        return res.json({
+          success: true,
+          csrfToken,
+          adminUsername: account.username,
+          twoFactor: account.twoFactor,
+          promptTwoFactorSetup: Boolean(
+            account.twoFactor && account.twoFactor.setupRequired
+          ),
+          timezone: resolveEnvironmentTimezone(),
+        });
       });
-    });
   })
 );
 

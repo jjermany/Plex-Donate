@@ -4749,6 +4749,7 @@
       let state = {
         authenticated: false,
         twoFactorPending: false,
+        showTwoFactorEnrollmentModal: false,
         donors: [],
         shareLinks: [],
         events: [],
@@ -5778,8 +5779,7 @@
           setLoginStatus('', '');
           if (
             twoFactorSetupModal &&
-            state.adminTwoFactor &&
-            state.adminTwoFactor.setupRequired
+            state.showTwoFactorEnrollmentModal
           ) {
             twoFactorSetupModal.classList.remove('hidden');
             twoFactorSetupModal.setAttribute('aria-hidden', 'false');
@@ -8053,6 +8053,7 @@
           startDashboardAutoRefresh();
         } else {
           stopDashboardAutoRefresh();
+          state.showTwoFactorEnrollmentModal = false;
           resetPendingTwoFactorSetup();
           state.settings = null;
           clearSettingsFormDirtyFlags();
@@ -8266,11 +8267,15 @@
             if (response && response.requiresTwoFactor) {
               state.authenticated = false;
               state.twoFactorPending = true;
+              state.showTwoFactorEnrollmentModal = false;
               showLoginTotpForm();
               setLoginStatus('Enter the code from your authenticator app.');
             } else {
               state.authenticated = true;
               state.twoFactorPending = false;
+              state.showTwoFactorEnrollmentModal = Boolean(
+                response && response.promptTwoFactorSetup
+              );
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
               await loadDashboardData();
@@ -8496,6 +8501,7 @@
           setSessionToken(null);
           state.authenticated = false;
           state.twoFactorPending = false;
+          state.showTwoFactorEnrollmentModal = false;
           state.donors = [];
           state.shareLinks = [];
           state.events = [];
@@ -8570,6 +8576,7 @@
             csrfToken = response.csrfToken;
             state.authenticated = true;
             state.twoFactorPending = false;
+            state.showTwoFactorEnrollmentModal = false;
             state.adminUsername = response.adminUsername || state.adminUsername;
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             loginRateLimitedUntil = null;
@@ -8783,13 +8790,14 @@
           return;
         }
         try {
-          const response = await api('/api/admin/2fa/setup/verify', {
-            method: 'POST',
-            body: { code },
-          });
-          applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
-          resetPendingTwoFactorSetup();
-          render();
+            const response = await api('/api/admin/2fa/setup/verify', {
+              method: 'POST',
+              body: { code },
+            });
+            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            state.showTwoFactorEnrollmentModal = false;
+            resetPendingTwoFactorSetup();
+            render();
           if (source === 'modal') {
             setTwoFactorSetupStatus('Two-factor authentication enabled.', 'success');
           } else {
@@ -8824,6 +8832,7 @@
           try {
             const response = await api('/api/admin/2fa/setup/skip', { method: 'POST' });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            state.showTwoFactorEnrollmentModal = false;
             resetPendingTwoFactorSetup();
             render();
           } catch (err) {
@@ -8857,6 +8866,7 @@
               body: { currentPassword },
             });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            state.showTwoFactorEnrollmentModal = false;
             resetPendingTwoFactorSetup();
             renderAdminAccountPanel();
             setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');
