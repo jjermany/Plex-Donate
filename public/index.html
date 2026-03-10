@@ -158,12 +158,12 @@
       }
 
       /* Hide header and container padding when showing login */
-      body:has(#login-panel:not(.hidden)) .container {
+      body:has(#login-page-wrapper:not(.hidden) #login-panel:not(.hidden)) .container {
         padding: 0;
         max-width: 100%;
       }
 
-      body:has(#login-panel:not(.hidden)) header {
+      body:has(#login-page-wrapper:not(.hidden) #login-panel:not(.hidden)) header {
         display: none;
       }
 
@@ -283,8 +283,27 @@
       }
 
       /* Hide login wrapper when dashboard is visible */
+      .login-page-wrapper.hidden,
       .login-page-wrapper:has(#login-panel.hidden) {
         display: none;
+      }
+
+      .loading-gate {
+        display: grid;
+        place-items: center;
+        min-height: calc(100vh - 64px);
+      }
+
+      .loading-gate-content {
+        display: grid;
+        justify-items: center;
+        gap: 16px;
+        text-align: center;
+      }
+
+      .loading-gate-content p {
+        margin: 0;
+        color: var(--text-muted);
       }
 
       .theme-toggle-icon {
@@ -2950,7 +2969,16 @@
       </header>
       <div id="dashboard-toast" class="dashboard-toast" hidden aria-live="polite"></div>
 
-      <div class="login-page-wrapper">
+      <div id="loading-gate" class="panel loading-gate">
+        <div class="loading-gate-content" aria-live="polite">
+          <div class="loading-spinner" aria-hidden="true">
+            <div class="loading-spinner-ring"></div>
+          </div>
+          <p>Loading admin workspace...</p>
+        </div>
+      </div>
+
+      <div id="login-page-wrapper" class="login-page-wrapper hidden">
         <section id="login-panel" class="panel login-panel">
           <div class="login-brand">
             <div class="login-brand-icon">
@@ -4096,6 +4124,8 @@
         });
       }
 
+      const loadingGate = document.getElementById('loading-gate');
+      const loginPageWrapper = document.getElementById('login-page-wrapper');
       const loginPanel = document.getElementById('login-panel');
       const loginForm = document.getElementById('login-form');
       const loginUsernameInput = document.getElementById('username');
@@ -5705,8 +5735,14 @@
         renderAdminTwoFactorOnboardingBanner();
         renderProspectSharePanel();
         renderShareLinks();
+        if (loadingGate) {
+          loadingGate.classList.add('hidden');
+        }
         if (state.authenticated) {
           showLoginPasswordForm();
+          if (loginPageWrapper) {
+            loginPageWrapper.classList.add('hidden');
+          }
           loginPanel.classList.add('hidden');
           dashboard.classList.remove('hidden');
           logoutButton.classList.remove('hidden');
@@ -5716,6 +5752,9 @@
           renderSettings();
           renderSupportPanel();
         } else {
+          if (loginPageWrapper) {
+            loginPageWrapper.classList.remove('hidden');
+          }
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
@@ -8017,6 +8056,10 @@
         }
       } catch (err) {
         console.error(err);
+        state.authenticated = false;
+        state.twoFactorPending = false;
+        render();
+        setLoginStatus('Unable to verify your session. Please sign in again.', 'error');
       }
     }
 
