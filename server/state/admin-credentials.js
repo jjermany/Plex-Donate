@@ -19,6 +19,9 @@ const DEFAULT_TWO_FACTOR = Object.freeze({
   secret: '',
   setupCompletedAt: '',
 });
+const DEFAULT_ONBOARDING = Object.freeze({
+  twoFactorPromptPending: false,
+});
 
 function normalizeUsername(username) {
   if (typeof username !== 'string') {
@@ -41,8 +44,9 @@ function readCredentialsFile() {
         : '';
     const passwordHash = rawHash && isSerializedHash(rawHash) ? rawHash : '';
     const twoFactor = normalizeTwoFactor(parsed.twoFactor);
+    const onboarding = normalizeOnboarding(parsed.onboarding);
     if (passwordHash) {
-      return { username, passwordHash, twoFactor };
+      return { username, passwordHash, twoFactor, onboarding };
     }
 
     const legacyPassword =
@@ -50,7 +54,7 @@ function readCredentialsFile() {
         ? parsed.password
         : '';
     if (legacyPassword) {
-      return { username, legacyPassword, twoFactor };
+      return { username, legacyPassword, twoFactor, onboarding };
     }
 
     return null;
@@ -72,11 +76,19 @@ function normalizeTwoFactor(value) {
   };
 }
 
-function writeCredentialsFile({ username, passwordHash, twoFactor }) {
+function normalizeOnboarding(value) {
+  const raw = value && typeof value === 'object' ? value : {};
+  return {
+    twoFactorPromptPending: Boolean(raw.twoFactorPromptPending),
+  };
+}
+
+function writeCredentialsFile({ username, passwordHash, twoFactor, onboarding }) {
   const payload = {
     username,
     passwordHash,
     twoFactor: normalizeTwoFactor(twoFactor),
+    onboarding: normalizeOnboarding(onboarding),
     updatedAt: new Date().toISOString(),
   };
   fs.mkdirSync(path.dirname(CREDENTIALS_FILE), { recursive: true });
@@ -115,6 +127,7 @@ function resetAdminCredentials({ username, password } = {}) {
     username: nextUsername,
     passwordHash,
     twoFactor: existing && existing.twoFactor ? normalizeTwoFactor(existing.twoFactor) : undefined,
+    onboarding: existing && existing.onboarding ? normalizeOnboarding(existing.onboarding) : undefined,
   });
   cache = {
     username: nextUsername,
@@ -123,6 +136,10 @@ function resetAdminCredentials({ username, password } = {}) {
       existing && existing.twoFactor
         ? normalizeTwoFactor(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
+    onboarding:
+      existing && existing.onboarding
+        ? normalizeOnboarding(existing.onboarding)
+        : { ...DEFAULT_ONBOARDING },
   };
 
   return {
@@ -146,11 +163,13 @@ function ensureCache() {
         username: stored.username,
         passwordHash: stored.passwordHash,
         twoFactor: migratedTwoFactor,
+        onboarding: stored.onboarding,
       });
       cache = {
         username: stored.username,
         passwordHash: stored.passwordHash,
         twoFactor: migratedTwoFactor,
+        onboarding: normalizeOnboarding(stored.onboarding),
       };
       return cache;
     }
@@ -161,11 +180,13 @@ function ensureCache() {
         username: stored.username,
         passwordHash,
         twoFactor: migratedTwoFactor,
+        onboarding: stored.onboarding,
       });
       cache = {
         username: stored.username,
         passwordHash,
         twoFactor: migratedTwoFactor,
+        onboarding: normalizeOnboarding(stored.onboarding),
       };
 
       logger.info(
@@ -184,6 +205,7 @@ function ensureCache() {
     username,
     passwordHash,
     twoFactor: existing && existing.twoFactor ? normalizeTwoFactor(existing.twoFactor) : undefined,
+    onboarding: { twoFactorPromptPending: true },
   });
   cache = {
     username,
@@ -192,6 +214,7 @@ function ensureCache() {
       existing && existing.twoFactor
         ? normalizeTwoFactor(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
+    onboarding: { twoFactorPromptPending: true },
   };
 
   logger.info(
@@ -210,6 +233,7 @@ function getAdminAccount() {
   return {
     username: details.username,
     twoFactor: getAdminTwoFactorStatus(),
+    onboarding: getAdminOnboardingStatus(),
   };
 }
 
@@ -228,12 +252,18 @@ function getAdminTwoFactorSecret() {
   return twoFactor.enabled ? twoFactor.secret : '';
 }
 
+function getAdminOnboardingStatus() {
+  const details = ensureCache();
+  return normalizeOnboarding(details.onboarding);
+}
+
 function persistCredentials(nextDetails) {
   writeCredentialsFile(nextDetails);
   cache = {
     username: nextDetails.username,
     passwordHash: nextDetails.passwordHash,
     twoFactor: normalizeTwoFactor(nextDetails.twoFactor),
+    onboarding: normalizeOnboarding(nextDetails.onboarding),
   };
   return cache;
 }
@@ -281,6 +311,7 @@ function updateAdminCredentials({ currentPassword, username, newPassword }) {
     username: nextUsername,
     passwordHash,
     twoFactor: normalizeTwoFactor(details.twoFactor),
+    onboarding: normalizeOnboarding(details.onboarding),
   });
 
   return {
@@ -307,6 +338,9 @@ function enableAdminTwoFactor(secret) {
       secret: normalizedSecret,
       setupCompletedAt: new Date().toISOString(),
     },
+    onboarding: {
+      twoFactorPromptPending: false,
+    },
   });
 
   return getAdminTwoFactorStatus();
@@ -322,14 +356,30 @@ function disableAdminTwoFactor() {
       secret: '',
       setupCompletedAt: details.twoFactor && details.twoFactor.setupCompletedAt,
     },
+    onboarding: normalizeOnboarding(details.onboarding),
   });
 
   return getAdminTwoFactorStatus();
 }
 
+function dismissAdminTwoFactorPrompt() {
+  const details = ensureCache();
+  persistCredentials({
+    username: details.username,
+    passwordHash: details.passwordHash,
+    twoFactor: normalizeTwoFactor(details.twoFactor),
+    onboarding: {
+      twoFactorPromptPending: false,
+    },
+  });
+  return getAdminOnboardingStatus();
+}
+
 module.exports = {
   disableAdminTwoFactor,
+  dismissAdminTwoFactorPrompt,
   enableAdminTwoFactor,
+  getAdminOnboardingStatus,
   getAdminTwoFactorSecret,
   getAdminTwoFactorStatus,
   initializeAdminCredentials,

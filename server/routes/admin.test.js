@@ -360,6 +360,21 @@ test('session response includes environment timezone', async (t) => {
   assert.equal(body.timezone, 'Pacific/Honolulu');
 });
 
+test('fresh install session marks two-factor onboarding prompt as pending', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: () => {},
+  });
+
+  const response = await agent.get('/api/admin/session');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.authenticated, false);
+  assert.equal(body.onboarding.twoFactorPromptPending, true);
+
+  const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.equal(stored.onboarding.twoFactorPromptPending, true);
+});
+
 test('migrates legacy admin credentials and preserves password', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: seedLegacyAdminCredentials,
@@ -405,6 +420,7 @@ test('existing admin credentials do not trigger the first-login 2FA setup prompt
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
+  assert.equal(loginBody.onboarding.twoFactorPromptPending, false);
 });
 
 test('legacy two-factor prompt fields are migrated away at startup', async (t) => {
@@ -432,6 +448,7 @@ test('legacy two-factor prompt fields are migrated away at startup', async (t) =
   const sessionBody = await sessionResponse.json();
   assert.equal(sessionBody.twoFactor.enabled, false);
   assert.equal(Object.prototype.hasOwnProperty.call(sessionBody.twoFactor, 'setupRequired'), false);
+  assert.equal(sessionBody.onboarding.twoFactorPromptPending, false);
 
   const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
   assert.equal(Object.prototype.hasOwnProperty.call(stored.twoFactor, 'setupPromptPending'), false);
@@ -448,6 +465,7 @@ test('legacy two-factor prompt fields are migrated away at startup', async (t) =
   assert.equal(loginResponse.status, 200);
   const loginBody = await loginResponse.json();
   assert.equal(loginBody.success, true);
+  assert.equal(loginBody.onboarding.twoFactorPromptPending, false);
 });
 
 test('POST /api/admin/login requires a TOTP code when two-factor auth is enabled', async (t) => {
@@ -526,6 +544,48 @@ test('admin can enable and disable authenticator app 2FA from account settings',
   assert.equal(disableResponse.status, 200);
   const disableBody = await disableResponse.json();
   assert.equal(disableBody.twoFactor.enabled, false);
+});
+
+test('admin can dismiss the fresh-install two-factor onboarding prompt', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: () => {
+      const payload = {
+        username: process.env.ADMIN_USERNAME,
+        passwordHash: hashPasswordSync(TEST_ADMIN_PASSWORD),
+        onboarding: {
+          twoFactorPromptPending: true,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+      fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    },
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(loginBody.onboarding.twoFactorPromptPending, true);
+
+  const dismissResponse = await agent.post('/api/admin/2fa/prompt/dismiss', {
+    body: { _csrf: loginBody.csrfToken },
+  });
+  assert.equal(dismissResponse.status, 200);
+  const dismissBody = await dismissResponse.json();
+  assert.equal(dismissBody.onboarding.twoFactorPromptPending, false);
+
+  const accountResponse = await agent.get('/api/admin/account');
+  assert.equal(accountResponse.status, 200);
+  const accountBody = await accountResponse.json();
+  assert.equal(accountBody.onboarding.twoFactorPromptPending, false);
 });
 
 test('updating admin credentials rewrites legacy two-factor prompt fields', async (t) => {

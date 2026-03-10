@@ -41,6 +41,7 @@ const logger = require('../utils/logger');
 const settingsStore = require('../state/settings');
 const {
   disableAdminTwoFactor,
+  dismissAdminTwoFactorPrompt,
   enableAdminTwoFactor,
   getAdminAccount,
   getAdminTwoFactorSecret,
@@ -541,6 +542,7 @@ router.get('/session', (req, res) => {
     adminUsername:
       authenticated || pendingTwoFactor ? account.username : null,
     twoFactor: account.twoFactor,
+    onboarding: account.onboarding,
     timezone,
   });
 });
@@ -572,6 +574,7 @@ router.post(
       }
 
       const twoFactor = getAdminTwoFactorStatus();
+      const account = getAdminAccount();
       if (twoFactor.enabled) {
         req.session.pendingAdminLogin = {
           username: normalizedUsername,
@@ -596,6 +599,7 @@ router.post(
           csrfToken,
           adminUsername: normalizedUsername,
           twoFactor,
+          onboarding: account.onboarding,
           timezone: resolveEnvironmentTimezone(),
         });
       }
@@ -614,13 +618,13 @@ router.post(
       }
 
       res.locals.csrfToken = csrfToken;
-      const account = getAdminAccount();
       logger.info('Admin logged in');
         return res.json({
           success: true,
           csrfToken,
           adminUsername: account.username,
           twoFactor: account.twoFactor,
+          onboarding: account.onboarding,
           timezone: resolveEnvironmentTimezone(),
         });
       });
@@ -671,6 +675,7 @@ router.post(
       csrfToken,
       adminUsername: account.username,
       twoFactor: account.twoFactor,
+      onboarding: account.onboarding,
       timezone: resolveEnvironmentTimezone(),
     });
   })
@@ -694,6 +699,7 @@ router.get(
     res.json({
       username: account.username,
       twoFactor: account.twoFactor,
+      onboarding: account.onboarding,
       csrfToken: res.locals.csrfToken,
     });
   })
@@ -810,6 +816,7 @@ router.get(
       paypalPlan,
       adminUsername: account.username,
       twoFactor: account.twoFactor,
+      onboarding: account.onboarding,
       csrfToken: res.locals.csrfToken,
     });
   })
@@ -832,6 +839,7 @@ router.post(
       success: true,
       setup,
       twoFactor: account.twoFactor,
+      onboarding: account.onboarding,
       csrfToken: res.locals.csrfToken,
     });
   })
@@ -857,11 +865,26 @@ router.post(
 
     clearPendingTwoFactorSetup(req);
     const twoFactor = enableAdminTwoFactor(pending.secret);
+    const account = getAdminAccount();
     logger.info('Admin enabled two-factor authentication');
 
     return res.json({
       success: true,
       twoFactor,
+      onboarding: account.onboarding,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/2fa/prompt/dismiss',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const onboarding = dismissAdminTwoFactorPrompt();
+    return res.json({
+      success: true,
+      onboarding,
       csrfToken: res.locals.csrfToken,
     });
   })
@@ -883,10 +906,12 @@ router.delete(
 
     clearPendingTwoFactorSetup(req);
     const twoFactor = disableAdminTwoFactor();
+    const updatedAccount = getAdminAccount();
     logger.info('Admin disabled two-factor authentication');
     return res.json({
       success: true,
       twoFactor,
+      onboarding: updatedAccount.onboarding,
       csrfToken: res.locals.csrfToken,
     });
   })

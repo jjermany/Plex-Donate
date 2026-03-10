@@ -3101,6 +3101,16 @@
             Workspace
           </button>
         </nav>
+        <section class="panel hidden" id="admin-two-factor-onboarding-banner">
+          <h2 style="margin-top:0;">Secure the admin account</h2>
+          <p class="muted-text" style="margin:0 0 16px;">
+            This is a fresh Plex Donate install. Add an authenticator app now, or skip and come back later from Workspace.
+          </p>
+          <div class="form-actions">
+            <button id="admin-two-factor-onboarding-start" type="button">Set up 2FA now</button>
+            <button id="admin-two-factor-onboarding-skip" type="button" class="secondary">Maybe later</button>
+          </div>
+        </section>
         <div class="dashboard-views">
           <div
             class="dashboard-view"
@@ -4101,6 +4111,9 @@
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
       const dashboardToast = document.getElementById('dashboard-toast');
+      const adminTwoFactorOnboardingBanner = document.getElementById('admin-two-factor-onboarding-banner');
+      const adminTwoFactorOnboardingStartButton = document.getElementById('admin-two-factor-onboarding-start');
+      const adminTwoFactorOnboardingSkipButton = document.getElementById('admin-two-factor-onboarding-skip');
       const adminAccountPanel = document.getElementById('admin-account-panel');
       const adminCredentialsForm = document.getElementById('admin-credentials-form');
       const adminTwoFactorForm = document.getElementById('admin-two-factor-form');
@@ -4713,6 +4726,7 @@
         paypalPlanLoading: false,
         adminUsername: 'admin',
         adminTwoFactor: null,
+        adminOnboarding: null,
         pendingTwoFactorSetup: null,
         timezone: null,
         plex: null,
@@ -5508,6 +5522,17 @@
               };
       }
 
+      function applyAdminOnboardingState(onboarding) {
+        state.adminOnboarding =
+          onboarding && typeof onboarding === 'object'
+            ? {
+                twoFactorPromptPending: Boolean(onboarding.twoFactorPromptPending),
+              }
+            : {
+                twoFactorPromptPending: false,
+              };
+      }
+
       function showLoginTotpForm() {
         state.twoFactorPending = true;
         if (loginForm) {
@@ -5677,6 +5702,7 @@
 
       function render() {
         renderAdminAccountPanel();
+        renderAdminTwoFactorOnboardingBanner();
         renderProspectSharePanel();
         renderShareLinks();
         if (state.authenticated) {
@@ -7758,6 +7784,20 @@
       }
     }
 
+    function renderAdminTwoFactorOnboardingBanner() {
+      if (!adminTwoFactorOnboardingBanner) {
+        return;
+      }
+      const shouldShow = Boolean(
+        state.authenticated &&
+        state.adminOnboarding &&
+        state.adminOnboarding.twoFactorPromptPending &&
+        !(state.adminTwoFactor && state.adminTwoFactor.enabled)
+      );
+      adminTwoFactorOnboardingBanner.classList.toggle('hidden', !shouldShow);
+      adminTwoFactorOnboardingBanner.hidden = !shouldShow;
+    }
+
     async function loadAdminAccount() {
       if (!state.authenticated) {
         return;
@@ -7768,6 +7808,7 @@
           state.adminUsername = response.username;
         }
         applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+        applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
       } catch (err) {
         console.error('Failed to load admin account details', err);
       }
@@ -7790,6 +7831,7 @@
               state.adminUsername = response.adminUsername;
             }
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
             const previousErrors = new Map(
               (Array.isArray(state.donors) ? state.donors : []).map((existing) => [
                 String(existing.id),
@@ -7937,6 +7979,7 @@
           data && typeof data.timezone === 'string' ? data.timezone.trim() : '';
         state.timezone = timezoneValue ? timezoneValue : null;
         applyTwoFactorState(data && data.twoFactor ? data.twoFactor : null);
+        applyAdminOnboardingState(data && data.onboarding ? data.onboarding : null);
         if (data.adminUsername) {
           state.adminUsername = data.adminUsername;
         } else if (!state.authenticated && !state.adminUsername) {
@@ -8149,6 +8192,7 @@
             csrfToken = response.csrfToken;
             state.adminUsername = response.adminUsername || username;
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
             const loginTimezone =
               response && typeof response.timezone === 'string'
                 ? response.timezone.trim()
@@ -8403,6 +8447,7 @@
           state.prospectShare = null;
           state.adminUsername = 'admin';
           applyTwoFactorState(null);
+          applyAdminOnboardingState(null);
           resetPendingTwoFactorSetup();
           state.support = {
             threads: [],
@@ -8418,6 +8463,28 @@
       });
 
       refreshButton.addEventListener('click', handleManualRefresh);
+
+      if (adminTwoFactorOnboardingStartButton) {
+        adminTwoFactorOnboardingStartButton.addEventListener('click', async () => {
+          setActiveDashboardView('account');
+          await beginTwoFactorSetup();
+        });
+      }
+
+      if (adminTwoFactorOnboardingSkipButton) {
+        adminTwoFactorOnboardingSkipButton.addEventListener('click', async () => {
+          try {
+            const response = await api('/api/admin/2fa/prompt/dismiss', { method: 'POST' });
+            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
+            render();
+          } catch (err) {
+            showDashboardToast(
+              err && err.message ? err.message : 'Failed to dismiss 2FA reminder.',
+              'error'
+            );
+          }
+        });
+      }
 
       if (prospectShareOpen) {
         prospectShareOpen.addEventListener('click', (event) => {
@@ -8466,6 +8533,7 @@
             state.twoFactorPending = false;
             state.adminUsername = response.adminUsername || state.adminUsername;
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
             loginRateLimitedUntil = null;
             isSessionExpiring = false;
             await loadDashboardData();
@@ -8625,6 +8693,7 @@
           const response = await api('/api/admin/2fa/setup', { method: 'POST' });
           state.pendingTwoFactorSetup = response && response.setup ? response.setup : null;
           applyTwoFactorState(response && response.twoFactor ? response.twoFactor : state.adminTwoFactor);
+          applyAdminOnboardingState(response && response.onboarding ? response.onboarding : state.adminOnboarding);
           if (adminTwoFactorQr && state.pendingTwoFactorSetup) {
             adminTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
           }
@@ -8658,6 +8727,7 @@
             body: { code },
           });
           applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+          applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
           resetPendingTwoFactorSetup();
           render();
           setFormStatus(adminTwoFactorForm, 'Two-factor authentication enabled.', 'success');
@@ -8693,6 +8763,7 @@
               body: { currentPassword },
             });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : state.adminOnboarding);
             resetPendingTwoFactorSetup();
             renderAdminAccountPanel();
             setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');
