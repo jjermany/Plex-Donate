@@ -3026,45 +3026,6 @@
         </section>
       </div>
 
-      <div id="two-factor-setup-modal" class="confirm-backdrop hidden" aria-hidden="true">
-        <div class="confirm-dialog">
-          <h3>Set up authenticator app</h3>
-          <p class="muted-text" id="two-factor-setup-description">
-            Protect the admin dashboard with a six-digit code from any TOTP authenticator app.
-          </p>
-          <div id="two-factor-setup-content" class="hidden">
-            <div style="display:flex; justify-content:center; margin: 12px 0 16px;">
-              <img
-                id="two-factor-setup-qr"
-                alt="Authenticator setup QR code"
-                style="width: 240px; max-width: 100%; border-radius: 16px; background: white; padding: 12px;"
-              />
-            </div>
-            <label>
-              Manual setup key
-              <input id="two-factor-manual-key" type="text" readonly />
-            </label>
-            <label>
-              Enter the 6-digit code
-              <input
-                id="two-factor-verify-code"
-                type="text"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                placeholder="123456"
-                maxlength="8"
-              />
-            </label>
-          </div>
-          <p id="two-factor-setup-status" class="form-status-text"></p>
-          <div class="form-actions">
-            <button id="two-factor-start-setup" type="button">Generate QR code</button>
-            <button id="two-factor-verify-setup" type="button" class="secondary" disabled>Enable 2FA</button>
-            <button id="two-factor-skip-setup" type="button" class="secondary">Skip for now</button>
-          </div>
-        </div>
-      </div>
-
       <div id="dashboard" class="hidden">
         <nav class="dashboard-legend" aria-label="Dashboard sections" data-dashboard-legend>
           <button
@@ -4139,15 +4100,6 @@
       const dashboard = document.getElementById('dashboard');
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
-      const twoFactorSetupModal = document.getElementById('two-factor-setup-modal');
-      const twoFactorSetupContent = document.getElementById('two-factor-setup-content');
-      const twoFactorSetupQr = document.getElementById('two-factor-setup-qr');
-      const twoFactorManualKey = document.getElementById('two-factor-manual-key');
-      const twoFactorVerifyCode = document.getElementById('two-factor-verify-code');
-      const twoFactorSetupStatus = document.getElementById('two-factor-setup-status');
-      const twoFactorStartSetupButton = document.getElementById('two-factor-start-setup');
-      const twoFactorVerifySetupButton = document.getElementById('two-factor-verify-setup');
-      const twoFactorSkipSetupButton = document.getElementById('two-factor-skip-setup');
       const dashboardToast = document.getElementById('dashboard-toast');
       const adminAccountPanel = document.getElementById('admin-account-panel');
       const adminCredentialsForm = document.getElementById('admin-credentials-form');
@@ -5526,34 +5478,8 @@
         }
       }
 
-      function setTwoFactorSetupStatus(message = '', stateAttr = '') {
-        if (!twoFactorSetupStatus) {
-          return;
-        }
-        twoFactorSetupStatus.textContent = message;
-        twoFactorSetupStatus.classList.remove('error', 'success');
-        if (stateAttr) {
-          twoFactorSetupStatus.classList.add(stateAttr);
-        }
-      }
-
       function resetPendingTwoFactorSetup() {
         state.pendingTwoFactorSetup = null;
-        if (twoFactorSetupContent) {
-          twoFactorSetupContent.classList.add('hidden');
-        }
-        if (twoFactorSetupQr) {
-          twoFactorSetupQr.removeAttribute('src');
-        }
-        if (twoFactorManualKey) {
-          twoFactorManualKey.value = '';
-        }
-        if (twoFactorVerifyCode) {
-          twoFactorVerifyCode.value = '';
-        }
-        if (twoFactorVerifySetupButton) {
-          twoFactorVerifySetupButton.disabled = true;
-        }
         if (adminTwoFactorSetupPanel) {
           adminTwoFactorSetupPanel.classList.add('hidden');
         }
@@ -5765,17 +5691,6 @@
           dashboard.classList.remove('hidden');
           logoutButton.classList.remove('hidden');
           setLoginStatus('', '');
-          if (
-            twoFactorSetupModal &&
-            state.showTwoFactorEnrollmentModal &&
-            state.allowTwoFactorEnrollmentPrompt
-          ) {
-            twoFactorSetupModal.classList.remove('hidden');
-            twoFactorSetupModal.setAttribute('aria-hidden', 'false');
-          } else if (twoFactorSetupModal) {
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorSetupModal.setAttribute('aria-hidden', 'true');
-          }
           renderSubscribers();
           renderEvents();
           renderSettings();
@@ -5784,10 +5699,6 @@
           loginPanel.classList.remove('hidden');
           dashboard.classList.add('hidden');
           logoutButton.classList.add('hidden');
-          if (twoFactorSetupModal) {
-            twoFactorSetupModal.classList.add('hidden');
-            twoFactorSetupModal.setAttribute('aria-hidden', 'true');
-          }
           updateIntegrationBadge(null);
           updateSupportBadge();
           setLoginStatus('', '');
@@ -8725,129 +8636,69 @@
       }
 
       async function beginTwoFactorSetup({ source = 'settings' } = {}) {
-        const targetForm = source === 'modal' ? null : adminTwoFactorForm;
+        const targetForm = adminTwoFactorForm;
         if (targetForm) {
           setFormStatus(targetForm, 'Generating QR code...', 'pending');
-        } else {
-          setTwoFactorSetupStatus('Generating QR code...');
         }
         try {
           const response = await api('/api/admin/2fa/setup', { method: 'POST' });
           state.pendingTwoFactorSetup = response && response.setup ? response.setup : null;
           applyTwoFactorState(response && response.twoFactor ? response.twoFactor : state.adminTwoFactor);
-          if (source === 'modal') {
-            if (twoFactorSetupContent) {
-              twoFactorSetupContent.classList.remove('hidden');
-            }
-            if (twoFactorSetupQr && state.pendingTwoFactorSetup) {
-              twoFactorSetupQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
-            }
-            if (twoFactorManualKey && state.pendingTwoFactorSetup) {
-              twoFactorManualKey.value = state.pendingTwoFactorSetup.manualEntryKey || '';
-            }
-            if (twoFactorVerifySetupButton) {
-              twoFactorVerifySetupButton.disabled = !state.pendingTwoFactorSetup;
-            }
-            setTwoFactorSetupStatus('Scan the QR code, then enter the 6-digit code from your app.');
-          } else {
-            if (adminTwoFactorQr && state.pendingTwoFactorSetup) {
-              adminTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
-            }
-            if (adminTwoFactorManualKey && state.pendingTwoFactorSetup) {
-              adminTwoFactorManualKey.value = state.pendingTwoFactorSetup.manualEntryKey || '';
-            }
-            if (adminTwoFactorSetupPanel) {
-              adminTwoFactorSetupPanel.classList.remove('hidden');
-            }
-            if (adminTwoFactorVerifyButton) {
-              adminTwoFactorVerifyButton.disabled = !state.pendingTwoFactorSetup;
-            }
-            setFormStatus(adminTwoFactorForm, 'Scan the QR code, then enter the 6-digit code from your app.', 'success');
+          if (adminTwoFactorQr && state.pendingTwoFactorSetup) {
+            adminTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
           }
+          if (adminTwoFactorManualKey && state.pendingTwoFactorSetup) {
+            adminTwoFactorManualKey.value = state.pendingTwoFactorSetup.manualEntryKey || '';
+          }
+          if (adminTwoFactorSetupPanel) {
+            adminTwoFactorSetupPanel.classList.remove('hidden');
+          }
+          if (adminTwoFactorVerifyButton) {
+            adminTwoFactorVerifyButton.disabled = !state.pendingTwoFactorSetup;
+          }
+          setFormStatus(adminTwoFactorForm, 'Scan the QR code, then enter the 6-digit code from your app.', 'success');
           renderAdminAccountPanel();
         } catch (err) {
           const message = err && err.message ? err.message : 'Failed to generate setup QR code.';
           if (targetForm) {
             setFormStatus(targetForm, message, 'error');
-          } else {
-            setTwoFactorSetupStatus(message, 'error');
           }
         }
       }
 
-      async function verifyTwoFactorSetup(code, { source = 'settings' } = {}) {
+      async function verifyTwoFactorSetup(code) {
         if (!code) {
-          if (source === 'modal') {
-            setTwoFactorSetupStatus('Authentication code is required.', 'error');
-          } else {
-            setFormStatus(adminTwoFactorForm, 'Authentication code is required.', 'error');
-          }
+          setFormStatus(adminTwoFactorForm, 'Authentication code is required.', 'error');
           return;
         }
         try {
-            const response = await api('/api/admin/2fa/setup/verify', {
-              method: 'POST',
-              body: { code },
-            });
-            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
-            state.showTwoFactorEnrollmentModal = false;
-            state.allowTwoFactorEnrollmentPrompt = false;
-            resetPendingTwoFactorSetup();
-            render();
-          if (source === 'modal') {
-            setTwoFactorSetupStatus('Two-factor authentication enabled.', 'success');
-          } else {
-            setFormStatus(adminTwoFactorForm, 'Two-factor authentication enabled.', 'success');
-            scheduleStatusClear(adminTwoFactorForm, 4000);
-          }
+          const response = await api('/api/admin/2fa/setup/verify', {
+            method: 'POST',
+            body: { code },
+          });
+          applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+          state.showTwoFactorEnrollmentModal = false;
+          state.allowTwoFactorEnrollmentPrompt = false;
+          resetPendingTwoFactorSetup();
+          render();
+          setFormStatus(adminTwoFactorForm, 'Two-factor authentication enabled.', 'success');
+          scheduleStatusClear(adminTwoFactorForm, 4000);
         } catch (err) {
           const message = err && err.message ? err.message : 'Failed to verify authentication code.';
-          if (source === 'modal') {
-            setTwoFactorSetupStatus(message, 'error');
-          } else {
-            setFormStatus(adminTwoFactorForm, message, 'error');
-          }
+          setFormStatus(adminTwoFactorForm, message, 'error');
         }
-      }
-
-      if (twoFactorStartSetupButton) {
-        twoFactorStartSetupButton.addEventListener('click', async () => {
-          await beginTwoFactorSetup({ source: 'modal' });
-        });
-      }
-
-      if (twoFactorVerifySetupButton) {
-        twoFactorVerifySetupButton.addEventListener('click', async () => {
-          const code = twoFactorVerifyCode ? twoFactorVerifyCode.value.trim() : '';
-          await verifyTwoFactorSetup(code, { source: 'modal' });
-        });
-      }
-
-      if (twoFactorSkipSetupButton) {
-        twoFactorSkipSetupButton.addEventListener('click', async () => {
-          try {
-            const response = await api('/api/admin/2fa/setup/skip', { method: 'POST' });
-            applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
-            state.showTwoFactorEnrollmentModal = false;
-            state.allowTwoFactorEnrollmentPrompt = false;
-            resetPendingTwoFactorSetup();
-            render();
-          } catch (err) {
-            setTwoFactorSetupStatus(err.message || 'Failed to skip setup.', 'error');
-          }
-        });
       }
 
       if (adminTwoFactorStartButton) {
         adminTwoFactorStartButton.addEventListener('click', async () => {
-          await beginTwoFactorSetup({ source: 'settings' });
+          await beginTwoFactorSetup();
         });
       }
 
       if (adminTwoFactorVerifyButton) {
         adminTwoFactorVerifyButton.addEventListener('click', async () => {
           const code = adminTwoFactorCode ? adminTwoFactorCode.value.trim() : '';
-          await verifyTwoFactorSetup(code, { source: 'settings' });
+          await verifyTwoFactorSetup(code);
         });
       }
 
