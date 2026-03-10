@@ -151,6 +151,12 @@ app.get('/api/health', (req, res) => {
 
 // Apply rate limiting to API routes (excluding health check)
 app.use('/api', apiLimiter);
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
 
 app.use('/api/paypal/webhook', webhookRouter);
 app.use('/api/admin', adminRouter);

@@ -527,6 +527,78 @@ test('admin can enable and disable authenticator app 2FA from account settings',
   assert.equal(disableBody.twoFactor.enabled, false);
 });
 
+test('admin can skip the first-login 2FA enrollment prompt', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: () => {
+      const payload = {
+        username: process.env.ADMIN_USERNAME,
+        passwordHash: hashPasswordSync(TEST_ADMIN_PASSWORD),
+        twoFactor: {
+          enabled: false,
+          secret: '',
+          setupCompletedAt: '',
+          setupSkippedAt: '',
+          setupPromptPending: true,
+          setupPromptVersion: 1,
+        },
+        updatedAt: new Date().toISOString(),
+      };
+      fs.mkdirSync(path.dirname(credentialsFile), { recursive: true });
+      fs.writeFileSync(credentialsFile, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    },
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  const loginResponse = await agent.post('/api/admin/login', {
+    body: {
+      username: process.env.ADMIN_USERNAME,
+      password: TEST_ADMIN_PASSWORD,
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+
+  assert.equal(loginResponse.status, 200);
+  const loginBody = await loginResponse.json();
+  assert.equal(loginBody.success, true);
+  assert.equal(Boolean(loginBody.promptTwoFactorSetup), true);
+
+  const skipResponse = await agent.post('/api/admin/2fa/setup/skip', {
+    body: { _csrf: loginBody.csrfToken },
+  });
+  assert.equal(skipResponse.status, 200);
+  const skipBody = await skipResponse.json();
+  assert.equal(skipBody.success, true);
+  assert.equal(skipBody.twoFactor.enabled, false);
+  assert.equal(skipBody.twoFactor.setupRequired, false);
+  assert.ok(skipBody.twoFactor.setupSkippedAt);
+
+  const accountResponse = await agent.get('/api/admin/account');
+  assert.equal(accountResponse.status, 200);
+  const accountBody = await accountResponse.json();
+  assert.equal(accountBody.twoFactor.enabled, false);
+  assert.equal(accountBody.twoFactor.setupRequired, false);
+  assert.ok(accountBody.twoFactor.setupSkippedAt);
+});
+
+test('admin session token alone does not authenticate without the session cookie', async (t) => {
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+  assert.ok(agent.sessionToken);
+
+  agent.cookies.clear();
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  assert.equal(sessionResponse.status, 200);
+  const sessionBody = await sessionResponse.json();
+  assert.equal(sessionBody.authenticated, false);
+  assert.equal(sessionBody.sessionToken, null);
+
+  const dashboardResponse = await agent.get('/api/admin/dashboard');
+  assert.equal(dashboardResponse.status, 401);
+});
+
 test('GET /api/admin/subscribers annotates Plex status for donors', async (t) => {
   resetDatabase();
   const agent = await startServer(t);

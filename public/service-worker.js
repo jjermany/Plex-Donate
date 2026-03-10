@@ -1,4 +1,4 @@
-const CACHE_NAME = 'plex-donate-cache-v5';
+const CACHE_NAME = 'plex-donate-cache-v6';
 const CORE_ASSETS = ['/', '/index.html', '/dashboard.html', '/share.html', '/manifest.webmanifest'];
 const OPTIONAL_ASSETS = [
   '/icons/plex-donate-android-any-144.png',
@@ -91,15 +91,7 @@ async function handleHtmlRequest(request) {
 }
 
 async function handleApiRequest(request) {
-  try {
-    return await fetch(request, { cache: 'no-store' });
-  } catch (err) {
-    const cached = await caches.match(request);
-    if (cached) {
-      return cached;
-    }
-    throw err;
-  }
+  return fetch(request, { cache: 'no-store' });
 }
 
 async function handleStaticRequest(request) {
