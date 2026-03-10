@@ -4750,6 +4750,7 @@
         authenticated: false,
         twoFactorPending: false,
         showTwoFactorEnrollmentModal: false,
+        allowTwoFactorEnrollmentPrompt: false,
         donors: [],
         shareLinks: [],
         events: [],
@@ -5779,7 +5780,8 @@
           setLoginStatus('', '');
           if (
             twoFactorSetupModal &&
-            state.showTwoFactorEnrollmentModal
+            state.showTwoFactorEnrollmentModal &&
+            state.allowTwoFactorEnrollmentPrompt
           ) {
             twoFactorSetupModal.classList.remove('hidden');
             twoFactorSetupModal.setAttribute('aria-hidden', 'false');
@@ -8039,6 +8041,8 @@
         csrfToken = data.csrfToken;
         state.authenticated = data.authenticated;
         state.twoFactorPending = Boolean(data && data.twoFactorPending);
+        state.showTwoFactorEnrollmentModal = false;
+        state.allowTwoFactorEnrollmentPrompt = false;
         const timezoneValue =
           data && typeof data.timezone === 'string' ? data.timezone.trim() : '';
         state.timezone = timezoneValue ? timezoneValue : null;
@@ -8268,12 +8272,16 @@
               state.authenticated = false;
               state.twoFactorPending = true;
               state.showTwoFactorEnrollmentModal = false;
+              state.allowTwoFactorEnrollmentPrompt = false;
               showLoginTotpForm();
               setLoginStatus('Enter the code from your authenticator app.');
             } else {
               state.authenticated = true;
               state.twoFactorPending = false;
               state.showTwoFactorEnrollmentModal = Boolean(
+                response && response.promptTwoFactorSetup
+              );
+              state.allowTwoFactorEnrollmentPrompt = Boolean(
                 response && response.promptTwoFactorSetup
               );
               isSessionExpiring = false;
@@ -8502,6 +8510,7 @@
           state.authenticated = false;
           state.twoFactorPending = false;
           state.showTwoFactorEnrollmentModal = false;
+          state.allowTwoFactorEnrollmentPrompt = false;
           state.donors = [];
           state.shareLinks = [];
           state.events = [];
@@ -8577,6 +8586,7 @@
             state.authenticated = true;
             state.twoFactorPending = false;
             state.showTwoFactorEnrollmentModal = false;
+            state.allowTwoFactorEnrollmentPrompt = false;
             state.adminUsername = response.adminUsername || state.adminUsername;
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             loginRateLimitedUntil = null;
@@ -8796,6 +8806,7 @@
             });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             state.showTwoFactorEnrollmentModal = false;
+            state.allowTwoFactorEnrollmentPrompt = false;
             resetPendingTwoFactorSetup();
             render();
           if (source === 'modal') {
@@ -8833,6 +8844,7 @@
             const response = await api('/api/admin/2fa/setup/skip', { method: 'POST' });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             state.showTwoFactorEnrollmentModal = false;
+            state.allowTwoFactorEnrollmentPrompt = false;
             resetPendingTwoFactorSetup();
             render();
           } catch (err) {
@@ -8867,6 +8879,7 @@
             });
             applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
             state.showTwoFactorEnrollmentModal = false;
+            state.allowTwoFactorEnrollmentPrompt = false;
             resetPendingTwoFactorSetup();
             renderAdminAccountPanel();
             setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');
