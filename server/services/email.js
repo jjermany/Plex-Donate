@@ -14,6 +14,31 @@ function formatAccessEndDate(value) {
   return date.toUTCString();
 }
 
+function formatRuntimeDuration(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return '';
+  }
+
+  const totalSeconds = Math.round(numeric);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [];
+
+  if (hours > 0) {
+    parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
+  }
+
+  return parts.join(', ');
+}
+
 function stripTrailingSlash(value) {
   return String(value).replace(/\/+$/, '');
 }
@@ -797,6 +822,121 @@ async function sendTrialEndingReminderEmail(
   });
 }
 
+async function sendUpsStatusEmail(
+  {
+    to,
+    name,
+    event,
+    upsName,
+    batteryChargePercent,
+    runtimeSeconds,
+    occurredAt,
+  },
+  overrideSettings
+) {
+  if (!to) {
+    throw new Error('Recipient email is required to send UPS status email');
+  }
+
+  const normalizedEvent =
+    typeof event === 'string' ? event.trim().toLowerCase() : '';
+  if (!['power_outage', 'power_restored'].includes(normalizedEvent)) {
+    throw new Error('Valid UPS event is required to send status email');
+  }
+
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const recipientName = name || 'there';
+  const displayOccurredAt = formatAccessEndDate(occurredAt);
+  const displayRuntime = formatRuntimeDuration(runtimeSeconds);
+  const hasBatteryPercent = Number.isFinite(Number(batteryChargePercent));
+  const displayBatteryPercent = hasBatteryPercent
+    ? `${Math.round(Number(batteryChargePercent))}%`
+    : '';
+  const displayUpsName =
+    typeof upsName === 'string' && upsName.trim() ? upsName.trim() : '';
+
+  const subject =
+    normalizedEvent === 'power_outage'
+      ? 'Plex server power outage detected'
+      : 'Plex server power has been restored';
+
+  const intro =
+    normalizedEvent === 'power_outage'
+      ? 'Our Plex server is currently running on UPS battery power and may shut down if the outage continues.'
+      : 'Commercial power has been restored and Plex service should be available again.';
+
+  const detailLines = [];
+  if (displayUpsName) {
+    detailLines.push(`UPS: ${displayUpsName}`);
+  }
+  if (displayBatteryPercent) {
+    detailLines.push(`Battery charge: ${displayBatteryPercent}`);
+  }
+  if (displayRuntime) {
+    detailLines.push(`Estimated runtime remaining: ${displayRuntime}`);
+  }
+  if (displayOccurredAt) {
+    detailLines.push(`Reported at: ${displayOccurredAt}`);
+  }
+
+  const textLines = [
+    `Hi ${recipientName},`,
+    '',
+    intro,
+  ];
+
+  if (detailLines.length > 0) {
+    textLines.push('');
+    textLines.push(...detailLines);
+  }
+
+  textLines.push('');
+  textLines.push(
+    normalizedEvent === 'power_outage'
+      ? 'We will send another update when power returns.'
+      : 'Thank you for your patience.'
+  );
+  textLines.push('');
+  textLines.push('— Plex Donate');
+
+  const htmlDetails =
+    detailLines.length > 0
+      ? `
+  <ul style="margin:0 0 16px 20px;padding:0;color:#111827;">
+    ${detailLines
+      .map((line) => `<li style="margin:0 0 8px;">${escapeHtml(line)}</li>`)
+      .join('')}
+  </ul>
+  `
+      : '';
+
+  const html = `
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
+    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(
+      subject
+    )}</h2>
+    <p style="margin:0 0 16px;">Hi ${escapeHtml(recipientName)},</p>
+    <p style="margin:0 0 16px;">${escapeHtml(intro)}</p>
+    ${htmlDetails}
+    <p style="margin:0 0 16px;">${
+      normalizedEvent === 'power_outage'
+        ? 'We will send another update when power returns.'
+        : 'Thank you for your patience.'
+    }</p>
+    <p style="margin:24px 0 0;">— Plex Donate</p>
+  </div>
+  `;
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text: textLines.join('\n'),
+    html,
+  });
+}
+
 function formatSupportEmailHtml({
   heading,
   subject,
@@ -1133,6 +1273,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendCancellationEmail,
   sendTrialEndingReminderEmail,
+  sendUpsStatusEmail,
   sendAnnouncementEmail,
   getSmtpConfig,
   verifyConnection,

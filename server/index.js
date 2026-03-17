@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const config = require('./config');
 const adminRouter = require('./routes/admin');
 const webhookRouter = require('./routes/webhook');
+const automationRouter = require('./routes/automation');
 const shareRouter = require('./routes/share');
 const customerRouter = require('./routes/customer');
 const logger = require('./utils/logger');
@@ -148,6 +149,8 @@ app.get('/api/health', (req, res) => {
     });
   }
 });
+
+app.use('/api/automation/ups', automationRouter);
 
 // Apply rate limiting to API routes (excluding health check)
 app.use('/api', apiLimiter);

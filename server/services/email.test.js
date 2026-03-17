@@ -170,3 +170,69 @@ test('sendSupportRequestNotification renders dashboard access details', async (t
   assert.match(message.html, /https:\/\/dash\.example\.com\/dashboard/);
   assert.match(message.text, /Open Dashboard: https:\/\/dash\.example\.com\/dashboard/);
 });
+
+test('sendUpsStatusEmail renders outage details with battery metadata', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendUpsStatusEmail(
+    {
+      to: 'user@example.com',
+      name: 'Outage User',
+      event: 'power_outage',
+      upsName: 'apc-ups',
+      batteryChargePercent: 82,
+      runtimeSeconds: 2400,
+      occurredAt: '2026-03-17T15:30:00Z',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Plex server power outage detected');
+  assert.match(message.text, /running on UPS battery power/i);
+  assert.match(message.text, /Battery charge: 82%/);
+  assert.match(message.text, /Estimated runtime remaining: 40 minutes/);
+  assert.match(message.text, /Reported at: Tue, 17 Mar 2026 15:30:00 GMT/);
+  assert.match(message.html, /apc-ups/);
+  assert.match(message.html, /82%/);
+});
+
+test('sendUpsStatusEmail renders restore copy', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendUpsStatusEmail(
+    {
+      to: 'user@example.com',
+      name: 'Restore User',
+      event: 'power_restored',
+      occurredAt: '2026-03-17T16:00:00Z',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Plex server power has been restored');
+  assert.match(message.text, /power has been restored/i);
+  assert.match(message.text, /service should be available again/i);
+  assert.match(message.html, /Thank you for your patience\./);
+});

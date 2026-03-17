@@ -77,6 +77,7 @@ Only the core application settings live in `.env` now:
 | `SESSION_COOKIE_SECURE` | Set to `true` to mark the admin session cookie as secure (requires HTTPS). Defaults to `false`. |
 | `ADMIN_USERNAME` | (Optional) Username for the admin dashboard. Defaults to `admin`. |
 | `DATABASE_FILE` | Location of the SQLite database file. |
+| `UPS_WEBHOOK_TOKEN` | (Optional) Bearer token that enables the UPS automation webhook at `/api/automation/ups`. |
 
 When running in production, you must set `SESSION_SECRET` or persist `data/.secrets` on a durable volume so the session key survives restarts and shared instances can validate the same login cookies. Without one of those options, admin logins will break after a restart or when multiple instances are deployed.
 
@@ -139,6 +140,54 @@ npm run diag:plex-sync
 ```
 
 The admin dashboard is served from `http://localhost:3000/` and exposes JSON APIs under `/api/admin`. Configure your PayPal webhook to POST to `/api/paypal/webhook`.
+
+### UPS outage automation
+
+If you use NUT on Unraid, Plex Donate can send automatic outage and recovery emails to `active` and `trial` users when your UPS state changes.
+
+1. Set `UPS_WEBHOOK_TOKEN` in the Plex Donate environment.
+2. Make sure SMTP is already configured in the Plex Donate admin dashboard.
+3. Have NUT call the webhook with a bearer token when power fails and when power returns.
+
+Example outage call:
+
+```bash
+curl -X POST "https://your-domain/api/automation/ups" \
+  -H "Authorization: Bearer $UPS_WEBHOOK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "power_outage",
+    "upsName": "apc-ups",
+    "batteryChargePercent": 82,
+    "runtimeSeconds": 2400,
+    "occurredAt": "2026-03-17T15:30:00Z"
+  }'
+```
+
+Example power-restored call:
+
+```bash
+curl -X POST "https://your-domain/api/automation/ups" \
+  -H "Authorization: Bearer $UPS_WEBHOOK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "power_restored",
+    "upsName": "apc-ups",
+    "occurredAt": "2026-03-17T16:00:00Z"
+  }'
+```
+
+Successful responses look like:
+
+```json
+{
+  "success": true,
+  "event": "power_outage",
+  "deduped": false,
+  "sent": 12,
+  "skipped": 0
+}
+```
 
 ### Shareable donor pages & invite flow
 

@@ -192,6 +192,7 @@ const config = {
   port: Number.parseInt(process.env.PORT || '3000', 10),
   sessionSecret: getOrCreateSessionSecret(),
   adminUsername: process.env.ADMIN_USERNAME || 'admin',
+  upsWebhookToken: process.env.UPS_WEBHOOK_TOKEN || '',
   sessionTtlHours,
   sessionTtlMs: Math.round(sessionTtlHours * 60 * 60 * 1000),
   databaseFile: process.env.DATABASE_FILE
