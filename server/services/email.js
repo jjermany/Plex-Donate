@@ -185,6 +185,172 @@ function buildDashboardAccessText(dashboardUrl) {
   return `Open Dashboard: ${dashboardUrl}`;
 }
 
+function getEmailTonePalette(tone = 'brand') {
+  const palettes = {
+    brand: {
+      shell: '#0f172a',
+      cardBorder: '#3b82f6',
+      headerBg: '#111827',
+      kicker: '#93c5fd',
+      badgeBg: '#dbeafe',
+      badgeColor: '#1d4ed8',
+      panelBg: '#eff6ff',
+      panelBorder: '#93c5fd',
+      panelText: '#1e3a8a',
+      buttonBg: '#2563eb',
+      buttonColor: '#ffffff',
+    },
+    success: {
+      shell: '#052e16',
+      cardBorder: '#166534',
+      headerBg: '#166534',
+      kicker: '#bbf7d0',
+      badgeBg: '#dcfce7',
+      badgeColor: '#166534',
+      panelBg: '#f0fdf4',
+      panelBorder: '#86efac',
+      panelText: '#14532d',
+      buttonBg: '#166534',
+      buttonColor: '#ffffff',
+    },
+    warning: {
+      shell: '#3f2f05',
+      cardBorder: '#d97706',
+      headerBg: '#92400e',
+      kicker: '#fde68a',
+      badgeBg: '#fef3c7',
+      badgeColor: '#92400e',
+      panelBg: '#fffbeb',
+      panelBorder: '#fcd34d',
+      panelText: '#78350f',
+      buttonBg: '#b45309',
+      buttonColor: '#ffffff',
+    },
+    danger: {
+      shell: '#450a0a',
+      cardBorder: '#b91c1c',
+      headerBg: '#991b1b',
+      kicker: '#fecaca',
+      badgeBg: '#fee2e2',
+      badgeColor: '#b91c1c',
+      panelBg: '#fef2f2',
+      panelBorder: '#fca5a5',
+      panelText: '#7f1d1d',
+      buttonBg: '#b91c1c',
+      buttonColor: '#ffffff',
+    },
+  };
+
+  return palettes[tone] || palettes.brand;
+}
+
+function buildEmailActionButtonHtml(label, url, palette) {
+  if (!label || !url) {
+    return '';
+  }
+
+  return `
+  <p style="margin:24px 0;text-align:center;">
+    <a
+      href="${escapeHtml(url)}"
+      style="display:inline-block;background:${palette.buttonBg};color:${palette.buttonColor};padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:700;letter-spacing:0.01em;"
+    >${escapeHtml(label)}</a>
+  </p>
+  `;
+}
+
+function buildEmailDetailPanelHtml(title, lines, palette) {
+  const normalizedLines = Array.isArray(lines)
+    ? lines.filter((line) => typeof line === 'string' && line.trim())
+    : [];
+
+  if (normalizedLines.length === 0) {
+    return '';
+  }
+
+  return `
+  <div style="margin:0 0 20px;padding:16px 18px;background:${palette.panelBg};border:1px solid ${palette.panelBorder};border-radius:12px;">
+    <p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${palette.panelText};">${escapeHtml(
+      title
+    )}</p>
+    <ul style="list-style:none;margin:0;padding:0;color:#111827;">
+      ${normalizedLines
+        .map((line) => {
+          const separatorIndex = line.indexOf(':');
+          if (separatorIndex === -1) {
+            return `<li style="margin:0 0 10px;color:#0f172a;">${escapeHtml(line)}</li>`;
+          }
+
+          const label = line.slice(0, separatorIndex);
+          const value = line.slice(separatorIndex + 1).trim();
+          return `<li style="margin:0 0 10px;color:#0f172a;"><strong style="display:inline-block;min-width:170px;color:#111827;">${escapeHtml(
+            label
+          )}:</strong><span style="color:#334155;">${escapeHtml(value)}</span></li>`;
+        })
+        .join('')}
+    </ul>
+  </div>
+  `;
+}
+
+function buildEmailFrameHtml({
+  tone = 'brand',
+  subject,
+  badge,
+  recipientName,
+  intro,
+  bodyHtml = '',
+  dashboardHtml = '',
+  footerHtml = '',
+}) {
+  const palette = getEmailTonePalette(tone);
+
+  return `
+  <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="color-scheme" content="light dark">
+      <meta name="supported-color-schemes" content="light dark">
+    </head>
+    <body style="margin:0;padding:0;">
+      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:${palette.shell};padding:20px;">
+        <div style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid ${palette.cardBorder};overflow:hidden;box-shadow:0 18px 50px -24px rgba(15,23,42,0.45);">
+          <div style="background:${palette.headerBg};color:#f8fafc;padding:22px 24px;">
+            <p style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:${palette.kicker};">Plex Donate</p>
+            <h2 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#f8fafc;">${escapeHtml(
+              subject
+            )}</h2>
+            ${
+              badge
+                ? `<span style="display:inline-block;padding:6px 10px;border-radius:999px;background:${palette.badgeBg};color:${palette.badgeColor};font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;">${escapeHtml(
+                    badge
+                  )}</span>`
+                : ''
+            }
+          </div>
+          <div style="padding:24px;color:#0f172a;line-height:1.65;">
+            <p style="margin:0 0 16px;font-size:16px;">Hi ${escapeHtml(
+              recipientName || 'there'
+            )},</p>
+            ${
+              intro
+                ? `<div style="margin:0 0 20px;padding:16px 18px;background:${palette.panelBg};border:1px solid ${palette.panelBorder};border-radius:12px;"><p style="margin:0;font-size:16px;color:#111827;">${escapeHtml(
+                    intro
+                  )}</p></div>`
+                : ''
+            }
+            ${bodyHtml}
+            ${dashboardHtml}
+            ${footerHtml}
+            <p style="margin:24px 0 0;color:#475569;font-size:14px;">&mdash; Plex Donate</p>
+          </div>
+        </div>
+      </div>
+    </body>
+  </html>
+  `;
+}
+
 function getSmtpConfig(overrideSettings) {
   const settings = overrideSettings || settingsState.getSmtpSettings();
   if (!settings.host) {
@@ -279,6 +445,7 @@ function buildAnnouncementEmailHtml({
   recipientName,
   dashboardUrl,
 }) {
+  const palette = getEmailTonePalette('brand');
   const paragraphs = String(body || '')
     .split(/\r?\n+/)
     .map((paragraph) => paragraph.trim())
@@ -289,39 +456,27 @@ function buildAnnouncementEmailHtml({
       ? paragraphs
           .map(
             (paragraph) =>
-              `<p style="margin:0 0 16px;">${escapeHtml(paragraph)}</p>`
+              `<p style="margin:0 0 16px;color:#0f172a;">${escapeHtml(paragraph)}</p>`
           )
           .join('')
-      : `<p style="margin:0 0 16px;">${escapeHtml(body || '')}</p>`;
+      : `<p style="margin:0 0 16px;color:#0f172a;">${escapeHtml(body || '')}</p>`;
 
   const ctaHtml = cta
-    ? `
-  <p style="margin:24px 0;text-align:center;">
-    <a
-      href="${escapeHtml(cta.url)}"
-      style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;"
-    >${escapeHtml(cta.label)}</a>
-  </p>
-  `
+    ? buildEmailActionButtonHtml(cta.label, cta.url, palette)
     : '';
 
   const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
-  const greetingName = recipientName ? escapeHtml(recipientName) : 'there';
 
-  return `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
-    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(
-      subject
-    )}</h2>
-    <p style="margin:0 0 16px;">Hi ${greetingName},</p>
-    ${htmlParagraphs}
-    ${ctaHtml}
-    ${dashboardHtml}
-    <p style="margin:24px 0 0;">— Plex Donate</p>
-  </div>
-  `;
+  return buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: 'Announcement',
+    recipientName,
+    intro: 'We have an update for your Plex Donate account.',
+    bodyHtml: `${htmlParagraphs}${ctaHtml}`,
+    dashboardHtml,
+  });
 }
-
 function buildAnnouncementEmailText({
   subject,
   body,
@@ -436,21 +591,30 @@ async function sendInviteEmail(
   textLines.push('');
   textLines.push('If you did not request this invite or need help, reply to this email.');
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
   const text = textLines.join('\n');
 
-  const html = `
-  <p>Hi ${name || 'there'},</p>
-  <p>Thank you for supporting our Plex server! Use the button below to accept your Plex invite.</p>
-  <p style="text-align:center;margin:24px 0;">
-    <a href="${inviteUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Accept Invite</a>
-  </p>
-  ${dashboardHtml}
-  <p style="font-size:14px;color:#4b5563;">Subscription ID: ${subscriptionId}</p>
-  <p>If you need help, just reply to this email.</p>
-  <p style="margin-top:24px;">— Plex Donate</p>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: 'Invite Ready',
+    recipientName: name,
+    intro: 'Thank you for supporting our Plex server. Your personal share link is ready.',
+    bodyHtml:
+      buildEmailActionButtonHtml(
+        'Accept Invite',
+        inviteUrl,
+        getEmailTonePalette('brand')
+      ) +
+      buildEmailDetailPanelHtml(
+        'Subscription details',
+        [`Subscription ID: ${subscriptionId}`],
+        getEmailTonePalette('brand')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you need help, just reply to this email.</p>',
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -460,7 +624,6 @@ async function sendInviteEmail(
     html,
   });
 }
-
 async function sendSubscriptionThankYouEmail(
   { to, name, subscriptionId, amount, currency, paidAt },
   overrideSettings
@@ -503,33 +666,38 @@ async function sendSubscriptionThankYouEmail(
   textLines.push('');
   textLines.push('If you have any questions, just reply to this email.');
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
   const text = textLines.join('\n');
 
   const htmlAmount = formattedAmount
-    ? `<p style="margin:0 0 16px;">Payment received: <strong>${escapeHtml(
+    ? `<p style="margin:0 0 16px;color:#0f172a;">Payment received: <strong>${escapeHtml(
         formattedAmount
       )}</strong></p>`
     : '';
   const htmlPaidAt = formattedPaidAt
-    ? `<p style="margin:0 0 16px;">Paid at: <strong>${escapeHtml(
+    ? `<p style="margin:0 0 16px;color:#0f172a;">Paid at: <strong>${escapeHtml(
         formattedPaidAt
       )}</strong></p>`
     : '';
 
-  const html = `
-  <p>Hi ${escapeHtml(name || 'there')},</p>
-  <p>Thank you for your subscription! Your support helps keep our Plex server running.</p>
-  ${htmlAmount}
-  ${htmlPaidAt}
-  ${dashboardHtml}
-  <p style="font-size:14px;color:#4b5563;">Subscription ID: ${escapeHtml(
-    subscriptionId
-  )}</p>
-  <p>If you have any questions, just reply to this email.</p>
-  <p style="margin-top:24px;">— Plex Donate</p>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'success',
+    subject,
+    badge: 'Subscription Active',
+    recipientName: name,
+    intro: 'Thank you for your subscription! Your support helps keep our Plex server running.',
+    bodyHtml:
+      htmlAmount +
+      htmlPaidAt +
+      buildEmailDetailPanelHtml(
+        'Subscription details',
+        [`Subscription ID: ${subscriptionId}`],
+        getEmailTonePalette('success')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you have any questions, just reply to this email.</p>',
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -539,7 +707,6 @@ async function sendSubscriptionThankYouEmail(
     html,
   });
 }
-
 async function sendAccountWelcomeEmail(
   { to, name, loginUrl, verificationUrl },
   overrideSettings
@@ -614,25 +781,35 @@ async function sendAccountWelcomeEmail(
   }
 
   lines.push('');
-  lines.push('— Plex Donate');
+  lines.push('-- Plex Donate');
 
   const text = lines.join('\n');
 
-  const html = `
-  <p>Hi ${recipientName},</p>
-  <p>Thanks for setting up your Plex Donate dashboard account. Use the button below to confirm your email address.</p>
-  <p style="text-align:center;margin:24px 0;">
-    <a href="${verificationUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Verify Email</a>
-  </p>
-  <p>Once verified you can manage your dashboard anytime at <a href="${dashboardUrl}">${dashboardUrl}</a>.</p>
-  ${dashboardHtml}
-  <p>${
-    supportUrl
-      ? `If you did not request this email or need help, visit <a href="${safeSupportUrl}">${safeSupportUrl}</a> to contact support instead of replying.`
-      : 'If you did not request this email or need help, visit your dashboard support center to contact us instead of replying.'
-  }</p>
-  <p style="margin-top:24px;">— Plex Donate</p>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: 'Verify Email',
+    recipientName,
+    intro:
+      'Thanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access.',
+    bodyHtml:
+      buildEmailActionButtonHtml(
+        'Verify Email',
+        verificationUrl,
+        getEmailTonePalette('brand')
+      ) +
+      `<p style="margin:0 0 16px;color:#0f172a;">Once verified you can manage your dashboard anytime at <a href="${escapeHtml(
+        dashboardUrl
+      )}" style="color:#2563eb;text-decoration:underline;">${escapeHtml(
+        dashboardUrl
+      )}</a>.</p>` +
+      `<p style="margin:0 0 16px;color:#0f172a;">${
+        supportUrl
+          ? `If you did not request this email or need help, visit <a href="${safeSupportUrl}" style="color:#2563eb;text-decoration:underline;">${safeSupportUrl}</a> to contact support instead of replying.`
+          : 'If you did not request this email or need help, visit your dashboard support center to contact us instead of replying.'
+      }</p>`,
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -642,7 +819,6 @@ async function sendAccountWelcomeEmail(
     html,
   });
 }
-
 async function sendPasswordResetEmail(
   { to, name, resetUrl, loginUrl },
   overrideSettings
@@ -661,7 +837,6 @@ async function sendPasswordResetEmail(
   });
   const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
   const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
-  const safeResetUrl = escapeHtml(resetUrl);
 
   const textLines = [
     `Hi ${recipientName},`,
@@ -680,19 +855,25 @@ async function sendPasswordResetEmail(
   }
 
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
   const text = textLines.join('\n');
 
-  const html = `
-  <p>Hi ${escapeHtml(recipientName)},</p>
-  <p>We received a request to reset your Plex Donate dashboard password. Use the button below to choose a new password.</p>
-  <p style="text-align:center;margin:24px 0;">
-    <a href="${safeResetUrl}" style="display:inline-block;background:#6366f1;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:600;">Reset password</a>
-  </p>
-  <p style="font-size:14px;color:#4b5563;">If you did not request this, you can safely ignore this email.</p>
-  ${dashboardHtml}
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'warning',
+    subject,
+    badge: 'Password Reset',
+    recipientName,
+    intro: 'We received a request to reset your Plex Donate dashboard password.',
+    bodyHtml:
+      buildEmailActionButtonHtml(
+        'Reset Password',
+        resetUrl,
+        getEmailTonePalette('warning')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you did not request this, you can safely ignore this email.</p>',
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -702,7 +883,6 @@ async function sendPasswordResetEmail(
     html,
   });
 }
-
 async function sendCancellationEmail(
   { to, name, subscriptionId, paidThrough },
   overrideSettings
@@ -739,7 +919,7 @@ async function sendCancellationEmail(
   textLines.push('');
   textLines.push('If you have any questions, just reply to this email.');
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
   const text = textLines.join('\n');
 
@@ -747,16 +927,23 @@ async function sendCancellationEmail(
     ? `Your Plex access will remain active until <strong>${displayDate}</strong>.`
     : 'Your Plex access has now ended.';
 
-  const html = `
-  <p>Hi ${name || 'there'},</p>
-  <p>Thank you for supporting our Plex server.</p>
-  <p>${htmlAccessText}</p>
-  <p>If you'd like to come back, you can restart your support anytime by visiting the donation portal and starting a new subscription with the same email address.</p>
-  ${dashboardHtml}
-  <p style="font-size:14px;color:#4b5563;">Subscription ID: ${subscriptionId}</p>
-  <p>If you have any questions, just reply to this email.</p>
-  <p style="margin-top:24px;">— Plex Donate</p>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'warning',
+    subject,
+    badge: 'Access Update',
+    recipientName: name,
+    intro: 'Thank you for supporting our Plex server.',
+    bodyHtml:
+      `<p style="margin:0 0 16px;color:#0f172a;">${htmlAccessText}</p>` +
+      `<p style="margin:0 0 16px;color:#0f172a;">If you'd like to come back, you can restart your support anytime by visiting the donation portal and starting a new subscription with the same email address.</p>` +
+      buildEmailDetailPanelHtml(
+        'Subscription details',
+        [`Subscription ID: ${subscriptionId}`],
+        getEmailTonePalette('warning')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you have any questions, just reply to this email.</p>',
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -766,7 +953,6 @@ async function sendCancellationEmail(
     html,
   });
 }
-
 async function sendTrialEndingReminderEmail(
   { to, name, accessExpiresAt },
   overrideSettings
@@ -799,19 +985,21 @@ async function sendTrialEndingReminderEmail(
   textLines.push('');
   textLines.push('If you have questions or need help subscribing, just reply to this email.');
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
   const text = textLines.join('\n');
 
-  const safeAccessText = escapeHtml(accessText);
-  const html = `
-  <p>Hi ${escapeHtml(name || 'there')},</p>
-  <p>${safeAccessText}</p>
-  <p>Keep your Plex access going by starting a subscription before your trial ends.</p>
-  ${dashboardHtml}
-  <p style="font-size:14px;color:#4b5563;">If you need help subscribing, just reply to this email.</p>
-  <p style="margin-top:24px;">— Plex Donate</p>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'warning',
+    subject,
+    badge: 'Trial Ending',
+    recipientName: name,
+    intro: accessText,
+    bodyHtml:
+      '<p style="margin:0 0 16px;color:#0f172a;">Keep your Plex access going by starting a subscription before your trial ends.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you need help subscribing, just reply to this email.</p>',
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -821,7 +1009,6 @@ async function sendTrialEndingReminderEmail(
     html,
   });
 }
-
 async function sendUpsStatusEmail(
   {
     to,
@@ -853,12 +1040,27 @@ async function sendUpsStatusEmail(
   const recipientName = name || 'there';
   const displayOccurredAt = formatAccessEndDate(occurredAt);
   const displayRuntime = formatRuntimeDuration(runtimeSeconds);
+  const dashboardUrl = resolveDashboardUrl();
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
   const hasBatteryPercent = Number.isFinite(Number(batteryChargePercent));
   const displayBatteryPercent = hasBatteryPercent
     ? `${Math.round(Number(batteryChargePercent))}%`
     : '';
   const displayUpsName =
     typeof upsName === 'string' && upsName.trim() ? upsName.trim() : '';
+  const eventTone =
+    normalizedEvent === 'power_restored'
+      ? 'success'
+      : normalizedEvent === 'shutdown_imminent'
+      ? 'danger'
+      : 'warning';
+  const eventLabel =
+    normalizedEvent === 'power_restored'
+      ? 'Power Restored'
+      : normalizedEvent === 'shutdown_imminent'
+      ? 'Shutdown Imminent'
+      : 'Power Outage';
 
   const subject =
     normalizedEvent === 'power_outage'
@@ -888,15 +1090,16 @@ async function sendUpsStatusEmail(
     detailLines.push(`Reported at: ${displayOccurredAt}`);
   }
 
-  const textLines = [
-    `Hi ${recipientName},`,
-    '',
-    intro,
-  ];
+  const textLines = [`Hi ${recipientName},`, '', intro];
 
   if (detailLines.length > 0) {
     textLines.push('');
     textLines.push(...detailLines);
+  }
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
   }
 
   textLines.push('');
@@ -908,37 +1111,31 @@ async function sendUpsStatusEmail(
       : 'Please expect Plex to go offline shortly until utility power returns.'
   );
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
-  const htmlDetails =
-    detailLines.length > 0
-      ? `
-  <ul style="margin:0 0 16px 20px;padding:0;color:#111827;">
-    ${detailLines
-      .map((line) => `<li style="margin:0 0 8px;">${escapeHtml(line)}</li>`)
-      .join('')}
-  </ul>
-  `
-      : '';
+  const htmlDetails = buildEmailDetailPanelHtml(
+    'System details',
+    detailLines,
+    getEmailTonePalette(eventTone)
+  );
 
-  const html = `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
-    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(
-      subject
-    )}</h2>
-    <p style="margin:0 0 16px;">Hi ${escapeHtml(recipientName)},</p>
-    <p style="margin:0 0 16px;">${escapeHtml(intro)}</p>
-    ${htmlDetails}
-    <p style="margin:0 0 16px;">${
-      normalizedEvent === 'power_outage'
-        ? 'We will send another update when power returns.'
-        : normalizedEvent === 'power_restored'
-        ? 'Thank you for your patience.'
-        : 'Please expect Plex to go offline shortly until utility power returns.'
-    }</p>
-    <p style="margin:24px 0 0;">— Plex Donate</p>
-  </div>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: eventTone,
+    subject,
+    badge: eventLabel,
+    recipientName,
+    intro,
+    bodyHtml:
+      htmlDetails +
+      `<p style="margin:0 0 16px;color:#0f172a;">${
+        normalizedEvent === 'power_outage'
+          ? 'We will send another update when power returns.'
+          : normalizedEvent === 'power_restored'
+          ? 'Thank you for your patience.'
+          : 'Please expect Plex to go offline shortly until utility power returns.'
+      }</p>`,
+    dashboardHtml,
+  });
 
   await mailer.sendMail({
     from: smtp.from,
@@ -948,7 +1145,6 @@ async function sendUpsStatusEmail(
     html,
   });
 }
-
 function formatSupportEmailHtml({
   heading,
   subject,
@@ -957,30 +1153,37 @@ function formatSupportEmailHtml({
   body,
   dashboardUrl,
 }) {
-  const safeHeading = escapeHtml(heading);
-  const safeSubject = escapeHtml(subject || 'Support request');
-  const safeActor = escapeHtml(actorName || 'Supporter');
+  const displayActor = actorName || 'Supporter';
   const paragraphs = String(body || '')
     .split(/\r?\n+/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0)
-    .map((paragraph) => `<p style="margin:0 0 12px;">${escapeHtml(paragraph)}</p>`)
+    .map(
+      (paragraph) =>
+        `<p style="margin:0 0 12px;color:#0f172a;">${escapeHtml(paragraph)}</p>`
+    )
     .join('');
-  const bodyHtml = paragraphs || `<p style="margin:0 0 12px;">${escapeHtml(body || '')}</p>`;
+  const bodyHtml =
+    paragraphs ||
+    `<p style="margin:0 0 12px;color:#0f172a;">${escapeHtml(body || '')}</p>`;
   const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
-  return `
-  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#111827;line-height:1.6;">
-    <h2 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${safeHeading}</h2>
-    <p style="margin:0 0 12px;">Subject: <strong>${safeSubject}</strong></p>
-    <p style="margin:0 0 12px;">Request ID: <strong>${escapeHtml(String(requestId || ''))}</strong></p>
-    <p style="margin:12px 0 12px;">${safeActor} wrote:</p>
-    <div style="background:#f8fafc;border:1px solid #cbd5f5;border-radius:8px;padding:16px;">${bodyHtml}</div>
-    ${dashboardHtml}
-    <p style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
-  </div>
-  `;
-}
 
+  return buildEmailFrameHtml({
+    tone: 'brand',
+    subject: heading || 'Support request update',
+    badge: 'Support',
+    recipientName: displayActor,
+    intro: subject
+      ? `Subject: ${subject} | Request ID: ${requestId || 'Not provided'}`
+      : `Request ID: ${requestId || 'Not provided'}`,
+    bodyHtml:
+      `<p style="margin:0 0 12px;color:#0f172a;">${escapeHtml(
+        displayActor
+      )} wrote:</p>` +
+      `<div style="background:#f8fafc;border:1px solid #cbd5f5;border-radius:12px;padding:16px;">${bodyHtml}</div>`,
+    dashboardHtml,
+  });
+}
 function formatSupportEmailText({
   heading,
   subject,
@@ -1122,27 +1325,17 @@ function formatAdminFactsHtml(facts) {
     return '';
   }
 
-  const items = facts
-    .filter((fact) => fact && fact.label)
-    .map((fact) => {
-      const label = escapeHtml(fact.label);
-      const value = escapeHtml(
-        fact.value == null ? 'Not provided' : String(fact.value)
-      );
-      return `
-        <li style="margin-bottom:6px;font-size:15px;color:#0f172a;">
-          <strong style="color:#111827;">${label}:</strong>
-          <span style="color:#111827;">${value}</span>
-        </li>
-      `;
-    })
-    .join('');
-
-  return `
-    <ul style="list-style:none;padding:0;margin:12px 0 0;">${items}</ul>
-  `;
+  return buildEmailDetailPanelHtml(
+    'Key details',
+    facts
+      .filter((fact) => fact && fact.label)
+      .map((fact) => {
+        const value = fact.value == null ? 'Not provided' : String(fact.value);
+        return `${fact.label}: ${value}`;
+      }),
+    getEmailTonePalette('brand')
+  );
 }
-
 function formatAdminFactsText(facts) {
   if (!Array.isArray(facts) || facts.length === 0) {
     return '';
@@ -1164,14 +1357,12 @@ function formatAdminNotificationEmail({
   facts = [],
   dashboardUrl,
 }) {
-  const safeHeading = escapeHtml(heading || 'Admin notification');
-  const safeIntro = escapeHtml(intro || 'A new event occurred in Plex Donate.');
   const factsHtml = formatAdminFactsHtml(facts);
   const factsText = formatAdminFactsText(facts);
   const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
   const dashboardText = buildDashboardAccessText(dashboardUrl);
 
-  const textLines = [safeHeading, '', intro || 'A new event occurred.'];
+  const textLines = [heading || 'Admin notification', '', intro || 'A new event occurred.'];
   if (factsText) {
     textLines.push('');
     textLines.push(factsText);
@@ -1181,63 +1372,17 @@ function formatAdminNotificationEmail({
     textLines.push(dashboardText);
   }
   textLines.push('');
-  textLines.push('— Plex Donate');
+  textLines.push('-- Plex Donate');
 
-  const html = `
-  <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="color-scheme" content="light dark">
-      <meta name="supported-color-schemes" content="light dark">
-      <style>
-        @media (prefers-color-scheme: dark) {
-          body,
-          .email-shell {
-            background-color: #0f172a !important;
-          }
-          .email-card {
-            background-color: #111827 !important;
-            border-color: #1f2937 !important;
-          }
-          .email-header {
-            background-color: #111827 !important;
-          }
-          .email-body,
-          .email-body p,
-          .email-body li,
-          .email-body span {
-            color: #f8fafc !important;
-          }
-          .email-body a {
-            color: #a5b4fc !important;
-          }
-          .email-kicker {
-            color: #a5b4fc !important;
-          }
-          .email-footer {
-            color: #cbd5f5 !important;
-          }
-        }
-      </style>
-    </head>
-    <body style="margin:0;padding:0;">
-      <div class="email-shell" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;padding:20px;">
-        <div class="email-card" style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;box-shadow:0 18px 50px -24px rgba(79,70,229,0.45);">
-          <div class="email-header" style="background:#111827;color:#e5e7eb;padding:20px 24px;">
-            <p class="email-kicker" style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:#a5b4fc;">Plex Donate</p>
-            <h2 style="margin:0;font-size:22px;line-height:1.3;color:#f8fafc;background-color:#111827;">${safeHeading}</h2>
-          </div>
-          <div class="email-body" style="padding:22px 24px;color:#0f172a;">
-            <p style="margin:0 0 12px;font-size:16px;color:#0f172a;background-color:#ffffff;">${safeIntro}</p>
-            ${factsHtml}
-            ${dashboardHtml}
-            <p class="email-footer" style="margin:24px 0 0;color:#4b5563;font-size:14px;">— Plex Donate</p>
-          </div>
-        </div>
-      </div>
-    </body>
-  </html>
-  `;
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject: heading || 'Admin notification',
+    badge: 'Admin',
+    recipientName: 'Admin',
+    intro: intro || 'A new event occurred in Plex Donate.',
+    bodyHtml: factsHtml,
+    dashboardHtml,
+  });
 
   return { html, text: textLines.join('\n') };
 }
@@ -1295,3 +1440,5 @@ module.exports = {
   resolveAdminDashboardUrl,
   sendAdminNotificationEmail,
 };
+
+
