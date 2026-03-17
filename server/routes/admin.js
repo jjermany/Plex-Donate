@@ -71,6 +71,56 @@ const {
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const PENDING_ADMIN_LOGIN_TTL_MS = 10 * 60 * 1000;
 
+function normalizeEmailAddress(value) {
+  if (!value) {
+    return '';
+  }
+
+  const raw = String(value).trim();
+  const angleMatch = raw.match(/<([^>]+)>/);
+  if (angleMatch && angleMatch[1]) {
+    return angleMatch[1].trim().toLowerCase();
+  }
+
+  return raw.toLowerCase();
+}
+
+function resolveUpsTestRecipient(smtpConfig) {
+  let notifications = null;
+  try {
+    notifications = settingsStore.getNotificationSettings();
+  } catch (err) {
+    notifications = null;
+  }
+
+  const explicit =
+    notifications && notifications.adminEmail
+      ? String(notifications.adminEmail).trim()
+      : '';
+  if (explicit) {
+    return {
+      email: explicit,
+      normalizedEmail: normalizeEmailAddress(explicit),
+      name: 'Server owner',
+    };
+  }
+
+  const fallback =
+    (smtpConfig && smtpConfig.supportNotificationEmail
+      ? String(smtpConfig.supportNotificationEmail).trim()
+      : '') ||
+    (smtpConfig && smtpConfig.from ? String(smtpConfig.from).trim() : '');
+  if (!fallback) {
+    return null;
+  }
+
+  return {
+    email: fallback,
+    normalizedEmail: normalizeEmailAddress(fallback),
+    name: 'Server owner',
+  };
+}
+
 function notifyDonorOfSupportReply(thread) {
   if (!thread || !thread.request || !Array.isArray(thread.messages)) {
     return;
@@ -1253,6 +1303,64 @@ router.post(
       success: true,
       sent: sentCount,
       skipped: donors.length - recipients.length,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/automation/ups/test',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const overrides = req.body || {};
+    const smtpPreview = settingsStore.previewGroup('smtp', overrides);
+
+    let smtpConfig;
+    try {
+      smtpConfig = emailService.getSmtpConfig(smtpPreview);
+    } catch (err) {
+      return res.status(400).json({
+        error: err.message || 'SMTP configuration is missing',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const recipient = resolveUpsTestRecipient(smtpConfig);
+    if (!recipient || !recipient.normalizedEmail) {
+      return res.status(400).json({
+        error: 'Configure an admin email, support notification email, or SMTP from address first.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    try {
+      await emailService.sendUpsStatusEmail(
+        {
+          to: recipient.email,
+          name: recipient.name,
+          event: 'power_outage',
+          upsName: 'UPS Test Event',
+          batteryChargePercent: 100,
+          runtimeSeconds: 900,
+          occurredAt: new Date().toISOString(),
+        },
+        smtpConfig
+      );
+    } catch (err) {
+      logger.warn('Failed to send UPS test email', err.message);
+      return res.status(500).json({
+        error: err.message || 'Failed to send UPS test email.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    logEvent('automation.ups.test.email.sent', {
+      recipientEmail: recipient.normalizedEmail,
+    });
+
+    return res.json({
+      success: true,
+      message: `UPS test email sent to ${recipient.normalizedEmail}.`,
       csrfToken: res.locals.csrfToken,
     });
   })

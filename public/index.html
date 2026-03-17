@@ -3784,6 +3784,7 @@
                 <div class="form-actions">
                   <button type="submit" class="secondary">Save email settings</button>
                   <button type="button" data-action="test">Test email delivery</button>
+                  <button type="button" data-action="test-ups">Send UPS test email</button>
                 </div>
               </form>
 
@@ -8955,6 +8956,34 @@
               setFormStatus(
                 form,
                 err.message || 'Failed to verify settings',
+                'error'
+              );
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+            return;
+          }
+
+          if (action === 'test-ups') {
+            const payload = getFormPayload(form);
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Sending UPS test email…');
+              const response = await api('/api/admin/automation/ups/test', {
+                method: 'POST',
+                body: payload,
+              });
+              setFormStatus(
+                form,
+                response.message || 'UPS test email sent successfully.',
+                'success'
+              );
+              scheduleStatusClear(form);
+            } catch (err) {
+              setFormStatus(
+                form,
+                err.message || 'Failed to send UPS test email.',
                 'error'
               );
             } finally {
