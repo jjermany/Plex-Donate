@@ -9,6 +9,7 @@ const {
   logEvent,
 } = require('../db');
 const emailService = require('../services/email');
+const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -104,8 +105,59 @@ function normalizeOptionalNumber(value) {
   return numeric;
 }
 
+function normalizeEmail(value) {
+  if (!value) {
+    return '';
+  }
+
+  const raw = String(value).trim().toLowerCase();
+  const angleMatch = raw.match(/<([^>]+)>/);
+  if (angleMatch && angleMatch[1]) {
+    return angleMatch[1].trim().toLowerCase();
+  }
+
+  return raw;
+}
+
+function getUpsAdminRecipient(smtpConfig) {
+  let notifications = null;
+  try {
+    notifications = settingsStore.getNotificationSettings();
+  } catch (err) {
+    notifications = null;
+  }
+
+  const explicit =
+    notifications && notifications.adminEmail
+      ? String(notifications.adminEmail).trim()
+      : '';
+  if (explicit) {
+    return {
+      email: explicit,
+      name: 'Server owner',
+      type: 'admin',
+    };
+  }
+
+  const fallback =
+    (smtpConfig && smtpConfig.supportNotificationEmail
+      ? String(smtpConfig.supportNotificationEmail).trim()
+      : '') ||
+    (smtpConfig && smtpConfig.from ? String(smtpConfig.from).trim() : '');
+
+  if (!fallback) {
+    return null;
+  }
+
+  return {
+    email: fallback,
+    name: 'Server owner',
+    type: 'admin',
+  };
+}
+
 function listUpsRecipients() {
-  return listDonorsWithDetails()
+  const recipients = listDonorsWithDetails()
     .filter((donor) => {
       const email = donor && donor.email ? String(donor.email).trim() : '';
       const status =
@@ -117,7 +169,28 @@ function listUpsRecipients() {
       name: donor && donor.name ? String(donor.name).trim() : '',
       status: donor && donor.status ? String(donor.status).trim().toLowerCase() : '',
       donorId: donor && donor.id ? donor.id : null,
+      type: 'donor',
     }));
+
+  return recipients;
+}
+
+function buildUpsRecipients(smtpConfig) {
+  const combined = listUpsRecipients();
+  const adminRecipient = getUpsAdminRecipient(smtpConfig);
+  if (adminRecipient) {
+    combined.push(adminRecipient);
+  }
+
+  const seen = new Set();
+  return combined.filter((recipient) => {
+    const normalized = normalizeEmail(recipient && recipient.email);
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+    seen.add(normalized);
+    return true;
+  });
 }
 
 router.use(webhookLimiter);
@@ -190,7 +263,7 @@ router.post(
       });
     }
 
-    const recipients = listUpsRecipients();
+    const recipients = buildUpsRecipients(smtpConfig);
     let sentCount = 0;
 
     try {

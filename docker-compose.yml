@@ -7,6 +7,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8080
+      - UPS_WEBHOOK_TOKEN=change-me
     ports:
       - "8080:8080"
     volumes:

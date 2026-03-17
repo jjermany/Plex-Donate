@@ -149,6 +149,65 @@ If you use NUT on Unraid, Plex Donate can send automatic outage and recovery ema
 2. Make sure SMTP is already configured in the Plex Donate admin dashboard.
 3. Have NUT call the webhook with a bearer token when power fails and when power returns.
 
+If you deploy with the included compose example, add the token to the container environment:
+
+```yaml
+environment:
+  - NODE_ENV=production
+  - PORT=8080
+  - UPS_WEBHOOK_TOKEN=change-me
+```
+
+### Unraid NUT plugin UI
+
+If you are using the Unraid NUT plugin UI, the settings that matter are in `upsmon.conf` and `xnut-notify-hooks.sh`.
+
+In `upsmon.conf`, keep your existing `MONITOR`, `SHUTDOWNCMD`, and `POWERDOWNFLAG` lines, then make sure these lines are present:
+
+```conf
+NOTIFYCMD "/etc/nut/xnut-notify-hooks.sh"
+NOTIFYFLAG ONBATT SYSLOG+EXEC
+NOTIFYFLAG ONLINE SYSLOG+EXEC
+```
+
+Do not put the Plex Donate webhook URL or token in `ups.conf`. That file is only for UPS device configuration.
+
+In `xnut-notify-hooks.sh`, update the `ONLINE()` and `ONBATT()` functions so they call Plex Donate. A working example is:
+
+```bash
+#!/bin/bash
+
+PLEX_DONATE_WEBHOOK_URL="https://plex-donate.jalonshomelab.com/api/automation/ups"
+PLEX_DONATE_WEBHOOK_TOKEN="YOUR_UPS_WEBHOOK_TOKEN"
+UPS_NAME="CyberPower"
+
+ONLINE () {
+    echo "ONLINE commands are now executing in background..."
+    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
+      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"event\":\"power_restored\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+}
+
+ONBATT () {
+    echo "ONBATT commands are now executing in background..."
+    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
+      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"event\":\"power_outage\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+}
+
+ONBATT_SHUTDOWN () {
+    echo "ONBATT_SHUTDOWN commands are now executing in background..."
+}
+
+REPLBATT () {
+    echo "REPLBATT commands are now executing in background..."
+}
+```
+
+After saving the NUT files, restart the NUT plugin/service. A manual webhook test is the fastest way to confirm Plex Donate is ready before testing a real UPS event.
+
 Example outage call:
 
 ```bash
