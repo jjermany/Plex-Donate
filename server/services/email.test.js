@@ -236,3 +236,37 @@ test('sendUpsStatusEmail renders restore copy', async (t) => {
   assert.match(message.text, /service should be available again/i);
   assert.match(message.html, /Thank you for your patience\./);
 });
+
+test('sendUpsStatusEmail renders shutdown imminent copy', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendUpsStatusEmail(
+    {
+      to: 'user@example.com',
+      name: 'Shutdown User',
+      event: 'shutdown_imminent',
+      upsName: 'apc-ups',
+      batteryChargePercent: 12,
+      runtimeSeconds: 180,
+      occurredAt: '2026-03-17T16:05:00Z',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Plex server shutdown is imminent');
+  assert.match(message.text, /expected to shut down soon/i);
+  assert.match(message.text, /Battery charge: 12%/);
+  assert.match(message.text, /Estimated runtime remaining: 3 minutes/);
+  assert.match(message.text, /go offline shortly/i);
+});

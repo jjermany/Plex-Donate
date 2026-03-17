@@ -143,11 +143,11 @@ The admin dashboard is served from `http://localhost:3000/` and exposes JSON API
 
 ### UPS outage automation
 
-If you use NUT on Unraid, Plex Donate can send automatic outage and recovery emails to `active` and `trial` users when your UPS state changes.
+If you use NUT on Unraid, Plex Donate can send automatic outage, recovery, and shutdown-imminent emails to `active` and `trial` users when your UPS state changes.
 
 1. Set `UPS_WEBHOOK_TOKEN` in the Plex Donate environment.
 2. Make sure SMTP is already configured in the Plex Donate admin dashboard.
-3. Have NUT call the webhook with a bearer token when power fails and when power returns.
+3. Have NUT call the webhook with a bearer token when power fails, when power returns, and when shutdown is imminent.
 
 If you deploy with the included compose example, add the token to the container environment:
 
@@ -168,11 +168,12 @@ In `upsmon.conf`, keep your existing `MONITOR`, `SHUTDOWNCMD`, and `POWERDOWNFLA
 NOTIFYCMD "/etc/nut/xnut-notify-hooks.sh"
 NOTIFYFLAG ONBATT SYSLOG+EXEC
 NOTIFYFLAG ONLINE SYSLOG+EXEC
+NOTIFYFLAG LOWBATT SYSLOG+EXEC
 ```
 
 Do not put the Plex Donate webhook URL or token in `ups.conf`. That file is only for UPS device configuration.
 
-In `xnut-notify-hooks.sh`, update the `ONLINE()` and `ONBATT()` functions so they call Plex Donate. A working example is:
+In `xnut-notify-hooks.sh`, update the `ONLINE()`, `ONBATT()`, and low-battery or shutdown function so they call Plex Donate. A working example is:
 
 ```bash
 #!/bin/bash
@@ -197,8 +198,20 @@ ONBATT () {
       -d "{\"event\":\"power_outage\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
 }
 
+LOWBATT () {
+    echo "LOWBATT commands are now executing in background..."
+    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
+      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"event\":\"shutdown_imminent\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+}
+
 ONBATT_SHUTDOWN () {
     echo "ONBATT_SHUTDOWN commands are now executing in background..."
+    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
+      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"event\":\"shutdown_imminent\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
 }
 
 REPLBATT () {
@@ -233,6 +246,21 @@ curl -X POST "https://your-domain/api/automation/ups" \
     "event": "power_restored",
     "upsName": "apc-ups",
     "occurredAt": "2026-03-17T16:00:00Z"
+  }'
+```
+
+Example shutdown-imminent call:
+
+```bash
+curl -X POST "https://your-domain/api/automation/ups" \
+  -H "Authorization: Bearer $UPS_WEBHOOK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "shutdown_imminent",
+    "upsName": "apc-ups",
+    "batteryChargePercent": 12,
+    "runtimeSeconds": 180,
+    "occurredAt": "2026-03-17T16:05:00Z"
   }'
 ```
 

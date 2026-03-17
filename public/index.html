@@ -3785,6 +3785,7 @@
                   <button type="submit" class="secondary">Save email settings</button>
                   <button type="button" data-action="test">Test email delivery</button>
                   <button type="button" data-action="test-ups">Send UPS test email</button>
+                  <button type="button" data-action="test-ups-shutdown">Send UPS shutdown test</button>
                 </div>
               </form>
 
@@ -8984,6 +8985,37 @@
               setFormStatus(
                 form,
                 err.message || 'Failed to send UPS test email.',
+                'error'
+              );
+            } finally {
+              button.disabled = previousDisabledState;
+            }
+            return;
+          }
+
+          if (action === 'test-ups-shutdown') {
+            const payload = getFormPayload(form);
+            const previousDisabledState = button.disabled;
+            try {
+              button.disabled = true;
+              setFormStatus(form, 'Sending UPS shutdown test email…');
+              const response = await api('/api/admin/automation/ups/test', {
+                method: 'POST',
+                body: {
+                  ...payload,
+                  event: 'shutdown_imminent',
+                },
+              });
+              setFormStatus(
+                form,
+                response.message || 'UPS shutdown test email sent successfully.',
+                'success'
+              );
+              scheduleStatusClear(form);
+            } catch (err) {
+              setFormStatus(
+                form,
+                err.message || 'Failed to send UPS shutdown test email.',
                 'error'
               );
             } finally {

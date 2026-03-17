@@ -1333,15 +1333,25 @@ router.post(
       });
     }
 
+    const requestedEvent =
+      typeof overrides.event === 'string' ? overrides.event.trim().toLowerCase() : '';
+    const event = ['power_outage', 'shutdown_imminent'].includes(requestedEvent)
+      ? requestedEvent
+      : 'power_outage';
+    const upsName =
+      event === 'shutdown_imminent' ? 'UPS Shutdown Test Event' : 'UPS Test Event';
+    const batteryChargePercent = event === 'shutdown_imminent' ? 12 : 100;
+    const runtimeSeconds = event === 'shutdown_imminent' ? 180 : 900;
+
     try {
       await emailService.sendUpsStatusEmail(
         {
           to: recipient.email,
           name: recipient.name,
-          event: 'power_outage',
-          upsName: 'UPS Test Event',
-          batteryChargePercent: 100,
-          runtimeSeconds: 900,
+          event,
+          upsName,
+          batteryChargePercent,
+          runtimeSeconds,
           occurredAt: new Date().toISOString(),
         },
         smtpConfig
@@ -1356,11 +1366,14 @@ router.post(
 
     logEvent('automation.ups.test.email.sent', {
       recipientEmail: recipient.normalizedEmail,
+      event,
     });
 
     return res.json({
       success: true,
-      message: `UPS test email sent to ${recipient.normalizedEmail}.`,
+      message: `${
+        event === 'shutdown_imminent' ? 'UPS shutdown test email' : 'UPS test email'
+      } sent to ${recipient.normalizedEmail}.`,
       csrfToken: res.locals.csrfToken,
     });
   })

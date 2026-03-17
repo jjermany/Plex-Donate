@@ -288,6 +288,71 @@ test('power_restored emails active and trial donors', { concurrency: false }, as
   }
 });
 
+test('shutdown_imminent emails active and trial donors while keeping outage state', { concurrency: false }, async (t) => {
+  resetDatabase();
+  config.upsWebhookToken = 'test-ups-token';
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+    supportNotificationEmail: 'owner@example.com',
+  });
+  createDonor({
+    email: 'active@example.com',
+    name: 'Active User',
+    status: 'active',
+  });
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    .run(
+      'automation_state',
+      JSON.stringify({
+        currentPowerState: 'outage',
+        lastAcceptedEventType: 'power_outage',
+        lastAcceptedEventAt: '2026-03-17T15:30:00.000Z',
+      })
+    );
+
+  const sentEmails = [];
+  const originalSendUpsStatusEmail = emailService.sendUpsStatusEmail;
+  emailService.sendUpsStatusEmail = async (payload) => {
+    sentEmails.push(payload);
+  };
+  t.after(() => {
+    emailService.sendUpsStatusEmail = originalSendUpsStatusEmail;
+  });
+
+  const app = createApp();
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer test-ups-token',
+      },
+      body: JSON.stringify({
+        event: 'shutdown_imminent',
+        batteryChargePercent: 12,
+        runtimeSeconds: 180,
+      }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.sent, 2);
+    assert.ok(sentEmails.every((entry) => entry.event === 'shutdown_imminent'));
+
+    const automationState = getSetting('automation_state');
+    assert.equal(automationState.currentPowerState, 'outage');
+    assert.equal(automationState.lastAcceptedEventType, 'shutdown_imminent');
+  } finally {
+    await server.close();
+    config.upsWebhookToken = '';
+  }
+});
+
 test('UPS automation deduplicates admin recipient when it matches a donor email', { concurrency: false }, async (t) => {
   resetDatabase();
   config.upsWebhookToken = 'test-ups-token';
@@ -419,6 +484,58 @@ test('repeated power_restored is deduped when already in normal state', { concur
         authorization: 'Bearer test-ups-token',
       },
       body: JSON.stringify({ event: 'power_restored' }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.deduped, true);
+    assert.equal(body.sent, 0);
+    assert.equal(sendCount, 0);
+  } finally {
+    await server.close();
+    config.upsWebhookToken = '';
+  }
+});
+
+test('repeated shutdown_imminent is deduped when already the latest accepted event', { concurrency: false }, async (t) => {
+  resetDatabase();
+  config.upsWebhookToken = 'test-ups-token';
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    .run(
+      'automation_state',
+      JSON.stringify({
+        currentPowerState: 'outage',
+        lastAcceptedEventType: 'shutdown_imminent',
+        lastAcceptedEventAt: '2026-03-17T15:30:00.000Z',
+      })
+    );
+
+  let sendCount = 0;
+  const originalSendUpsStatusEmail = emailService.sendUpsStatusEmail;
+  emailService.sendUpsStatusEmail = async () => {
+    sendCount += 1;
+  };
+  t.after(() => {
+    emailService.sendUpsStatusEmail = originalSendUpsStatusEmail;
+  });
+
+  const app = createApp();
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer test-ups-token',
+      },
+      body: JSON.stringify({ event: 'shutdown_imminent' }),
     });
     assert.equal(response.status, 200);
     const body = await response.json();

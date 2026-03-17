@@ -14,10 +14,15 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 const AUTOMATION_STATE_KEY = 'automation_state';
-const UPS_EVENT_TYPES = new Set(['power_outage', 'power_restored']);
+const UPS_EVENT_TYPES = new Set([
+  'power_outage',
+  'power_restored',
+  'shutdown_imminent',
+]);
 const UPS_POWER_STATES = {
   power_outage: 'outage',
   power_restored: 'normal',
+  shutdown_imminent: 'outage',
 };
 
 function asyncHandler(handler) {
@@ -103,6 +108,14 @@ function normalizeOptionalNumber(value) {
   }
 
   return numeric;
+}
+
+function shouldDeduplicateUpsEvent(currentState, event) {
+  if (event === 'shutdown_imminent') {
+    return currentState.lastAcceptedEventType === 'shutdown_imminent';
+  }
+
+  return currentState.currentPowerState === UPS_POWER_STATES[event];
 }
 
 function normalizeEmail(value) {
@@ -238,7 +251,7 @@ router.post(
 
     const currentState = getAutomationState();
     const nextPowerState = UPS_POWER_STATES[event];
-    if (currentState.currentPowerState === nextPowerState) {
+    if (shouldDeduplicateUpsEvent(currentState, event)) {
       logEvent('automation.ups.event.deduped', {
         event,
         currentPowerState: currentState.currentPowerState,

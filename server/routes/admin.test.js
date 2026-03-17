@@ -1432,6 +1432,58 @@ test('POST /api/admin/automation/ups/test sends a UPS test email to the admin re
   assert.equal(events[0].eventType, 'automation.ups.test.email.sent');
   const payload = JSON.parse(events[0].payload);
   assert.equal(payload.recipientEmail, 'owner@example.com');
+  assert.equal(payload.event, 'power_outage');
+});
+
+test('POST /api/admin/automation/ups/test sends a UPS shutdown test email to the admin recipient', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  settingsStore.updateGroup('notifications', {
+    adminEmail: 'owner@example.com',
+  });
+
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  const sentMessages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      sentMessages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const response = await agent.request('/api/admin/automation/ups/test', {
+    method: 'POST',
+    headers: { 'x-csrf-token': csrfToken },
+    body: { event: 'shutdown_imminent' },
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.ok(body.csrfToken);
+  assert.equal(body.success, true);
+  assert.match(body.message, /shutdown test email sent/i);
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].to, 'owner@example.com');
+  assert.equal(sentMessages[0].subject, 'Plex server shutdown is imminent');
+  assert.match(sentMessages[0].text, /UPS Shutdown Test Event/);
+
+  const events = getRecentEvents(1);
+  assert.equal(events[0].eventType, 'automation.ups.test.email.sent');
+  const payload = JSON.parse(events[0].payload);
+  assert.equal(payload.recipientEmail, 'owner@example.com');
+  assert.equal(payload.event, 'shutdown_imminent');
 });
 
 

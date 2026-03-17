@@ -840,7 +840,11 @@ async function sendUpsStatusEmail(
 
   const normalizedEvent =
     typeof event === 'string' ? event.trim().toLowerCase() : '';
-  if (!['power_outage', 'power_restored'].includes(normalizedEvent)) {
+  if (
+    !['power_outage', 'power_restored', 'shutdown_imminent'].includes(
+      normalizedEvent
+    )
+  ) {
     throw new Error('Valid UPS event is required to send status email');
   }
 
@@ -859,12 +863,16 @@ async function sendUpsStatusEmail(
   const subject =
     normalizedEvent === 'power_outage'
       ? 'Plex server power outage detected'
-      : 'Plex server power has been restored';
+      : normalizedEvent === 'power_restored'
+      ? 'Plex server power has been restored'
+      : 'Plex server shutdown is imminent';
 
   const intro =
     normalizedEvent === 'power_outage'
       ? 'Our Plex server is currently running on UPS battery power and may shut down if the outage continues.'
-      : 'Commercial power has been restored and Plex service should be available again.';
+      : normalizedEvent === 'power_restored'
+      ? 'Commercial power has been restored and Plex service should be available again.'
+      : 'Our Plex server is nearly out of battery runtime and is expected to shut down soon to protect the system.';
 
   const detailLines = [];
   if (displayUpsName) {
@@ -895,7 +903,9 @@ async function sendUpsStatusEmail(
   textLines.push(
     normalizedEvent === 'power_outage'
       ? 'We will send another update when power returns.'
-      : 'Thank you for your patience.'
+      : normalizedEvent === 'power_restored'
+      ? 'Thank you for your patience.'
+      : 'Please expect Plex to go offline shortly until utility power returns.'
   );
   textLines.push('');
   textLines.push('— Plex Donate');
@@ -922,7 +932,9 @@ async function sendUpsStatusEmail(
     <p style="margin:0 0 16px;">${
       normalizedEvent === 'power_outage'
         ? 'We will send another update when power returns.'
-        : 'Thank you for your patience.'
+        : normalizedEvent === 'power_restored'
+        ? 'Thank you for your patience.'
+        : 'Please expect Plex to go offline shortly until utility power returns.'
     }</p>
     <p style="margin:24px 0 0;">— Plex Donate</p>
   </div>
