@@ -498,6 +498,41 @@
         display: grid;
         gap: 12px;
       }
+      .invite-intent-grid {
+        display: grid;
+        gap: 12px;
+        margin: 20px 0 4px;
+      }
+      @media (min-width: 700px) {
+        .invite-intent-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .invite-intent-card {
+        align-items: flex-start;
+        justify-content: flex-start;
+        display: grid;
+        gap: 6px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: rgba(15, 23, 42, 0.46);
+        color: inherit;
+        text-align: left;
+        box-shadow: none;
+      }
+      :root[data-theme='light'] .invite-intent-card {
+        background: rgba(255, 255, 255, 0.76);
+      }
+      .invite-intent-card span {
+        color: var(--page-muted);
+        font-size: 0.9rem;
+        font-weight: 500;
+        line-height: 1.45;
+      }
+      .invite-intent-card.is-active {
+        border-color: rgba(129, 140, 248, 0.72);
+        background: rgba(79, 70, 229, 0.24);
+      }
       .invite-meta {
         display: flex;
         flex-wrap: wrap;
@@ -755,7 +790,7 @@
                 <h3>Activate billing and manage access</h3>
                 <p>
                   Start a trial or link your PayPal subscription. After that, this page can be used
-                  for access recovery and monthly referral invites.
+                  to restore your own access or send monthly referral invites.
                 </p>
               </article>
             </div>
@@ -855,8 +890,7 @@
         <section class="surface" id="payment-panel">
           <h2>Step 2 · Choose your subscription</h2>
           <p id="payment-description" class="muted">
-            After linking Plex, head to the Account tab to start your trial or subscription—your countdown will appear
-            there, along with the controls to manage your billing.
+            After linking Plex, use the button below to start your trial or subscription. Your countdown and billing controls will stay visible here.
           </p>
           <div id="payment-options" style="margin-top: 24px;">
             <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -876,15 +910,35 @@
         </section>
 
         <section class="surface" id="invite-panel">
-          <h2>Step 3 · Share and restore access</h2>
+          <h2>Step 3 · Restore access or send a referral</h2>
           <p class="muted" id="invite-description">
-            After Plex is linked and your donation is confirmed, you can send one referral invite
-            each month. Choose who should receive it—we'll highlight when the next referral unlocks.
-            If you've lost your own library access, you can regenerate your personal link here too.
+            After Plex is linked and your donation is confirmed, choose whether this invite is for your own recovery or for someone new.
           </p>
+          <div class="invite-intent-grid" role="group" aria-label="Invite goal">
+            <button
+              id="invite-intent-referral"
+              class="invite-intent-card is-active"
+              type="button"
+              aria-pressed="true"
+              data-invite-intent="referral"
+            >
+              <strong>Send referral invite</strong>
+              <span>Invite someone else to create their own account.</span>
+            </button>
+            <button
+              id="invite-intent-restore"
+              class="invite-intent-card"
+              type="button"
+              aria-pressed="false"
+              data-invite-intent="restore"
+            >
+              <strong>Restore my Plex access</strong>
+              <span>Send a fresh link to your own Plex account email.</span>
+            </button>
+          </div>
           <form id="invite-form">
             <label>
-              <span>Email for this referral invite</span>
+              <span id="recipient-email-label">Email for this referral invite</span>
               <input
                 id="recipient-email"
                 type="email"
@@ -896,7 +950,7 @@
               />
             </label>
             <label>
-              <span>Recipient name (optional)</span>
+              <span id="display-name-label">Recipient name (optional)</span>
               <input
                 id="display-name"
                 type="text"
@@ -956,6 +1010,7 @@
         hasSevereIssue: false,
         trialRequestPending: false,
       };
+      let inviteIntent = 'referral';
       const DEFAULT_TRIAL_MESSAGE =
         "Link Plex and kick off a 7-day trial before you subscribe. We'll hold your spot while you explore the library.";
       let inviteCooldownTimer = null;
@@ -987,6 +1042,12 @@
       const inviteForm = document.getElementById('invite-form');
       const emailInput = document.getElementById('recipient-email');
       const nameInput = document.getElementById('display-name');
+      const emailInputLabel = document.getElementById('recipient-email-label');
+      const nameInputLabel = document.getElementById('display-name-label');
+      const inviteIntentButtons = [
+        document.getElementById('invite-intent-referral'),
+        document.getElementById('invite-intent-restore'),
+      ].filter(Boolean);
       const generateButton = document.getElementById('generate-button');
       const actionStatus = document.getElementById('action-status');
       const inviteReady = document.getElementById('invite-ready');
@@ -1337,14 +1398,65 @@
         });
       }
 
+      function getCurrentIdentity() {
+        const data = state.data || {};
+        return data.donor || data.prospect || {};
+      }
+
+      function applyInviteIntent(options = {}) {
+        const normalized = inviteIntent === 'restore' ? 'restore' : 'referral';
+        inviteIntentButtons.forEach((button) => {
+          const isActive = button.dataset.inviteIntent === normalized;
+          button.classList.toggle('is-active', isActive);
+          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        if (emailInputLabel) {
+          emailInputLabel.textContent =
+            normalized === 'restore'
+              ? 'Your Plex account email'
+              : 'Email for this referral invite';
+        }
+        if (nameInputLabel) {
+          nameInputLabel.textContent =
+            normalized === 'restore'
+              ? 'Your display name (optional)'
+              : 'Recipient name (optional)';
+        }
+        if (normalized === 'restore' && emailInput) {
+          const identity = getCurrentIdentity();
+          const email = identity && identity.email ? identity.email : '';
+          const shouldPrefill = options.forcePrefill || !emailInput.value.trim();
+          if (email && shouldPrefill && document.activeElement !== emailInput) {
+            emailInput.value = email;
+          }
+        }
+      }
+
+      function setInviteIntent(nextIntent, options = {}) {
+        inviteIntent = nextIntent === 'restore' ? 'restore' : 'referral';
+        applyInviteIntent({ forcePrefill: inviteIntent === 'restore' });
+        if (actionStatus) {
+          actionStatus.textContent =
+            inviteIntent === 'restore'
+              ? 'Use your own email to generate a fresh Plex access link.'
+              : 'Send this setup link to someone else when you are ready.';
+          actionStatus.className = 'status-text info';
+        }
+        if (options.focus && emailInput) {
+          emailInput.focus();
+        }
+      }
+
       function renderInvite(
         invite,
         shareInvite,
         limitReached,
         nextInviteAvailableAt
       ) {
+        applyInviteIntent();
         const limitHit = Boolean(limitReached);
         const isProspect = Boolean(state.isProspect);
+        const restoreMode = inviteIntent === 'restore';
         const nextAvailableDate = parseDate(nextInviteAvailableAt);
         const cooldownActive =
           limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
@@ -1417,6 +1529,33 @@
                 : 'Send referral invite';
             }
           }
+          if (!cooldownActive) {
+            if (shareInviteUsed) {
+              inviteDescription.textContent = restoreMode
+                ? 'This recovery link has already been used. Generate a new one if you still need to restore access.'
+                : 'This referral invite has already been used. Generate a new invite if your recipient still needs access.';
+            } else if (shareInviteExpired) {
+              inviteDescription.textContent = restoreMode
+                ? 'This recovery link expired after seven days. Generate a new one to restore access.'
+                : 'This referral invite expired after seven days. Generate a new invite to share access again.';
+            } else {
+              inviteDescription.textContent = limitHit
+                ? 'This month’s invite has already been used. Contact the server admin if you need a link restored before the next unlock.'
+                : restoreMode
+                ? 'Use your own account email to generate a fresh Plex access link. This uses the same monthly invite allowance as referrals.'
+                : 'Choose who should receive this referral invite and we will generate the setup link instantly.';
+            }
+          }
+          if (generateButton) {
+            generateButton.textContent = limitHit
+              ? 'Invite already sent'
+              : restoreMode
+              ? 'Send recovery invite'
+              : 'Send referral invite';
+            if (cooldownActive) {
+              generateButton.textContent = 'Invite cooling down…';
+            }
+          }
           return;
         }
 
@@ -1456,6 +1595,23 @@
             generateButton.textContent = limitHit
               ? 'Referral invite already sent'
               : 'Send another referral invite';
+          }
+        }
+        if (!cooldownActive) {
+          inviteDescription.textContent = limitHit
+            ? 'Invite ready. Reach out to the server admin if you need the link refreshed before the next unlock.'
+            : restoreMode
+            ? 'Recovery invite ready. Follow the link yourself to restore Plex access.'
+            : 'Referral invite ready. Share the link below with your recipient.';
+        }
+        if (generateButton) {
+          generateButton.textContent = limitHit
+            ? 'Invite already sent'
+            : restoreMode
+            ? 'Send another recovery invite'
+            : 'Send another referral invite';
+          if (cooldownActive) {
+            generateButton.textContent = 'Invite cooling down…';
           }
         }
       }
@@ -1958,6 +2114,12 @@
         });
       }
 
+      inviteIntentButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          setInviteIntent(button.dataset.inviteIntent, { focus: true });
+        });
+      });
+
       inviteForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (
@@ -1982,7 +2144,10 @@
         }
 
         generateButton.disabled = true;
-        actionStatus.textContent = 'Sending referral invite…';
+        actionStatus.textContent =
+          inviteIntent === 'restore'
+            ? 'Sending recovery invite…'
+            : 'Sending referral invite…';
         actionStatus.className = 'status-text info';
 
         let responseData = null;
@@ -1992,7 +2157,10 @@
             headers,
             body: JSON.stringify({
               email,
-              name,
+              name:
+                inviteIntent === 'restore' && !name
+                  ? 'Access recovery'
+                  : name,
               sessionToken: state.sessionToken,
             }),
           });
@@ -2006,7 +2174,9 @@
           }
           render(payload);
             actionStatus.textContent =
-              "Referral invite created! Share the link below with your recipient or follow it yourself if you're restoring access.";
+              inviteIntent === 'restore'
+                ? 'Recovery invite created! Follow the link below to restore Plex access.'
+                : 'Referral invite created! Share the link below with your recipient.';
           actionStatus.className = 'status-text success';
         } catch (err) {
           actionStatus.textContent = err.message;

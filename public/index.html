@@ -2866,6 +2866,47 @@
       .service-summary-card .status-pill {
         width: fit-content;
       }
+      .setup-checklist-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+      .setup-checklist-grid {
+        display: grid;
+        gap: 12px;
+      }
+      @media (min-width: 900px) {
+        .setup-checklist-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+      }
+      .setup-checklist-item {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--panel-border-color);
+        background: var(--input-background);
+      }
+      .setup-checklist-item strong {
+        font-size: 0.92rem;
+      }
+      .setup-checklist-item span:not(.status-pill) {
+        color: var(--text-muted);
+        font-size: 0.86rem;
+        line-height: 1.45;
+      }
+      .setup-checklist-item .status-pill {
+        width: fit-content;
+      }
+      @media (max-width: 700px) {
+        .setup-checklist-header {
+          align-items: stretch;
+          flex-direction: column;
+        }
+      }
       .panel-disclosure {
         margin-top: 20px;
         border: 1px solid var(--panel-border-color);
@@ -3078,7 +3119,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Services
+            Integrations
           </button>
           <button
             type="button"
@@ -3090,7 +3131,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Alerts
+            Notifications
           </button>
           <button
             type="button"
@@ -3126,7 +3167,7 @@
             aria-selected="false"
             tabindex="-1"
           >
-            Workspace
+            Admin account
           </button>
         </nav>
         <section class="panel hidden" id="admin-two-factor-onboarding-banner">
@@ -3137,6 +3178,41 @@
           <div class="form-actions">
             <button id="admin-two-factor-onboarding-start" type="button">Set up 2FA now</button>
             <button id="admin-two-factor-onboarding-skip" type="button" class="secondary">Maybe later</button>
+          </div>
+        </section>
+        <section class="panel hidden" id="admin-setup-checklist">
+          <div class="setup-checklist-header">
+            <div>
+              <h2 style="margin:0 0 4px;">Launch checklist</h2>
+              <p class="muted-text" style="margin:0;">
+                Finish these setup steps before sending subscriber links or Plex invites.
+              </p>
+            </div>
+            <button type="button" class="secondary" id="admin-setup-open-integrations">
+              Open integrations
+            </button>
+          </div>
+          <div class="setup-checklist-grid" aria-label="Admin launch checklist">
+            <article class="setup-checklist-item">
+              <span class="status-pill" id="setup-check-app-state" data-status="pending">Needs review</span>
+              <strong>Public app URL</strong>
+              <span>Used to build setup links that work outside your network.</span>
+            </article>
+            <article class="setup-checklist-item">
+              <span class="status-pill" id="setup-check-email-state" data-status="pending">Needs review</span>
+              <strong>Email delivery</strong>
+              <span>Required for verification, support replies, and invite messages.</span>
+            </article>
+            <article class="setup-checklist-item">
+              <span class="status-pill" id="setup-check-paypal-state" data-status="pending">Needs review</span>
+              <strong>PayPal checkout</strong>
+              <span>Required before subscribers can start billing from the app.</span>
+            </article>
+            <article class="setup-checklist-item">
+              <span class="status-pill" id="setup-check-plex-state" data-status="pending">Needs review</span>
+              <strong>Plex invites</strong>
+              <span>Required before access can be granted from this dashboard.</span>
+            </article>
           </div>
         </section>
         <div class="dashboard-views">
@@ -3389,7 +3465,7 @@
                 <div class="donors-panel-header">
                   <div>
                     <h2 style="margin:0 0 4px;">Subscribers</h2>
-                    <p class="muted-text" style="margin:0;">Open a subscriber to manage access, billing, invite recovery, and status notes from one place.</p>
+                    <p class="muted-text" style="margin:0;">Open a subscriber to manage billing, Plex access, setup links, and status notes from one place.</p>
                   </div>
                 <div class="donors-controls">
                   <button
@@ -3443,7 +3519,7 @@
                     <div class="donor-detail-content">
                       <!-- Quick Actions at top -->
                       <div class="donor-detail-section">
-                        <h4><i data-lucide="zap" style="width: 16px; height: 16px;"></i> Quick Actions</h4>
+                        <h4><i data-lucide="zap" style="width: 16px; height: 16px;"></i> Subscriber actions</h4>
                         <div class="donor-detail-actions" id="donor-detail-actions"></div>
                       </div>
 
@@ -3501,7 +3577,7 @@
 
                       <!-- Invite Details -->
                       <div class="donor-detail-section">
-                        <h4><i data-lucide="link" style="width: 16px; height: 16px;"></i> Invite Details</h4>
+                        <h4><i data-lucide="link" style="width: 16px; height: 16px;"></i> Access and setup links</h4>
                         <div id="donor-detail-invite"></div>
                       </div>
 
@@ -3529,9 +3605,9 @@
               <section class="panel" id="share-links-panel">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
                   <div>
-                    <h2 style="margin:0 0 4px;">Recovery and invite links</h2>
+                    <h2 style="margin:0 0 4px;">Setup and recovery links</h2>
                     <p class="muted-text" style="margin:0;">
-                      Review active share URLs and remove any that are no longer needed.
+                      Review active setup URLs and remove any that are no longer needed.
                     </p>
                   </div>
                 </div>
@@ -3652,7 +3728,7 @@
                       placeholder="https://plexdonate.example.com"
                     />
                     <span class="help"
-                      >Used to build invite page links that work outside your
+                      >Used to build setup links that work outside your
                       network.</span
                     >
                   </label>
@@ -3705,7 +3781,7 @@
                   <label>
                     Monthly price
                     <input name="subscriptionPrice" type="number" min="0" step="0.01" placeholder="5.00" />
-                    <span class="help">Shown on share pages so donors know the recurring amount.</span>
+                    <span class="help">Shown on setup pages so subscribers know the recurring amount.</span>
                   </label>
                   <label>
                     Currency
@@ -3925,7 +4001,7 @@
                 data-action="share"
                 role="menuitem"
               >
-                Copy invite page link
+                Copy setup link
               </button>
               <button
                 type="button"
@@ -3933,7 +4009,7 @@
                 data-action="refresh"
                 role="menuitem"
               >
-                Verify Payment
+                Refresh PayPal status
               </button>
               <button
                 type="button"
@@ -3941,7 +4017,7 @@
                 data-action="share-generate"
                 role="menuitem"
               >
-                Generate invite page link
+                Create new setup link
               </button>
               <button
                 type="button"
@@ -3957,7 +4033,7 @@
                 data-action="revoke"
                 role="menuitem"
               >
-                Revoke invite
+                Revoke Plex invite
               </button>
               <button
                 type="button"
@@ -3973,7 +4049,7 @@
                 data-action="remove"
                 role="menuitem"
               >
-                Remove user
+                Remove subscriber
               </button>
             </div>
           </div>
@@ -3989,7 +4065,7 @@
         <td class="col-last-used"></td>
         <td>
           <div class="actions">
-            <button data-action="copy" class="secondary">Copy link</button>
+            <button data-action="copy" class="secondary">Copy setup link</button>
             <button data-action="remove" class="danger secondary">Remove</button>
           </div>
         </td>
@@ -4009,7 +4085,7 @@
           <div>
             <h3 id="prospect-share-modal-title">Invite a new supporter</h3>
             <p class="muted-text" style="margin:0;">
-              Generate a share page for someone who is not subscribed yet.
+              Create a setup link for someone who is not subscribed yet.
             </p>
           </div>
           <button
@@ -4049,7 +4125,7 @@
           </label>
           <p class="form-status" data-status-for="prospect-share"></p>
           <div class="form-actions">
-            <button type="submit">Generate invite page link</button>
+            <button type="submit">Create setup link</button>
             <button type="button" class="secondary" id="prospect-share-reset">Clear form</button>
           </div>
         </form>
@@ -4322,6 +4398,12 @@
       const supportDeleteButton = document.getElementById('support-delete-thread');
       const supportError = document.getElementById('support-error');
       const integrationTab = document.getElementById('dashboard-tab-integration');
+      const adminSetupChecklist = document.getElementById('admin-setup-checklist');
+      const adminSetupOpenIntegrations = document.getElementById('admin-setup-open-integrations');
+      const setupCheckAppState = document.getElementById('setup-check-app-state');
+      const setupCheckEmailState = document.getElementById('setup-check-email-state');
+      const setupCheckPaypalState = document.getElementById('setup-check-paypal-state');
+      const setupCheckPlexState = document.getElementById('setup-check-plex-state');
       const serviceSummaryAppState = document.getElementById('service-summary-app-state');
       const serviceSummaryAppCopy = document.getElementById('service-summary-app-copy');
       const serviceSummaryPaypalState = document.getElementById('service-summary-paypal-state');
@@ -4577,6 +4659,13 @@
             }
           });
         }
+      }
+
+      if (adminSetupOpenIntegrations) {
+        adminSetupOpenIntegrations.addEventListener('click', () => {
+          dashboardViewPreferenceLocked = true;
+          setActiveDashboardView('integration');
+        });
       }
 
       const storedDashboardView = getStoredDashboardView();
@@ -5609,6 +5698,35 @@
         copyEl.textContent = configured ? configuredText : missingText;
       }
 
+      function setSetupChecklistState(stateEl, configured) {
+        if (!stateEl) {
+          return;
+        }
+        stateEl.dataset.status = configured ? 'active' : 'pending';
+        stateEl.textContent = configured ? 'Ready' : 'Needs review';
+      }
+
+      function getSetupConfiguration(settings) {
+        const nextSettings = settings || {};
+        const app = nextSettings.app || {};
+        const paypal = nextSettings.paypal || {};
+        const smtp = nextSettings.smtp || {};
+        const plex = nextSettings.plex || {};
+        return {
+          appConfigured: [app.publicBaseUrl].some(hasNonEmptyValue),
+          paypalConfigured: [
+            paypal.clientId,
+            paypal.clientSecret,
+            paypal.webhookId,
+            paypal.planId,
+          ].every(hasNonEmptyValue),
+          smtpConfigured: [smtp.host, smtp.user, smtp.pass, smtp.from].every(
+            hasNonEmptyValue
+          ),
+          plexConfigured: [plex.baseUrl, plex.token].every(hasNonEmptyValue),
+        };
+      }
+
       function updateIntegrationBadge(settings) {
         if (!integrationTab) {
           return;
@@ -5683,6 +5801,24 @@
         updateIntegrationBadge(settings);
       }
 
+      function renderSetupChecklist() {
+        if (!adminSetupChecklist) {
+          return;
+        }
+        const setup = getSetupConfiguration(state.settings || {});
+        const allReady =
+          setup.appConfigured &&
+          setup.paypalConfigured &&
+          setup.smtpConfigured &&
+          setup.plexConfigured;
+
+        adminSetupChecklist.classList.toggle('hidden', allReady);
+        setSetupChecklistState(setupCheckAppState, setup.appConfigured);
+        setSetupChecklistState(setupCheckEmailState, setup.smtpConfigured);
+        setSetupChecklistState(setupCheckPaypalState, setup.paypalConfigured);
+        setSetupChecklistState(setupCheckPlexState, setup.plexConfigured);
+      }
+
       async function loadSupportRequests(options = {}) {
         if (!state.authenticated) {
           return false;
@@ -5752,6 +5888,7 @@
           renderSubscribers();
           renderEvents();
           renderSettings();
+          renderSetupChecklist();
           renderSupportPanel();
         } else {
           if (loginPageWrapper) {
@@ -5907,7 +6044,7 @@
 
       async function copyShareUrlWithFeedback(shareUrl, successMessage) {
         if (!shareUrl) {
-          showDashboardToast('Unable to determine invite page URL.', 'error');
+          showDashboardToast('Unable to determine setup link URL.', 'error');
           return false;
         }
 
@@ -5917,7 +6054,7 @@
           return true;
         }
 
-        showDashboardToast(`Copy this invite page URL manually: ${shareUrl}`, 'info', 8000);
+        showDashboardToast(`Copy this setup link manually: ${shareUrl}`, 'info', 8000);
         return false;
       }
 
@@ -6438,6 +6575,7 @@
         renderPaypalPlan();
         renderAnnouncementPreview();
         renderServiceSummary();
+        renderSetupChecklist();
       }
 
       function renderPaypalPlan() {
@@ -6634,8 +6772,8 @@
         setFormStatus(
           prospectShareForm,
           regenerate
-            ? 'Regenerating invite page link…'
-            : 'Generating invite page link…',
+            ? 'Creating a fresh setup link…'
+            : 'Creating setup link…',
           'info'
         );
 
@@ -6697,8 +6835,8 @@
           setFormStatus(
             prospectShareForm,
             copied
-              ? 'Invite page link copied to clipboard!'
-              : 'Invite page link ready! Use the buttons below to share.',
+              ? 'Setup link copied to clipboard!'
+              : 'Setup link ready! Use the buttons below to share.',
             'success'
           );
           openProspectShareModal();
@@ -7173,7 +7311,7 @@
 
           const shareUrl = buildShareUrl(donor.shareLink);
           if (shareUrl) {
-            inviteParts.push(`<a href="${shareUrl}" target="_blank" rel="noopener">Share page</a>`);
+            inviteParts.push(`<a href="${shareUrl}" target="_blank" rel="noopener">Setup page</a>`);
             if (donor.shareLink.lastUsedAt) {
               const usedDate = new Date(donor.shareLink.lastUsedAt);
               inviteParts.push(`<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`);
@@ -7296,36 +7434,36 @@
         } else if (donor.plexPending) {
           inviteBtn.title = 'A Plex invite is already pending — click to check status or resend.';
         } else {
-          inviteBtn.title = 'Send a Plex invite to this user.';
+          inviteBtn.title = 'Send a Plex invite to this subscriber.';
         }
         donorDetailActions.appendChild(inviteBtn);
 
-        // Copy invite page link
+        // Copy setup link
         const shareBtn = document.createElement('button');
         shareBtn.className = 'secondary';
-        shareBtn.textContent = 'Copy invite page link';
+        shareBtn.textContent = 'Copy setup link';
         shareBtn.disabled = !shareUrl;
         shareBtn.dataset.action = 'share';
         shareBtn.dataset.donorId = donor.id;
-        shareBtn.title = shareUrl ? 'Copy the existing invite page link' : 'Generate an invite page link first';
+        shareBtn.title = shareUrl ? 'Copy the existing setup link' : 'Create a setup link first';
         donorDetailActions.appendChild(shareBtn);
 
         // Verify payment
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'secondary';
-        refreshBtn.textContent = 'Verify Payment';
+        refreshBtn.textContent = 'Refresh PayPal status';
         refreshBtn.dataset.action = 'refresh';
         refreshBtn.dataset.donorId = donor.id;
-        refreshBtn.title = 'Re-verify PayPal subscription status';
+        refreshBtn.title = 'Refresh this subscriber from PayPal';
         donorDetailActions.appendChild(refreshBtn);
 
         // Generate new invite link
         const shareGenBtn = document.createElement('button');
         shareGenBtn.className = 'secondary';
-        shareGenBtn.textContent = 'Generate invite page link';
+        shareGenBtn.textContent = 'Create new setup link';
         shareGenBtn.dataset.action = 'share-generate';
         shareGenBtn.dataset.donorId = donor.id;
-        shareGenBtn.title = 'Generate a new invite page link';
+        shareGenBtn.title = 'Create a new setup link for account setup or recovery';
         donorDetailActions.appendChild(shareGenBtn);
 
         // Resend email
@@ -7339,11 +7477,11 @@
         resendBtn.title = canResend ? 'Resend the most recent invite email' : 'No active invite available to resend';
         donorDetailActions.appendChild(resendBtn);
 
-        // Revoke invite
+        // Revoke Plex invite
         const canRevoke = Boolean(activeInvite);
         const revokeBtn = document.createElement('button');
         revokeBtn.className = 'danger secondary';
-        revokeBtn.textContent = 'Revoke invite';
+        revokeBtn.textContent = 'Revoke Plex invite';
         revokeBtn.disabled = !canRevoke;
         revokeBtn.dataset.action = 'revoke';
         revokeBtn.dataset.donorId = donor.id;
@@ -7363,19 +7501,19 @@
         revokePlexBtn.dataset.action = 'revoke-plex';
         revokePlexBtn.dataset.donorId = donor.id;
         revokePlexBtn.title = canRevokePlex
-          ? 'Revoke Plex access for this user'
+          ? 'Revoke Plex access for this subscriber'
           : isRevokedStatus(status)
-          ? 'Plex access is already revoked or expired for this user'
-          : 'Revoke is available only for users with Plex access or pending share';
+          ? 'Plex access is already revoked or expired for this subscriber'
+          : 'Revoke is available only for subscribers with Plex access or a pending share';
         donorDetailActions.appendChild(revokePlexBtn);
 
-        // Remove user
+        // Remove subscriber
         const removeBtn = document.createElement('button');
         removeBtn.className = 'danger secondary';
-        removeBtn.textContent = 'Remove user';
+        removeBtn.textContent = 'Remove subscriber';
         removeBtn.dataset.action = 'remove';
         removeBtn.dataset.donorId = donor.id;
-        removeBtn.title = 'Remove this user and all related records';
+        removeBtn.title = 'Remove this subscriber and all related records';
         donorDetailActions.appendChild(removeBtn);
       }
 
@@ -7460,7 +7598,7 @@
           const row = document.createElement('tr');
           const cell = document.createElement('td');
           cell.colSpan = 5;
-          cell.textContent = 'No users yet.';
+          cell.textContent = 'No subscribers yet.';
           cell.style.color = 'var(--text-muted-soft)';
           row.appendChild(cell);
           subscribersTable.appendChild(row);
@@ -7549,7 +7687,7 @@
           const inviteParts = [];
           if (donor.plexShareState === 'shared') {
             inviteParts.push(
-              '<span class="badge badge-visited" title="This user already has Plex access.">Plex shared</span>'
+              '<span class="badge badge-visited" title="This subscriber already has Plex access.">Plex shared</span>'
             );
           } else if (donor.plexShareState === 'pending') {
             inviteParts.push(
@@ -7585,7 +7723,7 @@
           const shareUrl = buildShareUrl(donor.shareLink);
           if (shareUrl) {
             inviteParts.push(
-              `<a href="${shareUrl}" target="_blank" rel="noopener">Share page</a>`
+              `<a href="${shareUrl}" target="_blank" rel="noopener">Setup page</a>`
             );
             if (donor.shareLink.lastUsedAt) {
               const usedDate = new Date(donor.shareLink.lastUsedAt);
@@ -7626,9 +7764,9 @@
               inviteTitle =
                 'Pending subscribers must activate their subscription before a Plex invite can be sent.';
             } else if (canInvite) {
-              inviteTitle = 'Send a Plex invite to this user.';
+              inviteTitle = 'Send a Plex invite to this subscriber.';
             } else {
-              inviteTitle = 'Plex invite is not available for this user right now.';
+              inviteTitle = 'Plex invite is not available for this subscriber right now.';
             }
             inviteButton.title = inviteTitle;
           }
@@ -7636,12 +7774,12 @@
           if (shareButton) {
             shareButton.disabled = !hasShareUrl;
             shareButton.title = hasShareUrl
-              ? 'Copy the existing invite page link'
-              : 'Generate an invite page link first';
+              ? 'Copy the existing setup link'
+              : 'Create a setup link first';
           }
 
           if (shareGenerateButton) {
-            shareGenerateButton.title = 'Generate a new invite page link';
+            shareGenerateButton.title = 'Create a new setup link for account setup or recovery';
           }
 
           if (resendButton) {
@@ -7669,14 +7807,14 @@
             );
             revokePlexButton.disabled = !canRevokePlex;
             revokePlexButton.title = canRevokePlex
-              ? 'Revoke Plex access for this user'
+              ? 'Revoke Plex access for this subscriber'
               : isRevokedStatus(status)
-              ? 'Plex access is already revoked or expired for this user'
-              : 'Revoke is available only for users with Plex access or pending share';
+              ? 'Plex access is already revoked or expired for this subscriber'
+              : 'Revoke is available only for subscribers with Plex access or a pending share';
           }
 
           if (removeButton) {
-            removeButton.title = 'Remove this user and all related records';
+            removeButton.title = 'Remove this subscriber and all related records';
           }
 
           if (inviteParts.length > 0) {
@@ -8085,7 +8223,7 @@
           const row = document.createElement('tr');
           const cell = document.createElement('td');
           cell.colSpan = 5;
-          cell.textContent = 'No invite page links yet.';
+          cell.textContent = 'No setup links yet.';
           cell.style.color = 'var(--text-muted-soft)';
           row.appendChild(cell);
           shareLinksTable.appendChild(row);
@@ -8113,11 +8251,11 @@
             openButton.type = 'button';
             openButton.className = 'secondary link-open-button';
             openButton.dataset.action = 'open';
-            openButton.textContent = 'Open invite page';
+            openButton.textContent = 'Open setup page';
             openButton.title = shareUrl;
             linkCell.appendChild(openButton);
           } else {
-            linkCell.textContent = 'Pending link configuration';
+            linkCell.textContent = 'Pending setup link configuration';
           }
 
           const ownerName = (() => {
@@ -8717,12 +8855,12 @@
           }
           const copied = await copyTextToClipboard(shareUrl);
           if (copied) {
-            setFormStatus(prospectShareForm, 'Invite page link copied to clipboard!', 'success');
+            setFormStatus(prospectShareForm, 'Setup link copied to clipboard!', 'success');
             scheduleStatusClear(prospectShareForm, 4000);
           } else {
             setFormStatus(
               prospectShareForm,
-              `Copy this invite page link manually: ${shareUrl}`,
+              `Copy this setup link manually: ${shareUrl}`,
               'success'
             );
           }
@@ -9148,15 +9286,15 @@
                 shareLink.url ||
                 (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
               if (!shareUrl) {
-                throw new Error('Unable to determine invite page URL');
+                throw new Error('Unable to determine setup link URL');
               }
               await copyShareUrlWithFeedback(
                 shareUrl,
                 action === 'share-generate'
-                  ? 'New invite page link generated and copied to clipboard.'
+                  ? 'New setup link created and copied to clipboard.'
                   : regenerate
-                    ? 'Invite page link regenerated and copied to clipboard.'
-                    : 'Invite page link copied to clipboard.'
+                    ? 'Setup link regenerated and copied to clipboard.'
+                    : 'Setup link copied to clipboard.'
               );
             } else if (action === 'refresh') {
               requiresReload = false;
@@ -9181,12 +9319,12 @@
             } else if (action === 'resend') {
               await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
             } else if (action === 'revoke') {
-              if (!(await showConfirmModal('Revoke invite', 'Revoke the latest invite for this user? They will lose access to the Plex invite URL.'))) {
+              if (!(await showConfirmModal('Revoke Plex invite', 'Revoke the latest Plex invite for this subscriber? They will lose access to that invite URL.'))) {
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
             } else if (action === 'revoke-plex') {
-              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the user\'s access to your Plex server. They will need a new invite to regain access.'))) {
+              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the subscriber\'s access to your Plex server. They will need a new invite to regain access.'))) {
                 button.disabled = false;
                 return;
               }
@@ -9210,7 +9348,7 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              if (!(await showConfirmModal('Remove user', 'This will permanently delete this user and all related invites, payments, and share links. This action cannot be undone.'))) {
+              if (!(await showConfirmModal('Remove subscriber', 'This will permanently delete this subscriber and all related invites, payments, and setup links. This action cannot be undone.'))) {
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
@@ -9244,7 +9382,7 @@
           const links = Array.isArray(state.shareLinks) ? state.shareLinks : [];
           const link = links.find((item) => String(item.id) === String(linkId));
           if (!link) {
-            showDashboardToast('Unable to locate this invite link.', 'error');
+            showDashboardToast('Unable to locate this setup link.', 'error');
             return;
           }
 
@@ -9252,7 +9390,7 @@
             const shareUrl = buildShareUrl(link);
             if (!shareUrl) {
               showDashboardToast(
-                'This invite link does not have a shareable URL yet.',
+                'This setup link does not have a shareable URL yet.',
                 'error'
               );
               return;
@@ -9270,22 +9408,22 @@
             const shareUrl = buildShareUrl(link);
             if (!shareUrl) {
               showDashboardToast(
-                'This invite link does not have a shareable URL yet.',
+                'This setup link does not have a shareable URL yet.',
                 'error'
               );
               return;
             }
             await copyShareUrlWithFeedback(
               shareUrl,
-              'Invite link copied to clipboard.'
+              'Setup link copied to clipboard.'
             );
             return;
           }
 
           if (action === 'remove') {
             const confirmation = await showConfirmModal(
-              'Remove invite link',
-              'Remove this invite link? Anyone with the URL will lose access to the invite page.'
+              'Remove setup link',
+              'Remove this setup link? Anyone with the URL will lose access to that setup page.'
             );
             if (!confirmation) {
               return;
@@ -9297,7 +9435,7 @@
               await refreshShareLinks();
               renderShareLinks();
             } catch (err) {
-              showDashboardToast(err.message || 'Failed to remove invite link.', 'error');
+              showDashboardToast(err.message || 'Failed to remove setup link.', 'error');
             } finally {
               button.disabled = previousDisabledState;
             }
@@ -9398,15 +9536,15 @@
               const origin = configuredBase || window.location.origin.replace(/\/$/, '');
               const shareUrl = shareLink.url || (shareLink.token ? `${origin}/share/${shareLink.token}` : '');
               if (!shareUrl) {
-                throw new Error('Unable to determine invite page URL');
+                throw new Error('Unable to determine setup link URL');
               }
               await copyShareUrlWithFeedback(
                 shareUrl,
                 action === 'share-generate'
-                  ? 'New invite page link generated and copied to clipboard.'
+                  ? 'New setup link created and copied to clipboard.'
                   : regenerate
-                    ? 'Invite page link regenerated and copied to clipboard.'
-                    : 'Invite page link copied to clipboard.'
+                    ? 'Setup link regenerated and copied to clipboard.'
+                    : 'Setup link copied to clipboard.'
               );
             } else if (action === 'refresh') {
               requiresReload = false;
@@ -9432,7 +9570,7 @@
               const successMessage = (response && response.message) || 'Email resent successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke') {
-              if (!(await showConfirmModal('Revoke invite', 'Revoke this invite? The recipient will lose access to the Plex invite URL.'))) {
+              if (!(await showConfirmModal('Revoke Plex invite', 'Revoke this Plex invite? The recipient will lose access to that invite URL.'))) {
                 button.disabled = false;
                 return;
               }
@@ -9453,7 +9591,7 @@
               const successMessage = (response && response.message) || 'Invite revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke-plex') {
-              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the user\'s access to your Plex server. They will need a new invite to regain access.'))) {
+              if (!(await showConfirmModal('Revoke Plex access', 'This will remove the subscriber\'s access to your Plex server. They will need a new invite to regain access.'))) {
                 button.disabled = false;
                 return;
               }
@@ -9477,7 +9615,7 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              if (!(await showConfirmModal('Remove user', 'Remove this user and all related records? This action cannot be undone.'))) {
+              if (!(await showConfirmModal('Remove subscriber', 'Remove this subscriber and all related records? This action cannot be undone.'))) {
                 button.disabled = false;
                 return;
               }
