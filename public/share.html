@@ -734,8 +734,8 @@
           <h1>Use this page to set up your access in the right order.</h1>
           <p class="lead">
             Create your Plex Donate login, verify your email, then connect the
-            Plex account you actually want to use. Once billing is linked, this
-            page becomes your handoff point for invite recovery and referrals.
+            Plex account you actually want to use. Then start a 7-day risk-free
+            trial with no payment info required, or subscribe when you are ready.
           </p>
           <div class="hero-badges">
             <span class="chip">1. Create account</span>
@@ -744,7 +744,7 @@
           </div>
           <div class="requirements-strip">
             <p class="muted">
-              <strong>Have these ready:</strong> your real Plex account, access to your email inbox, and optionally your PayPal subscription ID if you already subscribed.
+              <strong>Have these ready:</strong> your real Plex account and access to your email inbox. Billing can wait until after the trial.
             </p>
             <div class="requirements-list">
               <div class="requirements-item">
@@ -757,7 +757,7 @@
               </div>
               <div class="requirements-item">
                 <span>Billing</span>
-                <span>Keep your PayPal subscription ID nearby if needed.</span>
+                <span>No payment info is needed for the 7-day trial.</span>
               </div>
             </div>
           </div>
@@ -787,20 +787,19 @@
               </article>
               <article class="journey-card">
                 <span class="journey-step">3</span>
-                <h3>Activate billing and manage access</h3>
+                <h3>Start risk-free, subscribe later</h3>
                 <p>
-                  Start a trial or link your PayPal subscription. After that, this page can be used
-                  to restore your own access or send monthly referral invites.
+                  Start a 7-day trial without billing details. If you decide to stay, subscribe
+                  before the trial ends to keep access uninterrupted.
                 </p>
               </article>
             </div>
             <div id="trial-cta" class="cta hidden">
-              <h3>Preview the library</h3>
+              <h3>7-day risk-free trial</h3>
               <p class="muted small" id="trial-message">
-                Link Plex and kick off a 7-day trial before you subscribe. We'll hold your spot while
-                you explore the library.
+                Link Plex and start watching for 7 days. No payment info is required.
               </p>
-              <button id="trial-button" class="cta-button">Start 7-day trial</button>
+              <button id="trial-button" class="cta-button">Start risk-free trial</button>
               <p id="trial-status" class="status-text small"></p>
             </div>
             <div class="cta">
@@ -848,7 +847,7 @@
               />
             </label>
             <label id="account-subscription-row" class="hidden">
-              <span>PayPal subscription ID (optional)</span>
+              <span>Already subscribed? PayPal subscription ID (optional)</span>
               <input
                 id="account-subscription"
                 type="text"
@@ -857,8 +856,7 @@
                 inputmode="text"
               />
               <p class="helper-text">
-                When your PayPal donation is ready, paste the subscription ID so we can link it
-                automatically.
+                Skip this for the 7-day trial. Only paste an ID if you already subscribed in PayPal.
               </p>
             </label>
             <label>
@@ -888,9 +886,9 @@
         </section>
 
         <section class="surface" id="payment-panel">
-          <h2>Step 2 · Choose your subscription</h2>
+          <h2>Step 2 · Start risk-free or subscribe</h2>
           <p id="payment-description" class="muted">
-            After linking Plex, use the button below to start your trial or subscription. Your countdown and billing controls will stay visible here.
+            Start the 7-day trial without entering billing information. Subscription checkout is here for later, when you decide to keep access.
           </p>
           <div id="payment-options" style="margin-top: 24px;">
             <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -1012,7 +1010,7 @@
       };
       let inviteIntent = 'referral';
       const DEFAULT_TRIAL_MESSAGE =
-        "Link Plex and kick off a 7-day trial before you subscribe. We'll hold your spot while you explore the library.";
+        'Start a 7-day risk-free trial after linking Plex. No payment info is required.';
       let inviteCooldownTimer = null;
       let inviteCooldownTimerType = null;
 
@@ -1305,7 +1303,7 @@
           }
           if (trialButton) {
             trialButton.disabled = true;
-            trialButton.textContent = 'Start 7-day trial';
+            trialButton.textContent = 'Start risk-free trial';
           }
           setTrialStatus('');
           return;
@@ -1314,13 +1312,13 @@
         trialCta.classList.remove('hidden');
 
         let message = DEFAULT_TRIAL_MESSAGE;
-        let buttonLabel = 'Start 7-day trial';
+        let buttonLabel = 'Start risk-free trial';
         let disableButton = false;
         let statusMessage = '';
         let statusTone = 'info';
 
         if (!plexLinked) {
-          message = 'Link your Plex account above to unlock the 7-day trial.';
+          message = 'Link your Plex account above to unlock the 7-day risk-free trial.';
           disableButton = true;
         }
 
@@ -1332,7 +1330,7 @@
         }
 
         if (normalizedStatus === 'trial') {
-          message = 'Your 7-day trial is active.';
+          message = 'Your 7-day risk-free trial is active.';
           buttonLabel = 'Trial in progress';
           disableButton = true;
           statusTone = 'success';
@@ -1351,7 +1349,7 @@
               : inviteMessage;
           }
         } else if (normalizedStatus === 'trial_expired') {
-          message = 'Your free trial has ended. Start a PayPal subscription to keep streaming.';
+          message = 'Your 7-day trial has ended. Start a PayPal subscription to keep streaming.';
           disableButton = true;
           statusMessage = trialExpiresLabel
             ? `Trial ended on ${trialExpiresLabel}.`
@@ -1746,11 +1744,11 @@
             actionStatus.className = 'status-text error';
           } else if (normalizedStatus === 'trial') {
             if (trialCountdownLabel) {
-              actionStatus.textContent = `Your 7-day trial is active. Access expires in ${trialCountdownLabel}. Subscribe to unlock referral invites.`;
+              actionStatus.textContent = `Your 7-day risk-free trial is active. Access expires in ${trialCountdownLabel}. No billing info was needed to start.`;
             } else if (trialExpiresLabel) {
-              actionStatus.textContent = `Your 7-day trial is active. Access expires on ${trialExpiresLabel}. Subscribe to unlock referral invites.`;
+              actionStatus.textContent = `Your 7-day risk-free trial is active. Access expires on ${trialExpiresLabel}. No billing info was needed to start.`;
             } else {
-              actionStatus.textContent = 'Your 7-day trial is active. Subscribe to unlock referral invites.';
+              actionStatus.textContent = 'Your 7-day risk-free trial is active. Subscribe later if you want to keep access.';
             }
             actionStatus.className = 'status-text info';
           } else if (normalizedStatus === 'trial_expired') {

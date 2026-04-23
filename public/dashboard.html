@@ -1719,7 +1719,7 @@
                     />
                   </label>
                   <label>
-                    <span>Subscription ID (optional)</span>
+                    <span>Already subscribed? PayPal subscription ID (optional)</span>
                     <input
                       id="profile-subscription"
                       type="text"
@@ -1729,8 +1729,7 @@
                       spellcheck="false"
                     />
                     <p class="helper-text">
-                      Already have an active subscription? Paste your PayPal subscription ID to
-                      link it to this account.
+                      Skip this for the 7-day trial. Only paste an ID if you already subscribed in PayPal.
                     </p>
                   </label>
                   <div class="cta-actions">
@@ -1921,9 +1920,9 @@
                     <div class="step-header">
                       <span class="step-number" data-step-number="2">2</span>
                       <div>
-                        <h3 class="step-title">Start your trial or subscription</h3>
+                        <h3 class="step-title">Start a risk-free trial</h3>
                         <p id="step-subscription-note" class="muted small">
-                          Once Plex is linked, start your trial or subscription from the actions below. We'll update this step automatically.
+                          Once Plex is linked, start 7 days of access with no payment info required. Subscribe later if you want to keep streaming.
                         </p>
                       </div>
                     </div>
@@ -1944,16 +1943,16 @@
                 </div>
               </article>
               <article class="surface">
-                <h2 class="section-title">Billing and trial</h2>
+                <h2 class="section-title">7-day risk-free trial</h2>
                 <p class="muted">
-                  When Plex is linked and your email is verified, start your trial or open PayPal checkout here without switching tabs.
+                  Start watching for 7 days with no payment information required. PayPal checkout is only needed if you decide to keep access after the trial.
                 </p>
                 <div id="subscription-cta" class="subscription-cta hidden">
                   <button id="trial-button" class="button-secondary" type="button">
-                    Start 7-day trial
+                    Start risk-free trial
                   </button>
                   <button id="subscription-button" class="button-primary" type="button">
-                    Start subscription
+                    Subscribe after trial
                   </button>
                   <p id="subscription-note" class="status-text small">
                     Choose your payment method to get started.
@@ -2293,7 +2292,7 @@
       }
       const defaultTrialButtonLabel = trialButton
         ? trialButton.textContent
-        : 'Start 7-day trial';
+        : 'Start risk-free trial';
       if (trialButton) {
         trialButton.disabled = true;
         trialButton.dataset.available = 'false';
@@ -3756,9 +3755,9 @@
               message = 'Your 7-day trial is active.';
             }
             if (showSubscriptionCta) {
-              message += ' Start a subscription above to keep streaming without interruption.';
+              message += ' Subscribe before the trial ends to keep streaming without interruption.';
             } else {
-              message += ' Add your subscription ID below to keep streaming without interruption.';
+              message += ' No billing info was needed to start. Add a subscription only if you want to keep streaming after the trial.';
             }
             break;
           case 'trial_expired':
@@ -3771,7 +3770,7 @@
             if (showSubscriptionCta) {
               message += ' Start a subscription above to continue access.';
             } else {
-              message += ' Add your subscription ID below to restore access.';
+              message += ' Add a subscription only if you want to restore access.';
             }
             break;
           case 'pending':
@@ -3779,7 +3778,7 @@
             if (!donor || !donor.subscriptionId) {
               if (showSubscriptionCta) {
                 message =
-                  'Start your subscription above or paste an existing subscription ID below to activate your membership.';
+                  'Start the risk-free trial above, or subscribe if you already know you want to keep access.';
               } else {
                 message =
                   'Already subscribed? Add your subscription ID below so we can link it to your account.';
@@ -4140,20 +4139,20 @@
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
-                `Free trial active. Access expires in ${trialCountdown}. Subscribe here before it ends.`;
+                `Risk-free trial active. Access expires in ${trialCountdown}. Subscribe here before it ends.`;
             } else if (trialExpiresOn) {
               stepSubscriptionNote.textContent =
-                `Free trial active until ${trialExpiresOn}. Subscribe here when you're ready.`;
+                `Risk-free trial active until ${trialExpiresOn}. Subscribe here when you're ready.`;
             } else {
               stepSubscriptionNote.textContent =
-                'Free trial active. Manage billing here to keep streaming once it ends.';
+                'Risk-free trial active. Subscribe here if you want to keep streaming once it ends.';
             }
           } else if (isTrialExpired) {
             stepSubscriptionNote.textContent =
               'Your trial has ended. Start a subscription here to restore access.';
           } else if (!subscriptionStarted) {
             stepSubscriptionNote.textContent =
-              'Plex is linked. Start your trial or subscription here when you are ready.';
+              'Plex is linked. Start your 7-day risk-free trial here. No payment info required.';
           } else if (!subscriptionComplete) {
             stepSubscriptionNote.textContent =
               'We are waiting to confirm your first payment. Check Account if you need to update profile details.';
@@ -4475,7 +4474,7 @@
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
-                'Link your Plex account from the Setup & billing tab to unlock subscription checkout or paste your subscription ID once you have it.';
+                'Link your Plex account from the Setup & billing tab to unlock the risk-free trial. Subscription checkout will also be available there when you are ready.';
             } else {
               subscriptionButtonVisible = false;
               subscriptionButtonAvailable = false;
@@ -4520,7 +4519,7 @@
               trialButtonHidden = false;
               trialButtonAvailable = false;
               trialStatusMessage =
-                'Verify your email to unlock the free trial.';
+                'Verify your email to unlock the 7-day risk-free trial.';
               trialStatusTone = 'info';
             } else if (!plexLinked) {
               trialButtonHidden = false;
@@ -4556,7 +4555,7 @@
               trialButtonHidden = false;
               trialButtonAvailable = true;
               trialStatusMessage =
-                'Try the server free for 7 days—no payment required.';
+                'Try the server free for 7 days. No payment info required.';
               trialStatusTone = 'info';
             }
           }
@@ -5148,10 +5147,10 @@
 
           trialButton.disabled = true;
           trialButton.dataset.available = 'false';
-          trialButton.textContent = 'Starting trial…';
+          trialButton.textContent = 'Starting risk-free trial…';
 
           if (trialStatus) {
-            setStatusText(trialStatus, 'Activating your trial…', 'info');
+            setStatusText(trialStatus, 'Activating your 7-day risk-free trial…', 'info');
             trialStatus.classList.add('small');
           }
 
