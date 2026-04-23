@@ -1719,10 +1719,10 @@ test(
           delete require.cache[utilsModulePath];
           const plexUtils = require('../utils/plex');
 
-          const sharedMembersMock = t.mock.method(
+          const currentSharesMock = t.mock.method(
             plexService,
-            'listSharedServerMembers',
-            async () => []
+            'getCurrentPlexShares',
+            async () => ({ success: true, shares: [] })
           );
 
           const context = await plexUtils.loadPlexContext();
@@ -1732,7 +1732,7 @@ test(
           assert.equal(context.users[0].email, 'friend@example.com');
           assert.equal(context.error, null);
 
-          sharedMembersMock.mock.restore();
+          currentSharesMock.mock.restore();
           delete require.cache[utilsModulePath];
         }
       );

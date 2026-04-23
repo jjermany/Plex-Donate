@@ -4906,6 +4906,18 @@
         );
       }
 
+      function loadDashboardDataInBackground() {
+        loadDashboardData().catch((err) => {
+          console.error('Failed to load dashboard data after sign-in', err);
+        });
+      }
+
+      function enterAdminWorkspace() {
+        render();
+        loadDashboardDataInBackground();
+        startDashboardAutoRefresh();
+      }
+
       function storeThemePreference(theme) {
         try {
           localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -5243,6 +5255,16 @@
         }
 
         updateSessionTokenFromResponse(data);
+
+        const isLoginRequest =
+          typeof path === 'string' && path.startsWith('/api/admin/login');
+
+        if (response.status === 401 && isLoginRequest) {
+          const errorMessage = data.error || 'Authentication failed';
+          const error = new Error(errorMessage);
+          error.status = response.status;
+          throw error;
+        }
 
         if (response.status === 401) {
           // Session has expired or user is not authenticated
@@ -8165,8 +8187,7 @@
           state.adminUsername = 'admin';
         }
         if (state.authenticated) {
-          await loadDashboardData();
-          startDashboardAutoRefresh();
+          enterAdminWorkspace();
         } else {
           stopDashboardAutoRefresh();
           resetPendingTwoFactorSetup();
@@ -8394,8 +8415,7 @@
               state.twoFactorPending = false;
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
-              await loadDashboardData();
-              startDashboardAutoRefresh();
+              enterAdminWorkspace();
               setLoginStatus('');
             }
           } catch (err) {
@@ -8703,6 +8723,7 @@
             return;
           }
           setLoginStatus('Verifying code...');
+          isSessionExpiring = false;
           if (loginTotpSubmitButton) {
             loginTotpSubmitButton.disabled = true;
           }
@@ -8719,8 +8740,7 @@
             applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
             loginRateLimitedUntil = null;
             isSessionExpiring = false;
-            await loadDashboardData();
-            startDashboardAutoRefresh();
+            enterAdminWorkspace();
             setLoginStatus('');
           } catch (err) {
             setLoginStatus(err.message || 'Verification failed', 'error');

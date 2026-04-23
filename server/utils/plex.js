@@ -2,11 +2,45 @@ const plexService = require('../services/plex');
 const logger = require('./logger');
 const { isInviteStale } = require('./invite-stale');
 
+const SHARED_MEMBER_WARNING_THROTTLE_MS = 10 * 60 * 1000;
+let lastSharedMemberWarning = { key: '', timestamp: 0 };
+
 function normalizeValue(value) {
   if (value === undefined || value === null) {
     return '';
   }
   return String(value).trim().toLowerCase();
+}
+
+function describePlexContextError(err, fallback) {
+  const message =
+    err && err.message ? String(err.message).trim() : String(fallback || '').trim();
+
+  if (/\b50[0-9]\b/.test(message)) {
+    return 'Plex is temporarily unavailable while checking shared server members. Subscriber Plex status may be stale.';
+  }
+
+  if (/rejected the provided token|401|403/i.test(message)) {
+    return 'Plex rejected the configured token. Check the Plex token in Integrations.';
+  }
+
+  return message || fallback || 'Failed to load Plex status.';
+}
+
+function logSharedMemberWarning(contextSuffix, err) {
+  const message = err && err.message ? String(err.message) : 'Unknown Plex error';
+  const now = Date.now();
+  const key = `${contextSuffix}:${message}`;
+  const shouldLog =
+    key !== lastSharedMemberWarning.key ||
+    now - lastSharedMemberWarning.timestamp >= SHARED_MEMBER_WARNING_THROTTLE_MS;
+
+  if (!shouldLog) {
+    return;
+  }
+
+  lastSharedMemberWarning = { key, timestamp: now };
+  logger.warn(`Failed to load Plex shared server members${contextSuffix}`, message);
 }
 
 function gatherStrings(candidate) {
@@ -202,6 +236,7 @@ async function loadPlexContext({ logContext } = {}) {
       ? [users]
       : [];
     let sharedMembers = [];
+    let sharedMembersError = null;
 
     try {
       // Use getCurrentPlexShares instead of listSharedServerMembers
@@ -213,9 +248,10 @@ async function loadPlexContext({ logContext } = {}) {
         sharedMembers = [];
       }
     } catch (err) {
-      logger.warn(
-        `Failed to load Plex shared server members${contextSuffix}`,
-        err && err.message
+      logSharedMemberWarning(contextSuffix, err);
+      sharedMembersError = describePlexContextError(
+        err,
+        'Failed to load Plex shared server members.'
       );
       sharedMembers = [];
     }
@@ -274,15 +310,19 @@ async function loadPlexContext({ logContext } = {}) {
       .filter(Boolean);
 
     const index = preparePlexUserIndex([...normalizedUsers, ...sharedUsers]);
-    return { configured: true, users: normalizedUsers, index, error: null };
+    return {
+      configured: true,
+      users: normalizedUsers,
+      index,
+      error: sharedMembersError,
+    };
   } catch (err) {
     logger.warn(`Failed to load Plex users${contextSuffix}`, err && err.message);
     return {
       configured: true,
       users: [],
       index: [],
-      error:
-        err && err.message ? String(err.message) : 'Failed to load Plex users',
+      error: describePlexContextError(err, 'Failed to load Plex users.'),
     };
   }
 }
