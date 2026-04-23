@@ -40,6 +40,15 @@ function formatDonorLabel(donor) {
   return name || email || `Donor #${donor.id || 'unknown'}`;
 }
 
+function donorLabelIncludesEmail(donor, donorLabel) {
+  const donorEmail = donor && donor.email;
+  return Boolean(
+    donorEmail &&
+      donorLabel &&
+      String(donorLabel).includes(String(donorEmail).trim())
+  );
+}
+
 function formatTimestamp(value) {
   if (!value) {
     return '';
@@ -95,6 +104,7 @@ async function sendNotification({
 
 async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
   const donorLabel = formatDonorLabel(donor);
+  const includesEmail = donorLabelIncludesEmail(donor, donorLabel);
   await sendNotification({
     enabledKey: 'onDonorCreated',
     subject: `[Admin] New donor account: ${donorLabel}`,
@@ -102,7 +112,7 @@ async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
     intro: `${donorLabel} just created a Plex Donate dashboard account.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      { label: 'Email', value: donor && donor.email },
+      ...(includesEmail ? [] : [{ label: 'Email', value: donor && donor.email }]),
       { label: 'Source', value: source || 'Share link' },
       { label: 'Subscription ID', value: donor && donor.subscriptionId },
       { label: 'Share link ID', value: shareLinkId },
@@ -114,8 +124,7 @@ async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
 
 async function notifyTrialStarted({ donor, route, accessExpiresAt }) {
   const donorLabel = formatDonorLabel(donor);
-  const donorEmail = donor && donor.email;
-  const includesEmail = donorEmail && donorLabel.includes(donorEmail);
+  const includesEmail = donorLabelIncludesEmail(donor, donorLabel);
   await sendNotification({
     enabledKey: 'onTrialStarted',
     subject: `[Admin] Trial started: ${donorLabel}`,
@@ -123,7 +132,7 @@ async function notifyTrialStarted({ donor, route, accessExpiresAt }) {
     intro: `${donorLabel} started a Plex trial.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      ...(includesEmail ? [] : [{ label: 'Email', value: donorEmail }]),
+      ...(includesEmail ? [] : [{ label: 'Email', value: donor && donor.email }]),
       { label: 'Route', value: route || 'share' },
       { label: 'Trial ends', value: formatTimestamp(accessExpiresAt) },
     ],
@@ -140,6 +149,7 @@ async function notifySubscriptionStarted({
   source,
 }) {
   const donorLabel = formatDonorLabel(donor);
+  const includesEmail = donorLabelIncludesEmail(donor, donorLabel);
   await sendNotification({
     enabledKey: 'onSubscriptionStarted',
     subject: `[Admin] Subscription started: ${donorLabel}`,
@@ -147,7 +157,7 @@ async function notifySubscriptionStarted({
     intro: `${donorLabel} is now an active subscriber.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      { label: 'Email', value: donor && donor.email },
+      ...(includesEmail ? [] : [{ label: 'Email', value: donor && donor.email }]),
       { label: 'Subscription ID', value: subscriptionId || (donor && donor.subscriptionId) },
       { label: 'Payment', value: amount ? `${amount} ${currency || ''}`.trim() : null },
       { label: 'Payment at', value: formatTimestamp(paidAt) },
@@ -162,8 +172,7 @@ async function notifyPlexRevoked({ donor, reason, context }) {
     return;
   }
   const donorLabel = formatDonorLabel(donor);
-  const donorEmail = donor && donor.email;
-  const includesEmail = donorEmail && donorLabel.includes(donorEmail);
+  const includesEmail = donorLabelIncludesEmail(donor, donorLabel);
   await sendNotification({
     enabledKey: 'onPlexRevoked',
     subject: `[Admin] Plex access revoked: ${donorLabel}`,
@@ -171,7 +180,7 @@ async function notifyPlexRevoked({ donor, reason, context }) {
     intro: `${donorLabel} no longer has Plex access.`,
     facts: [
       { label: 'Donor', value: donorLabel },
-      ...(includesEmail ? [] : [{ label: 'Email', value: donorEmail }]),
+      ...(includesEmail ? [] : [{ label: 'Email', value: donor && donor.email }]),
       { label: 'Reason', value: reason || 'revoked' },
       { label: 'Context', value: context || 'system' },
       { label: 'Plex Account ID', value: donor && donor.plexAccountId },
