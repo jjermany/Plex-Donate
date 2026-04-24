@@ -34,6 +34,7 @@ const {
   getRecentEvents,
 } = require('../db');
 const { hashPasswordSync, verifyPasswordSync } = require('../utils/passwords');
+const { totp } = require('../utils/totp');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
 const plexService = require('../services/plex');
@@ -59,6 +60,7 @@ function resetDatabase() {
     DELETE FROM support_requests;
     DELETE FROM email_verification_tokens;
     DELETE FROM password_reset_tokens;
+    DELETE FROM donor_two_factor_recovery_codes;
   `);
 }
 
@@ -427,6 +429,204 @@ test('email verification is required before login', async (t) => {
     .prepare('SELECT COUNT(*) AS count FROM email_verification_tokens WHERE donor_id = ?')
     .get(donor.id);
   assert.equal(remainingTokens.count, 0);
+});
+
+test('customer can enable 2FA and finish login with an authenticator code', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'Enable2fa123!';
+  const donor = createDonor({
+    email: 'totp-customer@example.com',
+    name: 'Two Factor Donor',
+    status: 'active',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  let manualEntryKey = '';
+
+  await withTestServer(async (client) => {
+    const loginResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(loginResponse.status, 200);
+    await loginResponse.json();
+
+    const setupResponse = await client.post('/customer/2fa/setup');
+    assert.equal(setupResponse.status, 200);
+    const setupPayload = await setupResponse.json();
+    assert.ok(setupPayload.setup);
+    assert.match(setupPayload.setup.otpauthUrl, /^otpauth:\/\/totp\//);
+    manualEntryKey = setupPayload.setup.manualEntryKey;
+
+    const verifyResponse = await client.post('/customer/2fa/setup/verify', {
+      body: { code: totp(manualEntryKey) },
+    });
+    assert.equal(verifyResponse.status, 200);
+    const verifyPayload = await verifyResponse.json();
+    assert.equal(verifyPayload.twoFactor.enabled, true);
+    assert.equal(Array.isArray(verifyPayload.recoveryCodes), true);
+    assert.equal(verifyPayload.recoveryCodes.length, 8);
+
+    const logoutResponse = await client.post('/customer/logout');
+    assert.equal(logoutResponse.status, 200);
+    await logoutResponse.json();
+
+    const challengeResponse = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(challengeResponse.status, 200);
+    const challengePayload = await challengeResponse.json();
+    assert.equal(challengePayload.authenticated, false);
+    assert.equal(challengePayload.requiresTwoFactor, true);
+
+    const totpResponse = await client.post('/customer/login/totp', {
+      body: { code: totp(manualEntryKey) },
+    });
+    assert.equal(totpResponse.status, 200);
+    const finalPayload = await totpResponse.json();
+    assert.equal(finalPayload.authenticated, true);
+    assert.ok(finalPayload.donor);
+    assert.equal(finalPayload.donor.twoFactor.enabled, true);
+  });
+
+  const refreshed = getDonorById(donor.id);
+  assert.equal(refreshed.twoFactor.enabled, true);
+  const recoveryCodeCount = db
+    .prepare(
+      'SELECT COUNT(*) AS count FROM donor_two_factor_recovery_codes WHERE donor_id = ? AND used_at IS NULL'
+    )
+    .get(donor.id);
+  assert.equal(recoveryCodeCount.count, 8);
+});
+
+test('customer can recover 2FA login with a recovery code and it is single use', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'Recover2fa123!';
+  const donor = createDonor({
+    email: 'recovery-customer@example.com',
+    name: 'Recovery Donor',
+    status: 'active',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  let recoveryCode = '';
+
+  await withTestServer(async (client) => {
+    let response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/2fa/setup');
+    assert.equal(response.status, 200);
+    const setupPayload = await response.json();
+
+    response = await client.post('/customer/2fa/setup/verify', {
+      body: { code: totp(setupPayload.setup.manualEntryKey) },
+    });
+    assert.equal(response.status, 200);
+    const verifyPayload = await response.json();
+    recoveryCode = verifyPayload.recoveryCodes[0];
+
+    response = await client.post('/customer/logout');
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/login/recovery', {
+      body: { recoveryCode },
+    });
+    assert.equal(response.status, 200);
+    const recoveredPayload = await response.json();
+    assert.equal(recoveredPayload.authenticated, true);
+
+    response = await client.post('/customer/logout');
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/login/recovery', {
+      body: { recoveryCode },
+    });
+    assert.equal(response.status, 401);
+    const rejectedPayload = await response.json();
+    assert.match(rejectedPayload.error, /invalid recovery code/i);
+  });
+});
+
+test('customer can regenerate recovery codes and disable 2FA from account settings', async (t) => {
+  resetDatabase();
+  t.after(resetDatabase);
+
+  const password = 'Settings2fa123!';
+  const donor = createDonor({
+    email: 'settings-customer@example.com',
+    name: 'Settings Donor',
+    status: 'active',
+  });
+  updateDonorPassword(donor.id, hashPasswordSync(password));
+  markDonorEmailVerified(donor.id);
+
+  await withTestServer(async (client) => {
+    let response = await client.post('/customer/login', {
+      body: { email: donor.email, password },
+    });
+    assert.equal(response.status, 200);
+    await response.json();
+
+    response = await client.post('/customer/2fa/setup');
+    assert.equal(response.status, 200);
+    const setupPayload = await response.json();
+
+    response = await client.post('/customer/2fa/setup/verify', {
+      body: { code: totp(setupPayload.setup.manualEntryKey) },
+    });
+    assert.equal(response.status, 200);
+    const enablePayload = await response.json();
+    const originalCodes = enablePayload.recoveryCodes.slice();
+
+    response = await client.post('/customer/2fa/recovery-codes/regenerate', {
+      body: { currentPassword: password },
+    });
+    assert.equal(response.status, 200);
+    const regenPayload = await response.json();
+    assert.equal(regenPayload.twoFactor.enabled, true);
+    assert.equal(regenPayload.recoveryCodes.length, 8);
+    assert.notDeepEqual(regenPayload.recoveryCodes, originalCodes);
+
+    response = await client.request('/customer/2fa', {
+      method: 'DELETE',
+      body: { currentPassword: password },
+    });
+    assert.equal(response.status, 200);
+    const disablePayload = await response.json();
+    assert.equal(disablePayload.twoFactor.enabled, false);
+  });
+
+  const refreshed = getDonorById(donor.id);
+  assert.equal(refreshed.twoFactor.enabled, false);
+  const recoveryCodeCount = db
+    .prepare(
+      'SELECT COUNT(*) AS count FROM donor_two_factor_recovery_codes WHERE donor_id = ?'
+    )
+    .get(donor.id);
+  assert.equal(recoveryCodeCount.count, 0);
 });
 
 test(

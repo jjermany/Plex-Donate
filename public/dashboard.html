@@ -1062,6 +1062,129 @@
         display: grid;
         gap: 12px;
       }
+      .two-factor-card {
+        margin-top: 20px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(129, 140, 248, 0.28);
+        background: linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.82));
+        display: grid;
+        gap: 14px;
+      }
+      .two-factor-card.is-compact {
+        margin-top: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+      }
+      .two-factor-card-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .two-factor-card-header > div {
+        display: grid;
+        gap: 6px;
+      }
+      .two-factor-status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: rgba(148, 163, 184, 0.18);
+        color: rgba(226, 232, 240, 0.95);
+      }
+      .two-factor-status-badge.enabled {
+        background: rgba(34, 197, 94, 0.18);
+        color: #bbf7d0;
+      }
+      .two-factor-status-badge.pending {
+        background: rgba(59, 130, 246, 0.18);
+        color: #bfdbfe;
+      }
+      .two-factor-setup-shell {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: minmax(220px, 240px) minmax(0, 1fr);
+        align-items: start;
+      }
+      .two-factor-qr-panel {
+        display: grid;
+        gap: 10px;
+        justify-items: center;
+        text-align: center;
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.72);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .two-factor-qr-panel img {
+        width: 220px;
+        max-width: 100%;
+        border-radius: 20px;
+        background: #ffffff;
+        padding: 14px;
+        box-shadow: 0 24px 44px -32px rgba(15, 23, 42, 0.92);
+      }
+      .two-factor-setup-fields {
+        display: grid;
+        gap: 14px;
+      }
+      .two-factor-manual-key {
+        font-family: 'Consolas', 'SFMono-Regular', monospace;
+        letter-spacing: 0.16em;
+        font-size: 0.95rem;
+      }
+      .otp-input {
+        text-align: center;
+        letter-spacing: 0.35em;
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+      .two-factor-login-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: rgba(148, 163, 184, 0.85);
+        font-size: 0.85rem;
+      }
+      .two-factor-login-divider::before,
+      .two-factor-login-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: rgba(148, 163, 184, 0.22);
+      }
+      .recovery-code-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 10px;
+      }
+      .recovery-code-list li {
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(15, 23, 42, 0.72);
+        font-family: 'Consolas', 'SFMono-Regular', monospace;
+        letter-spacing: 0.08em;
+        text-align: center;
+      }
+      .two-factor-inline-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
       .forgot-password-actions {
         justify-content: flex-start;
       }
@@ -1156,9 +1279,19 @@
       .password-guidance {
         margin-top: -4px;
       }
+      .security-stack {
+        display: grid;
+        gap: 16px;
+      }
       .section-title {
         font-size: 1.2rem;
         font-weight: 600;
+      }
+
+      @media (max-width: 720px) {
+        .two-factor-setup-shell {
+          grid-template-columns: 1fr;
+        }
       }
       ul {
         margin: 0;
@@ -1444,6 +1577,57 @@
                   Sign in
                 </button>
                 <p id="login-status" class="status-text"></p>
+              </div>
+            </form>
+            <form id="login-two-factor-form" class="stacked-form hidden" autocomplete="one-time-code">
+              <div class="two-factor-card is-compact">
+                <div class="two-factor-card-header">
+                  <div>
+                    <span class="section-title">Two-factor verification</span>
+                    <p class="muted small">
+                      Enter the 6-digit code from your authenticator app to finish signing in.
+                    </p>
+                  </div>
+                  <span id="login-two-factor-badge" class="two-factor-status-badge pending">
+                    2FA required
+                  </span>
+                </div>
+                <label>
+                  <span>Authenticator code</span>
+                  <input
+                    id="login-two-factor-code"
+                    class="otp-input"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    placeholder="123456"
+                    maxlength="8"
+                  />
+                </label>
+                <div class="cta-actions">
+                  <button id="login-two-factor-submit" type="submit" class="button-primary">
+                    Verify code
+                  </button>
+                  <button id="login-two-factor-cancel" type="button" class="button-secondary">
+                    Back
+                  </button>
+                </div>
+                <div class="two-factor-login-divider">or use a recovery code</div>
+                <label>
+                  <span>Recovery code</span>
+                  <input
+                    id="login-recovery-code"
+                    type="text"
+                    placeholder="ABCD-EFGH-JKLM"
+                    autocomplete="one-time-code"
+                  />
+                </label>
+                <div class="cta-actions">
+                  <button id="login-recovery-submit" type="button" class="button-secondary">
+                    Use recovery code
+                  </button>
+                </div>
+                <p id="login-two-factor-status" class="status-text" aria-live="polite"></p>
               </div>
             </form>
             <p class="muted small login-footnote">
@@ -1788,6 +1972,93 @@
                     <p id="password-status" class="status-text"></p>
                   </div>
                 </form>
+
+                <section id="customer-two-factor-panel" class="two-factor-card">
+                  <div class="two-factor-card-header">
+                    <div>
+                      <h3 class="section-title">Authenticator app 2FA</h3>
+                      <p id="customer-two-factor-description" class="muted small">
+                        Add an authenticator app and recovery codes to better protect your donor dashboard.
+                      </p>
+                    </div>
+                    <span id="customer-two-factor-badge" class="two-factor-status-badge">
+                      2FA off
+                    </span>
+                  </div>
+
+                  <div id="customer-two-factor-setup-panel" class="hidden">
+                    <div class="two-factor-setup-shell">
+                      <div class="two-factor-qr-panel">
+                        <img
+                          id="customer-two-factor-qr"
+                          alt="Donor authenticator setup QR code"
+                        />
+                        <p class="muted small">
+                          Scan this code in Google Authenticator, 1Password, Authy, or another TOTP app.
+                        </p>
+                      </div>
+                      <div class="two-factor-setup-fields">
+                        <label>
+                          <span>Manual setup key</span>
+                          <input
+                            id="customer-two-factor-manual-key"
+                            class="two-factor-manual-key"
+                            type="text"
+                            readonly
+                          />
+                        </label>
+                        <label>
+                          <span>Verification code</span>
+                          <input
+                            id="customer-two-factor-code"
+                            class="otp-input"
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete="one-time-code"
+                            placeholder="123456"
+                            maxlength="8"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div id="customer-two-factor-recovery-panel" class="hidden">
+                    <p class="muted small">
+                      Save these recovery codes somewhere safe. Each code works once if you lose access to your authenticator app.
+                    </p>
+                    <ol id="customer-two-factor-recovery-codes" class="recovery-code-list"></ol>
+                  </div>
+
+                  <div class="two-factor-inline-actions">
+                    <button id="customer-two-factor-start" type="button" class="button-primary">
+                      Set up 2FA
+                    </button>
+                    <button
+                      id="customer-two-factor-verify"
+                      type="button"
+                      class="button-secondary"
+                      disabled
+                    >
+                      Verify and enable
+                    </button>
+                    <button
+                      id="customer-two-factor-regenerate"
+                      type="button"
+                      class="button-secondary"
+                    >
+                      Regenerate recovery codes
+                    </button>
+                    <button
+                      id="customer-two-factor-disable"
+                      type="button"
+                      class="button-secondary"
+                    >
+                      Turn off 2FA
+                    </button>
+                  </div>
+                  <p id="customer-two-factor-status" class="status-text"></p>
+                </section>
               </article>
 
               <article class="surface">
@@ -2134,6 +2405,8 @@
         inviteLimitReached: false,
         nextInviteAvailableAt: null,
         pendingPlexLink: null,
+        pendingTwoFactorSetup: null,
+        latestRecoveryCodes: [],
         announcement: null,
         lastInviteId: null,
         support: {
@@ -2188,6 +2461,13 @@
       const loginPassword = document.getElementById('login-password');
       const loginEmail = document.getElementById('login-email');
       const loginRelayWarning = document.getElementById('login-relay-warning');
+      const loginTwoFactorForm = document.getElementById('login-two-factor-form');
+      const loginTwoFactorCode = document.getElementById('login-two-factor-code');
+      const loginTwoFactorSubmit = document.getElementById('login-two-factor-submit');
+      const loginTwoFactorCancel = document.getElementById('login-two-factor-cancel');
+      const loginTwoFactorStatus = document.getElementById('login-two-factor-status');
+      const loginRecoveryCode = document.getElementById('login-recovery-code');
+      const loginRecoverySubmit = document.getElementById('login-recovery-submit');
       const loginCardContent = document.getElementById('login-card-content');
       const resetCardContent = document.getElementById('reset-card-content');
       const passwordResetForm = document.getElementById('password-reset-form');
@@ -2585,6 +2865,136 @@
         if (loginCardContent) {
           loginCardContent.classList.remove('hidden');
         }
+        if (loginTwoFactorForm) {
+          loginTwoFactorForm.classList.add('hidden');
+        }
+        if (loginTwoFactorCode) {
+          loginTwoFactorCode.value = '';
+        }
+        if (loginRecoveryCode) {
+          loginRecoveryCode.value = '';
+        }
+        if (loginTwoFactorStatus) {
+          setStatusText(loginTwoFactorStatus, '');
+        }
+      }
+
+      function showLoginTwoFactorForm() {
+        if (resetCardContent) {
+          resetCardContent.classList.add('hidden');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.add('hidden');
+        }
+        if (loginTwoFactorForm) {
+          loginTwoFactorForm.classList.remove('hidden');
+        }
+        if (loginTwoFactorCode) {
+          loginTwoFactorCode.value = '';
+          try {
+            loginTwoFactorCode.focus();
+          } catch (err) {
+            // Ignore focus errors.
+          }
+        }
+        if (loginRecoveryCode) {
+          loginRecoveryCode.value = '';
+        }
+        if (loginTwoFactorStatus) {
+          setStatusText(loginTwoFactorStatus, '');
+        }
+      }
+
+      function renderRecoveryCodes(codes) {
+        state.latestRecoveryCodes = Array.isArray(codes) ? codes.slice() : [];
+        if (!customerTwoFactorRecoveryPanel || !customerTwoFactorRecoveryCodes) {
+          return;
+        }
+
+        const shouldShow = state.latestRecoveryCodes.length > 0;
+        customerTwoFactorRecoveryPanel.classList.toggle('hidden', !shouldShow);
+        customerTwoFactorRecoveryCodes.innerHTML = '';
+
+        if (!shouldShow) {
+          return;
+        }
+
+        state.latestRecoveryCodes.forEach((code) => {
+          const item = document.createElement('li');
+          item.textContent = code;
+          customerTwoFactorRecoveryCodes.appendChild(item);
+        });
+      }
+
+      function resetPendingCustomerTwoFactorSetup() {
+        state.pendingTwoFactorSetup = null;
+        if (customerTwoFactorSetupPanel) {
+          customerTwoFactorSetupPanel.classList.add('hidden');
+        }
+        if (customerTwoFactorQr) {
+          customerTwoFactorQr.removeAttribute('src');
+        }
+        if (customerTwoFactorManualKey) {
+          customerTwoFactorManualKey.value = '';
+        }
+        if (customerTwoFactorCode) {
+          customerTwoFactorCode.value = '';
+        }
+        if (customerTwoFactorVerify) {
+          customerTwoFactorVerify.disabled = true;
+        }
+      }
+
+      function renderCustomerTwoFactorPanel(donor) {
+        if (!customerTwoFactorPanel) {
+          return;
+        }
+
+        const emailVerified = Boolean(donor && donor.emailVerified);
+        const enabled = Boolean(donor && donor.twoFactor && donor.twoFactor.enabled);
+
+        if (customerTwoFactorDescription) {
+          customerTwoFactorDescription.textContent = !emailVerified
+            ? 'Verify your email before enabling two-factor authentication.'
+            : enabled
+            ? 'Authenticator app 2FA is enabled. Keep your recovery codes somewhere safe.'
+            : 'Add an authenticator app and recovery codes to better protect your donor dashboard.';
+        }
+
+        if (customerTwoFactorBadge) {
+          customerTwoFactorBadge.textContent = enabled ? '2FA on' : '2FA off';
+          customerTwoFactorBadge.className = `two-factor-status-badge${enabled ? ' enabled' : ''}`;
+        }
+
+        if (customerTwoFactorStart) {
+          customerTwoFactorStart.disabled = !emailVerified;
+          customerTwoFactorStart.textContent = enabled ? 'New setup QR' : 'Set up 2FA';
+        }
+        if (customerTwoFactorVerify) {
+          customerTwoFactorVerify.disabled = !state.pendingTwoFactorSetup;
+        }
+        if (customerTwoFactorRegenerate) {
+          customerTwoFactorRegenerate.disabled = !emailVerified || !enabled;
+        }
+        if (customerTwoFactorDisable) {
+          customerTwoFactorDisable.disabled = !emailVerified || !enabled;
+        }
+
+        if (customerTwoFactorSetupPanel) {
+          customerTwoFactorSetupPanel.classList.toggle(
+            'hidden',
+            !state.pendingTwoFactorSetup
+          );
+        }
+        if (customerTwoFactorQr && state.pendingTwoFactorSetup) {
+          customerTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
+        }
+        if (customerTwoFactorManualKey && state.pendingTwoFactorSetup) {
+          customerTwoFactorManualKey.value =
+            state.pendingTwoFactorSetup.manualEntryKey || '';
+        }
+
+        renderRecoveryCodes(state.latestRecoveryCodes);
       }
 
       function normalizeAnnouncementPayload(payload) {
@@ -3059,6 +3469,20 @@
       const passwordSave = document.getElementById('password-save');
       const passwordGuidance = document.getElementById('password-guidance');
       const passwordPanel = document.getElementById('password-panel');
+      const customerTwoFactorPanel = document.getElementById('customer-two-factor-panel');
+      const customerTwoFactorDescription = document.getElementById('customer-two-factor-description');
+      const customerTwoFactorBadge = document.getElementById('customer-two-factor-badge');
+      const customerTwoFactorSetupPanel = document.getElementById('customer-two-factor-setup-panel');
+      const customerTwoFactorQr = document.getElementById('customer-two-factor-qr');
+      const customerTwoFactorManualKey = document.getElementById('customer-two-factor-manual-key');
+      const customerTwoFactorCode = document.getElementById('customer-two-factor-code');
+      const customerTwoFactorStart = document.getElementById('customer-two-factor-start');
+      const customerTwoFactorVerify = document.getElementById('customer-two-factor-verify');
+      const customerTwoFactorRegenerate = document.getElementById('customer-two-factor-regenerate');
+      const customerTwoFactorDisable = document.getElementById('customer-two-factor-disable');
+      const customerTwoFactorStatus = document.getElementById('customer-two-factor-status');
+      const customerTwoFactorRecoveryPanel = document.getElementById('customer-two-factor-recovery-panel');
+      const customerTwoFactorRecoveryCodes = document.getElementById('customer-two-factor-recovery-codes');
 
       const inviteForm = document.getElementById('invite-form');
       const inviteEmail = document.getElementById('invite-email');
@@ -4257,6 +4681,13 @@
           if (profileSubscription) {
             profileSubscription.value = '';
           }
+          resetPendingCustomerTwoFactorSetup();
+          if (!(data && data.requiresTwoFactor)) {
+            renderRecoveryCodes([]);
+          }
+          if (data && data.requiresTwoFactor) {
+            showLoginTwoFactorForm();
+          }
           return;
         }
 
@@ -4645,6 +5076,7 @@
         if (passwordSave) {
           passwordSave.disabled = !emailVerified;
         }
+        renderCustomerTwoFactorPanel(donor);
         inviteEmail.value = donor.email || '';
         if (supportNameInput) {
           const preferredName = donor.name || donor.email || '';
@@ -5058,6 +5490,222 @@
             if (passwordSave) {
               passwordSave.disabled = false;
             }
+          }
+        });
+      }
+
+      if (loginTwoFactorForm) {
+        loginTwoFactorForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const code = loginTwoFactorCode ? loginTwoFactorCode.value.trim() : '';
+          if (!code) {
+            setStatusText(loginTwoFactorStatus, 'Enter the authenticator code to continue.', 'error');
+            return;
+          }
+
+          setStatusText(loginTwoFactorStatus, 'Verifying code…', 'info');
+          if (loginTwoFactorSubmit) {
+            loginTwoFactorSubmit.disabled = true;
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/login/totp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to verify two-factor code.');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(loginTwoFactorStatus, err.message, 'error');
+          } finally {
+            if (loginTwoFactorSubmit) {
+              loginTwoFactorSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (loginRecoverySubmit) {
+        loginRecoverySubmit.addEventListener('click', async () => {
+          const recoveryCode = loginRecoveryCode ? loginRecoveryCode.value.trim() : '';
+          if (!recoveryCode) {
+            setStatusText(loginTwoFactorStatus, 'Enter a recovery code to continue.', 'error');
+            return;
+          }
+
+          setStatusText(loginTwoFactorStatus, 'Checking recovery code…', 'info');
+          loginRecoverySubmit.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/login/recovery', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recoveryCode }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to verify recovery code.');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(loginTwoFactorStatus, err.message, 'error');
+          } finally {
+            loginRecoverySubmit.disabled = false;
+          }
+        });
+      }
+
+      if (loginTwoFactorCancel) {
+        loginTwoFactorCancel.addEventListener('click', async () => {
+          try {
+            await fetch('/api/customer/login/totp/cancel', { method: 'POST' });
+          } catch (err) {
+            // Ignore cancellation errors.
+          }
+          showLoginForm();
+        });
+      }
+
+      if (customerTwoFactorStart) {
+        customerTwoFactorStart.addEventListener('click', async () => {
+          setStatusText(customerTwoFactorStatus, 'Preparing your authenticator setup…', 'info');
+          customerTwoFactorStart.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/setup', {
+              method: 'POST',
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to start 2FA setup.');
+            }
+            state.pendingTwoFactorSetup = payload && payload.setup ? payload.setup : null;
+            renderCustomerTwoFactorPanel(
+              state.data && state.data.donor ? state.data.donor : null
+            );
+            setStatusText(
+              customerTwoFactorStatus,
+              'Scan the QR code, then enter the 6-digit code from your app.',
+              'success'
+            );
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorStart.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorVerify) {
+        customerTwoFactorVerify.addEventListener('click', async () => {
+          const code = customerTwoFactorCode ? customerTwoFactorCode.value.trim() : '';
+          if (!code) {
+            setStatusText(customerTwoFactorStatus, 'Enter the authenticator code from your app.', 'error');
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Verifying authenticator app…', 'info');
+          customerTwoFactorVerify.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/setup/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to enable 2FA.');
+            }
+            resetPendingCustomerTwoFactorSetup();
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || { enabled: true };
+            }
+            renderRecoveryCodes(payload.recoveryCodes || []);
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'Two-factor authentication enabled. Save your recovery codes now.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorVerify.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorRegenerate) {
+        customerTwoFactorRegenerate.addEventListener('click', async () => {
+          const currentPassword = window.prompt('Enter your current password to regenerate recovery codes:');
+          if (!currentPassword) {
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Generating new recovery codes…', 'info');
+          customerTwoFactorRegenerate.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/recovery-codes/regenerate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentPassword }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to regenerate recovery codes.');
+            }
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || state.data.donor.twoFactor;
+            }
+            renderRecoveryCodes(payload.recoveryCodes || []);
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'New recovery codes generated. Replace the old set anywhere you saved it.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorRegenerate.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorDisable) {
+        customerTwoFactorDisable.addEventListener('click', async () => {
+          const currentPassword = window.prompt('Enter your current password to turn off 2FA:');
+          if (!currentPassword) {
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Turning off two-factor authentication…', 'info');
+          customerTwoFactorDisable.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentPassword }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to disable 2FA.');
+            }
+            resetPendingCustomerTwoFactorSetup();
+            renderRecoveryCodes([]);
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || {
+                enabled: false,
+                setupCompletedAt: null,
+                recoveryCodesGeneratedAt: null,
+              };
+            }
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'Two-factor authentication turned off.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorDisable.disabled = false;
           }
         });
       }

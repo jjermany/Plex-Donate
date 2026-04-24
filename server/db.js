@@ -131,6 +131,15 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS donor_two_factor_recovery_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  donor_id INTEGER NOT NULL,
+  code_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at TEXT,
+  FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS support_requests (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   donor_id INTEGER NOT NULL,
@@ -218,9 +227,32 @@ function ensureDonorEmailVerifiedColumn() {
 
       UPDATE donors
          SET email_verified_at = CURRENT_TIMESTAMP
-       WHERE password_hash IS NOT NULL
-         AND TRIM(password_hash) <> '';
+      WHERE password_hash IS NOT NULL
+        AND TRIM(password_hash) <> '';
     `);
+  }
+}
+
+function ensureDonorTwoFactorColumns() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+
+  if (!columns.some((column) => column.name === 'two_factor_secret')) {
+    db.exec('ALTER TABLE donors ADD COLUMN two_factor_secret TEXT');
+  }
+  if (!columns.some((column) => column.name === 'two_factor_enabled')) {
+    db.exec('ALTER TABLE donors ADD COLUMN two_factor_enabled INTEGER DEFAULT 0');
+  }
+  if (!columns.some((column) => column.name === 'two_factor_setup_completed_at')) {
+    db.exec('ALTER TABLE donors ADD COLUMN two_factor_setup_completed_at TEXT');
+  }
+  if (
+    !columns.some(
+      (column) => column.name === 'two_factor_recovery_codes_generated_at'
+    )
+  ) {
+    db.exec(
+      'ALTER TABLE donors ADD COLUMN two_factor_recovery_codes_generated_at TEXT'
+    );
   }
 }
 
@@ -556,6 +588,7 @@ ensureDonorEmailVerifiedColumn();
 ensureDonorPlexColumns();
 ensureDonorAccessExpirationColumn();
 ensureDonorSubscriptionOptional();
+ensureDonorTwoFactorColumns();
 ensureStripePaymentColumns();
 ensureStripePaymentIdColumn();
 ensurePreexistingAccessColumn();
@@ -581,6 +614,8 @@ function ensurePerformanceIndexes() {
     'CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON email_verification_tokens(token)',
     'CREATE INDEX IF NOT EXISTS password_reset_tokens_donor_idx ON password_reset_tokens(donor_id)',
     'CREATE INDEX IF NOT EXISTS password_reset_tokens_token_idx ON password_reset_tokens(token)',
+    'CREATE INDEX IF NOT EXISTS donor_two_factor_recovery_codes_donor_idx ON donor_two_factor_recovery_codes(donor_id)',
+    'CREATE INDEX IF NOT EXISTS donor_two_factor_recovery_codes_active_idx ON donor_two_factor_recovery_codes(donor_id, used_at)',
     'CREATE INDEX IF NOT EXISTS payments_donor_idx ON payments(donor_id)',
     'CREATE INDEX IF NOT EXISTS events_type_idx ON events(event_type)',
     'CREATE INDEX IF NOT EXISTS events_created_idx ON events(created_at)',
@@ -933,6 +968,29 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  enableDonorTwoFactor: db.prepare(
+    `UPDATE donors
+     SET two_factor_secret = @secret,
+         two_factor_enabled = 1,
+         two_factor_setup_completed_at = CURRENT_TIMESTAMP,
+         two_factor_recovery_codes_generated_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  touchDonorTwoFactorRecoveryCodesGeneratedAt: db.prepare(
+    `UPDATE donors
+     SET two_factor_recovery_codes_generated_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  disableDonorTwoFactor: db.prepare(
+    `UPDATE donors
+     SET two_factor_secret = NULL,
+         two_factor_enabled = 0,
+         two_factor_recovery_codes_generated_at = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   markDonorEmailVerified: db.prepare(
     `UPDATE donors
      SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP),
@@ -1041,6 +1099,24 @@ const statements = {
   deletePasswordResetTokenById: db.prepare(
     'DELETE FROM password_reset_tokens WHERE id = ?'
   ),
+  listDonorTwoFactorRecoveryCodes: db.prepare(
+    `SELECT *
+       FROM donor_two_factor_recovery_codes
+      WHERE donor_id = ?
+      ORDER BY created_at ASC, id ASC`
+  ),
+  insertDonorTwoFactorRecoveryCode: db.prepare(
+    `INSERT INTO donor_two_factor_recovery_codes (donor_id, code_hash)
+     VALUES (@donorId, @codeHash)`
+  ),
+  markDonorTwoFactorRecoveryCodeUsed: db.prepare(
+    `UPDATE donor_two_factor_recovery_codes
+     SET used_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  deleteDonorTwoFactorRecoveryCodes: db.prepare(
+    'DELETE FROM donor_two_factor_recovery_codes WHERE donor_id = ?'
+  ),
   insertSupportRequest: db.prepare(
     `INSERT INTO support_requests (donor_id, donor_display_name, subject)
      VALUES (@donorId, @donorDisplayName, @subject)`
@@ -1125,6 +1201,12 @@ function mapDonor(row) {
     accessExpiresAt: row.access_expires_at,
     trialReminderSentAt: row.trial_reminder_sent_at,
     hasPassword: Boolean(row.password_hash && row.password_hash.length > 0),
+    twoFactor: {
+      enabled: Boolean(row.two_factor_enabled && row.two_factor_secret),
+      setupCompletedAt: row.two_factor_setup_completed_at || null,
+      recoveryCodesGeneratedAt:
+        row.two_factor_recovery_codes_generated_at || null,
+    },
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
     emailVerifiedAt: row.email_verified_at,
@@ -1472,6 +1554,11 @@ function getDonorAuthByEmail(email) {
   return {
     donor: mapDonor(row),
     passwordHash: row.password_hash || '',
+    twoFactorEnabled: Boolean(row.two_factor_enabled && row.two_factor_secret),
+    twoFactorSecret:
+      row.two_factor_enabled && row.two_factor_secret
+        ? row.two_factor_secret
+        : '',
   };
 }
 
@@ -1794,6 +1881,122 @@ function updateDonorPassword(donorId, passwordHash) {
   });
 
   return mapDonor(statements.getDonorById.get(donorId));
+}
+
+function getDonorTwoFactorStatus(donorId) {
+  if (!donorId) {
+    return { enabled: false, setupCompletedAt: null, recoveryCodesGeneratedAt: null };
+  }
+
+  const donor = mapDonor(statements.getDonorById.get(donorId));
+  return donor && donor.twoFactor
+    ? donor.twoFactor
+    : { enabled: false, setupCompletedAt: null, recoveryCodesGeneratedAt: null };
+}
+
+function getDonorTwoFactorSecret(donorId) {
+  if (!donorId) {
+    return '';
+  }
+
+  const row = statements.getDonorById.get(donorId);
+  if (!row || !row.two_factor_enabled || !row.two_factor_secret) {
+    return '';
+  }
+
+  return row.two_factor_secret;
+}
+
+const replaceDonorTwoFactorRecoveryCodesTransaction = db.transaction(
+  (donorId, recoveryCodeHashes) => {
+    statements.deleteDonorTwoFactorRecoveryCodes.run(donorId);
+    recoveryCodeHashes.forEach((codeHash) => {
+      statements.insertDonorTwoFactorRecoveryCode.run({
+        donorId,
+        codeHash,
+      });
+    });
+    statements.touchDonorTwoFactorRecoveryCodesGeneratedAt.run({ id: donorId });
+  }
+);
+
+function replaceDonorTwoFactorRecoveryCodes(donorId, recoveryCodeHashes = []) {
+  if (!donorId) {
+    throw new Error('donorId is required to update recovery codes');
+  }
+
+  replaceDonorTwoFactorRecoveryCodesTransaction(
+    donorId,
+    Array.isArray(recoveryCodeHashes) ? recoveryCodeHashes.filter(Boolean) : []
+  );
+
+  return getDonorTwoFactorStatus(donorId);
+}
+
+const enableDonorTwoFactorTransaction = db.transaction(
+  (donorId, secret, recoveryCodeHashes) => {
+    statements.enableDonorTwoFactor.run({
+      id: donorId,
+      secret,
+    });
+    statements.deleteDonorTwoFactorRecoveryCodes.run(donorId);
+    recoveryCodeHashes.forEach((codeHash) => {
+      statements.insertDonorTwoFactorRecoveryCode.run({
+        donorId,
+        codeHash,
+      });
+    });
+  }
+);
+
+function enableDonorTwoFactor(donorId, secret, recoveryCodeHashes = []) {
+  if (!donorId) {
+    throw new Error('donorId is required to enable 2FA');
+  }
+  if (!secret) {
+    throw new Error('A two-factor secret is required.');
+  }
+
+  enableDonorTwoFactorTransaction(
+    donorId,
+    secret,
+    Array.isArray(recoveryCodeHashes) ? recoveryCodeHashes.filter(Boolean) : []
+  );
+
+  return getDonorTwoFactorStatus(donorId);
+}
+
+function listDonorTwoFactorRecoveryCodes(donorId) {
+  if (!donorId) {
+    return [];
+  }
+
+  return statements.listDonorTwoFactorRecoveryCodes.all(donorId).map((row) => ({
+    id: row.id,
+    donorId: row.donor_id,
+    codeHash: row.code_hash,
+    createdAt: row.created_at,
+    usedAt: row.used_at || null,
+  }));
+}
+
+function markDonorTwoFactorRecoveryCodeUsed(codeId) {
+  if (!codeId) {
+    return null;
+  }
+
+  statements.markDonorTwoFactorRecoveryCodeUsed.run({ id: codeId });
+  return true;
+}
+
+function disableDonorTwoFactor(donorId) {
+  if (!donorId) {
+    throw new Error('donorId is required to disable 2FA');
+  }
+
+  statements.disableDonorTwoFactor.run({ id: donorId });
+  statements.deleteDonorTwoFactorRecoveryCodes.run(donorId);
+  return getDonorTwoFactorStatus(donorId);
 }
 
 function updateDonorPlexIdentity(donorId, { plexAccountId, plexEmail } = {}) {
@@ -2456,6 +2659,8 @@ module.exports = {
   listInvitesForDonor,
   getDonorByEmailAddress,
   getDonorAuthByEmail,
+  getDonorTwoFactorSecret,
+  getDonorTwoFactorStatus,
   createDonor,
   updateDonorSubscriptionId,
   deleteDonorById,
@@ -2467,6 +2672,7 @@ module.exports = {
   getDonorEmailVerificationToken,
   markDonorEmailVerified,
   resetDonorEmailVerification,
+  markDonorTwoFactorRecoveryCodeUsed,
   markEmailVerificationTokenUsed,
   createDonorPasswordResetToken,
   getPasswordResetToken,
@@ -2496,6 +2702,10 @@ module.exports = {
   logEvent,
   updateDonorContact,
   updateDonorPassword,
+  enableDonorTwoFactor,
+  disableDonorTwoFactor,
+  replaceDonorTwoFactorRecoveryCodes,
+  listDonorTwoFactorRecoveryCodes,
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
   setDonorAccessExpirationBySubscription,

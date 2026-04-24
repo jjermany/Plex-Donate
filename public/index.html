@@ -1999,6 +1999,91 @@
         font-size: 0.8rem;
       }
 
+      .two-factor-settings-card {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(99, 102, 241, 0.18);
+        background: linear-gradient(180deg, rgba(99, 102, 241, 0.08), rgba(15, 23, 42, 0.04));
+      }
+
+      .two-factor-settings-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .two-factor-settings-header > div {
+        display: grid;
+        gap: 6px;
+      }
+
+      .two-factor-settings-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.16);
+        color: var(--text-primary);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .two-factor-settings-shell {
+        display: grid;
+        grid-template-columns: minmax(220px, 240px) minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .two-factor-settings-qr {
+        display: grid;
+        justify-items: center;
+        gap: 10px;
+        text-align: center;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(15, 23, 42, 0.04);
+      }
+
+      .two-factor-settings-qr img {
+        width: 220px;
+        max-width: 100%;
+        border-radius: 20px;
+        background: #ffffff;
+        padding: 14px;
+        box-shadow: 0 24px 44px -34px rgba(15, 23, 42, 0.65);
+      }
+
+      .two-factor-settings-fields {
+        display: grid;
+        gap: 14px;
+      }
+
+      .two-factor-settings-fields input.two-factor-manual-key {
+        font-family: 'Consolas', 'SFMono-Regular', monospace;
+        letter-spacing: 0.16em;
+      }
+
+      .two-factor-settings-fields input.otp-input {
+        text-align: center;
+        letter-spacing: 0.35em;
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+
+      @media (max-width: 760px) {
+        .two-factor-settings-shell {
+          grid-template-columns: 1fr;
+        }
+      }
+
       .announcement-preview {
         border: 1px dashed var(--settings-divider);
         border-radius: 14px;
@@ -3338,39 +3423,53 @@
                 </div>
               </form>
               <form id="admin-two-factor-form" class="settings-form">
-                <h3>Authenticator app 2FA</h3>
-                <p class="muted-text" id="admin-two-factor-description" style="margin:0 0 16px;">
-                  Add a QR-based authenticator app check for admin sign-in.
-                </p>
-                <div id="admin-two-factor-setup-panel" class="hidden">
-                  <div style="display:flex; justify-content:center; margin: 8px 0 16px;">
-                    <img
-                      id="admin-two-factor-qr"
-                      alt="Authenticator setup QR code"
-                      style="width: 220px; max-width: 100%; border-radius: 16px; background: white; padding: 12px;"
-                    />
+                <div class="two-factor-settings-card">
+                  <div class="two-factor-settings-header">
+                    <div>
+                      <h3>Authenticator app 2FA</h3>
+                      <p class="muted-text" id="admin-two-factor-description" style="margin:0;">
+                        Add a QR-based authenticator app check for admin sign-in.
+                      </p>
+                    </div>
+                    <span class="two-factor-settings-badge">Admin only</span>
                   </div>
-                  <label>
-                    Manual setup key
-                    <input id="admin-two-factor-manual-key" type="text" readonly />
-                  </label>
-                  <label>
-                    Verification code
-                    <input
-                      id="admin-two-factor-code"
-                      type="text"
-                      inputmode="numeric"
-                      autocomplete="one-time-code"
-                      placeholder="123456"
-                      maxlength="8"
-                    />
-                  </label>
-                </div>
-                <p class="form-status" data-status-for="admin-two-factor"></p>
-                <div class="form-actions">
-                  <button id="admin-two-factor-start" type="button">Set up 2FA</button>
-                  <button id="admin-two-factor-verify" type="button" class="secondary" disabled>Verify and enable</button>
-                  <button id="admin-two-factor-disable" type="button" class="secondary">Turn off 2FA</button>
+                  <div id="admin-two-factor-setup-panel" class="hidden">
+                    <div class="two-factor-settings-shell">
+                      <div class="two-factor-settings-qr">
+                        <img
+                          id="admin-two-factor-qr"
+                          alt="Authenticator setup QR code"
+                        />
+                        <p class="muted-text" style="margin:0;">
+                          Scan this QR code with your authenticator app, then verify with the rotating code it shows.
+                        </p>
+                      </div>
+                      <div class="two-factor-settings-fields">
+                        <label>
+                          Manual setup key
+                          <input id="admin-two-factor-manual-key" class="two-factor-manual-key" type="text" readonly />
+                        </label>
+                        <label>
+                          Verification code
+                          <input
+                            id="admin-two-factor-code"
+                            class="otp-input"
+                            type="text"
+                            inputmode="numeric"
+                            autocomplete="one-time-code"
+                            placeholder="123456"
+                            maxlength="8"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <p class="form-status" data-status-for="admin-two-factor"></p>
+                  <div class="form-actions">
+                    <button id="admin-two-factor-start" type="button">Set up 2FA</button>
+                    <button id="admin-two-factor-verify" type="button" class="secondary" disabled>Verify and enable</button>
+                    <button id="admin-two-factor-disable" type="button" class="secondary">Turn off 2FA</button>
+                  </div>
                 </div>
               </form>
             </section>

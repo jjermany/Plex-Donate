@@ -13,6 +13,13 @@ const {
   updateDonorContact,
   updateDonorPassword,
   getDonorAuthByEmail,
+  getDonorTwoFactorSecret,
+  getDonorTwoFactorStatus,
+  enableDonorTwoFactor,
+  disableDonorTwoFactor,
+  replaceDonorTwoFactorRecoveryCodes,
+  listDonorTwoFactorRecoveryCodes,
+  markDonorTwoFactorRecoveryCodeUsed,
   updateDonorSubscriptionId,
   updateDonorPlexIdentity,
   clearDonorPlexIdentity,
@@ -46,6 +53,17 @@ const {
   isPasswordStrong,
   MIN_PASSWORD_LENGTH,
 } = require('../utils/passwords');
+const {
+  buildOtpAuthUrl,
+  DEFAULT_ISSUER,
+  generateSecret,
+  normalizeBase32,
+  verifyTotp,
+} = require('../utils/totp');
+const {
+  createRecoveryCodeSet,
+  verifyRecoveryCode,
+} = require('../utils/recovery-codes');
 const {
   getSubscriptionCheckoutUrl,
   getPaypalEnvironment,
@@ -82,6 +100,7 @@ const { resolvePublicBaseUrl } = require('../utils/public-base-url');
 const router = express.Router();
 
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
+const PENDING_CUSTOMER_LOGIN_TTL_MS = 10 * 60 * 1000;
 
 const PLEX_LINK_EXPIRY_GRACE_MS = 60 * 1000;
 const ANNOUNCEMENT_TONES = new Set([
@@ -93,6 +112,87 @@ const ANNOUNCEMENT_TONES = new Set([
 ]);
 const PASSWORD_RESET_SUCCESS_MESSAGE =
   'If we find an account for that email, we will send a reset link shortly.';
+
+function getPendingCustomerLogin(req) {
+  const pending =
+    req &&
+    req.session &&
+    req.session.pendingCustomerLogin &&
+    typeof req.session.pendingCustomerLogin === 'object'
+      ? req.session.pendingCustomerLogin
+      : null;
+
+  if (!pending) {
+    return null;
+  }
+
+  const createdAt = Number(pending.createdAt) || 0;
+  if (!createdAt || Date.now() - createdAt > PENDING_CUSTOMER_LOGIN_TTL_MS) {
+    delete req.session.pendingCustomerLogin;
+    return null;
+  }
+
+  return pending;
+}
+
+function clearPendingCustomerLogin(req) {
+  if (req && req.session) {
+    delete req.session.pendingCustomerLogin;
+  }
+}
+
+function getPendingCustomerTwoFactorSetup(req) {
+  const pending =
+    req &&
+    req.session &&
+    req.session.pendingCustomerTwoFactorSetup &&
+    typeof req.session.pendingCustomerTwoFactorSetup === 'object'
+      ? req.session.pendingCustomerTwoFactorSetup
+      : null;
+
+  if (!pending) {
+    return null;
+  }
+
+  const createdAt = Number(pending.createdAt) || 0;
+  if (!createdAt || Date.now() - createdAt > PENDING_CUSTOMER_LOGIN_TTL_MS) {
+    delete req.session.pendingCustomerTwoFactorSetup;
+    return null;
+  }
+
+  return pending;
+}
+
+function clearPendingCustomerTwoFactorSetup(req) {
+  if (req && req.session) {
+    delete req.session.pendingCustomerTwoFactorSetup;
+  }
+}
+
+async function buildTwoFactorSetupPayload(email, secret) {
+  const normalizedEmail =
+    typeof email === 'string' && email.trim() ? email.trim() : 'customer';
+  const normalizedSecret = normalizeBase32(secret);
+  const otpauthUrl = buildOtpAuthUrl({
+    secret: normalizedSecret,
+    accountName: normalizedEmail,
+    issuer: DEFAULT_ISSUER,
+  });
+  const QRCode = require('qrcode');
+  const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 1,
+    width: 240,
+  });
+
+  return {
+    issuer: DEFAULT_ISSUER,
+    accountName: normalizedEmail,
+    manualEntryKey: normalizedSecret,
+    otpauthUrl,
+    qrCodeDataUrl,
+  };
+}
 
 function getSessionCookieOptions(req) {
   const cookie = (req.session && req.session.cookie) || {};
@@ -449,6 +549,7 @@ function buildDashboardResponse({
   donor,
   invite,
   pendingPlexLink = null,
+  pendingTwoFactor = false,
   inviteLimitReached = Boolean(invite),
   nextInviteAvailableAt = null,
   paypalError = '',
@@ -498,6 +599,19 @@ function buildDashboardResponse({
           hasPassword: Boolean(donor.hasPassword),
           emailVerified: Boolean(donor.emailVerified),
           emailVerifiedAt: donor.emailVerifiedAt || null,
+          twoFactor:
+            donor && donor.twoFactor && typeof donor.twoFactor === 'object'
+              ? {
+                  enabled: Boolean(donor.twoFactor.enabled),
+                  setupCompletedAt: donor.twoFactor.setupCompletedAt || null,
+                  recoveryCodesGeneratedAt:
+                    donor.twoFactor.recoveryCodesGeneratedAt || null,
+                }
+              : {
+                  enabled: false,
+                  setupCompletedAt: null,
+                  recoveryCodesGeneratedAt: null,
+                },
           plexAccountId: donor.plexAccountId || '',
           plexEmail: donor.plexEmail || '',
           plexLinked: hasPlexLink(donor),
@@ -526,6 +640,7 @@ function buildDashboardResponse({
             plexOAuth.DEFAULT_POLL_INTERVAL_MS,
         }
       : { pending: false },
+    twoFactorPending: Boolean(pendingTwoFactor),
     inviteLimitReached: Boolean(inviteLimitReached),
     nextInviteAvailableAt:
       nextInviteAvailableAt instanceof Date
@@ -541,6 +656,73 @@ function buildDashboardResponse({
       },
     },
   };
+}
+
+function buildCustomerTwoFactorChallenge(donor, options = {}) {
+  return {
+    authenticated: false,
+    requiresTwoFactor: true,
+    twoFactorPending: true,
+    donor: donor
+      ? {
+          id: donor.id,
+          email: donor.email,
+          name: donor.name,
+          twoFactor: donor.twoFactor || { enabled: true },
+        }
+      : null,
+    recoveryCodeAvailable: true,
+    challengeReason:
+      typeof options.reason === 'string' && options.reason
+        ? options.reason
+        : 'login',
+  };
+}
+
+async function finalizeCustomerAuthentication(req, res, donor, options = {}) {
+  let authenticatedDonor = donor;
+  let subscriptionRefreshError = '';
+
+  if (needsSubscriptionRefresh(authenticatedDonor, false)) {
+    const donorForRefresh = authenticatedDonor;
+    const { donor: refreshedDonor, error } = await refreshDonorSubscription(
+      donorForRefresh,
+      {
+        onError: (refreshErr) =>
+          logger.warn('Failed to refresh PayPal subscription during auth finalize', {
+            donorId: donorForRefresh.id,
+            subscriptionId: donorForRefresh.subscriptionId,
+            error: refreshErr && refreshErr.message,
+          }),
+      }
+    );
+    if (refreshedDonor) {
+      authenticatedDonor = refreshedDonor;
+    }
+    subscriptionRefreshError = error || '';
+  }
+
+  req.session.customerId = authenticatedDonor.id;
+  clearPendingCustomerLogin(req);
+  res.locals.sessionToken = ensureSessionToken(req);
+
+  const {
+    activeInvite: invite,
+    inviteLimitReached,
+    nextInviteAvailableAt,
+  } = getInviteState(authenticatedDonor.id);
+  const pendingPlexLink = getPendingPlexLink(req, authenticatedDonor);
+
+  return res.json(
+    buildDashboardResponse({
+      donor: authenticatedDonor,
+      invite,
+      pendingPlexLink,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+      paypalError: subscriptionRefreshError,
+    })
+  );
 }
 
 function hasActiveSubscription(donor) {
@@ -578,12 +760,19 @@ function requireCustomer(req, res, next) {
 router.get(
   '/session',
   asyncHandler(async (req, res) => {
+    const pendingLogin = getPendingCustomerLogin(req);
     let donor = getAuthenticatedDonor(req);
     let subscriptionRefreshError = '';
-    if (!donor) {
+    if (!donor && !pendingLogin) {
       res.locals.sessionToken = null;
       return res.json({ authenticated: false });
     }
+    if (!donor && pendingLogin && pendingLogin.donorId) {
+      donor = getDonorById(pendingLogin.donorId);
+      res.locals.sessionToken = null;
+      return res.json(buildCustomerTwoFactorChallenge(donor, { reason: pendingLogin.reason }));
+    }
+
     res.locals.sessionToken = ensureSessionToken(req);
 
     if (needsSubscriptionRefresh(donor, false)) {
@@ -620,6 +809,7 @@ router.get(
         donor,
         invite,
         pendingPlexLink,
+        pendingTwoFactor: false,
         inviteLimitReached,
         nextInviteAvailableAt,
         paypalError: subscriptionRefreshError,
@@ -706,49 +896,25 @@ router.post(
           req.session.plexLink = existingPlexLink;
         }
 
-        let subscriptionRefreshError = '';
-        if (needsSubscriptionRefresh(donor, false)) {
-          const donorForRefresh = donor;
-          const { donor: refreshedDonor, error } = await refreshDonorSubscription(
-            donorForRefresh,
-            {
-              onError: (refreshErr) =>
-                logger.warn('Failed to refresh PayPal subscription during login', {
-                  donorId: donorForRefresh.id,
-                  subscriptionId: donorForRefresh.subscriptionId,
-                  error: refreshErr && refreshErr.message,
-                }),
-            }
-          );
-          if (refreshedDonor) {
-            donor = refreshedDonor;
-          }
-          subscriptionRefreshError = error || '';
+        clearPendingCustomerTwoFactorSetup(req);
+        clearPendingCustomerLogin(req);
+
+        if (authRecord.twoFactorEnabled && authRecord.twoFactorSecret) {
+          req.session.customerId = null;
+          req.session.pendingCustomerLogin = {
+            donorId: donor.id,
+            createdAt: Date.now(),
+            reason: 'login',
+          };
+          res.locals.sessionToken = null;
+          return res.json(buildCustomerTwoFactorChallenge(donor, { reason: 'login' }));
         }
 
-        req.session.customerId = donor.id;
         logger.info('Customer signed in with email/password', {
           donorId: donor.id,
         });
 
-        res.locals.sessionToken = ensureSessionToken(req);
-
-        const {
-          activeInvite: invite,
-          inviteLimitReached,
-          nextInviteAvailableAt,
-        } = getInviteState(donor.id);
-        const pendingPlexLink = getPendingPlexLink(req, donor);
-        return res.json(
-          buildDashboardResponse({
-            donor,
-            invite,
-            pendingPlexLink,
-            inviteLimitReached,
-            nextInviteAvailableAt,
-            paypalError: subscriptionRefreshError,
-          })
-        );
+        return finalizeCustomerAuthentication(req, res, donor);
       } catch (handlerErr) {
         logger.error('Failed to finalize customer login', handlerErr);
         return res
@@ -756,6 +922,107 @@ router.post(
           .json({ error: 'Failed to sign in. Please try again shortly.' });
       }
     });
+  })
+);
+
+router.post(
+  '/login/totp',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const pending = getPendingCustomerLogin(req);
+    if (!pending || !pending.donorId) {
+      return res.status(401).json({
+        error: 'Two-factor verification has expired. Please sign in again.',
+      });
+    }
+
+    const donor = getDonorById(pending.donorId);
+    if (!donor) {
+      clearPendingCustomerLogin(req);
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+
+    const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    if (!code) {
+      return res.status(400).json({ error: 'Authentication code is required.' });
+    }
+
+    const secret = getDonorTwoFactorSecret(donor.id);
+    if (!secret) {
+      clearPendingCustomerLogin(req);
+      return res.status(400).json({
+        error: 'Two-factor authentication is not configured for this account.',
+      });
+    }
+
+    if (!verifyTotp(code, secret, { window: 1 })) {
+      return res.status(401).json({ error: 'Invalid authentication code.' });
+    }
+
+    logger.info('Customer completed two-factor login', { donorId: donor.id });
+    return finalizeCustomerAuthentication(req, res, donor);
+  })
+);
+
+router.post(
+  '/login/recovery',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const pending = getPendingCustomerLogin(req);
+    if (!pending || !pending.donorId) {
+      return res.status(401).json({
+        error: 'Two-factor verification has expired. Please sign in again.',
+      });
+    }
+
+    const donor = getDonorById(pending.donorId);
+    if (!donor) {
+      clearPendingCustomerLogin(req);
+      return res.status(404).json({ error: 'Account not found.' });
+    }
+
+    const code =
+      typeof req.body.recoveryCode === 'string'
+        ? req.body.recoveryCode.trim()
+        : typeof req.body.code === 'string'
+        ? req.body.code.trim()
+        : '';
+
+    if (!code) {
+      return res.status(400).json({ error: 'Recovery code is required.' });
+    }
+
+    const recoveryCodes = listDonorTwoFactorRecoveryCodes(donor.id).filter(
+      (record) => !record.usedAt
+    );
+
+    let matchedRecord = null;
+    for (const record of recoveryCodes) {
+      // eslint-disable-next-line no-await-in-loop
+      const matches = await verifyRecoveryCode(code, record.codeHash);
+      if (matches) {
+        matchedRecord = record;
+        break;
+      }
+    }
+
+    if (!matchedRecord) {
+      return res.status(401).json({ error: 'Invalid recovery code.' });
+    }
+
+    markDonorTwoFactorRecoveryCodeUsed(matchedRecord.id);
+    logger.info('Customer signed in with recovery code', { donorId: donor.id });
+    return finalizeCustomerAuthentication(req, res, getDonorById(donor.id));
+  })
+);
+
+router.post(
+  '/login/totp/cancel',
+  asyncHandler(async (req, res) => {
+    clearPendingCustomerLogin(req);
+    clearPendingCustomerTwoFactorSetup(req);
+    res.locals.sessionToken = null;
+    return res.json({ success: true });
   })
 );
 
@@ -963,25 +1230,28 @@ router.post(
           subscriptionRefreshError = error || '';
         }
 
-        req.session.customerId = updatedDonor.id;
-        logger.info('Customer reset password and signed in', { donorId: updatedDonor.id });
         logEvent('customer.password_reset.completed', { donorId: updatedDonor.id });
 
-        res.locals.sessionToken = ensureSessionToken(req);
+        clearPendingCustomerTwoFactorSetup(req);
+        clearPendingCustomerLogin(req);
 
-        const { activeInvite: invite, inviteLimitReached, nextInviteAvailableAt } =
-          getInviteState(updatedDonor.id);
-        const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
-        return res.json(
-          buildDashboardResponse({
-            donor: updatedDonor,
-            invite,
-            pendingPlexLink,
-            inviteLimitReached,
-            nextInviteAvailableAt,
-            paypalError: subscriptionRefreshError,
-          })
-        );
+        if (updatedDonor.twoFactor && updatedDonor.twoFactor.enabled) {
+          req.session.customerId = null;
+          req.session.pendingCustomerLogin = {
+            donorId: updatedDonor.id,
+            createdAt: Date.now(),
+            reason: 'password-reset',
+          };
+          res.locals.sessionToken = null;
+          return res.json(
+            buildCustomerTwoFactorChallenge(updatedDonor, {
+              reason: 'password-reset',
+            })
+          );
+        }
+
+        logger.info('Customer reset password and signed in', { donorId: updatedDonor.id });
+        return finalizeCustomerAuthentication(req, res, updatedDonor);
       } catch (handlerErr) {
         logger.error('Failed to finalize password reset', handlerErr);
         return res.status(500).json({
@@ -1090,35 +1360,33 @@ router.post(
           subscriptionRefreshError = error || '';
         }
 
-        req.session.customerId = verifiedDonor.id;
-        logger.info('Customer verified email and signed in', {
-          donorId: verifiedDonor.id,
-        });
-
         logEvent('customer.email.verified', {
           donorId: verifiedDonor.id,
           verificationTokenId: tokenRecord.id,
         });
 
-        res.locals.sessionToken = ensureSessionToken(req);
+        clearPendingCustomerTwoFactorSetup(req);
+        clearPendingCustomerLogin(req);
 
-        const {
-          activeInvite: invite,
-          inviteLimitReached,
-          nextInviteAvailableAt,
-        } = getInviteState(verifiedDonor.id);
-        const pendingPlexLink = getPendingPlexLink(req, verifiedDonor);
+        if (verifiedDonor.twoFactor && verifiedDonor.twoFactor.enabled) {
+          req.session.customerId = null;
+          req.session.pendingCustomerLogin = {
+            donorId: verifiedDonor.id,
+            createdAt: Date.now(),
+            reason: 'email-verification',
+          };
+          res.locals.sessionToken = null;
+          return res.json(
+            buildCustomerTwoFactorChallenge(verifiedDonor, {
+              reason: 'email-verification',
+            })
+          );
+        }
 
-        return res.json(
-          buildDashboardResponse({
-            donor: verifiedDonor,
-            invite,
-            pendingPlexLink,
-            inviteLimitReached,
-            nextInviteAvailableAt,
-            paypalError: subscriptionRefreshError,
-          })
-        );
+        logger.info('Customer verified email and signed in', {
+          donorId: verifiedDonor.id,
+        });
+        return finalizeCustomerAuthentication(req, res, verifiedDonor);
       } catch (handlerErr) {
         logger.error('Failed to finalize email verification', handlerErr);
         return res
@@ -1130,9 +1398,241 @@ router.post(
 );
 
 router.post(
+  '/password',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    const currentPassword =
+      req.body && typeof req.body.currentPassword === 'string'
+        ? req.body.currentPassword
+        : '';
+    const newPassword =
+      req.body && typeof req.body.newPassword === 'string'
+        ? req.body.newPassword
+        : '';
+    const confirmPassword =
+      req.body && typeof req.body.confirmPassword === 'string'
+        ? req.body.confirmPassword
+        : '';
+
+    if (!newPassword || !confirmPassword) {
+      return res.status(400).json({
+        error: 'Enter and confirm your new password to continue.',
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        error: 'New password and confirmation must match.',
+      });
+    }
+
+    if (!isPasswordStrong(newPassword)) {
+      return res.status(400).json({
+        error: `Choose a password with at least ${MIN_PASSWORD_LENGTH} characters.`,
+      });
+    }
+
+    const authRecord = getDonorAuthByEmail(donor.email);
+    if (donor.hasPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({
+          error: 'Current password is required.',
+        });
+      }
+
+      const passwordMatches = await verifyPassword(
+        currentPassword,
+        authRecord && authRecord.passwordHash ? authRecord.passwordHash : ''
+      );
+      if (!passwordMatches) {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    const updatedDonor = updateDonorPassword(donor.id, passwordHash);
+    req.customer.donor = updatedDonor;
+
+    logEvent('customer.password.updated', {
+      donorId: updatedDonor.id,
+      hadPassword: Boolean(donor.hasPassword),
+    });
+
+    const {
+      activeInvite: invite,
+      inviteLimitReached,
+      nextInviteAvailableAt,
+    } = getInviteState(updatedDonor.id);
+    const pendingPlexLink = getPendingPlexLink(req, updatedDonor);
+    res.locals.sessionToken = ensureSessionToken(req);
+    return res.json(
+      buildDashboardResponse({
+        donor: updatedDonor,
+        invite,
+        pendingPlexLink,
+        inviteLimitReached,
+        nextInviteAvailableAt,
+      })
+    );
+  })
+);
+
+router.post(
+  '/2fa/setup',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    if (!donor.emailVerified) {
+      return res.status(403).json({
+        error: 'Verify your email before setting up two-factor authentication.',
+      });
+    }
+
+    const secret = generateSecret();
+    req.session.pendingCustomerTwoFactorSetup = {
+      donorId: donor.id,
+      secret,
+      createdAt: Date.now(),
+    };
+    const setup = await buildTwoFactorSetupPayload(donor.email, secret);
+    return res.json({
+      success: true,
+      setup,
+      twoFactor: getDonorTwoFactorStatus(donor.id),
+    });
+  })
+);
+
+router.post(
+  '/2fa/setup/verify',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    const pending = getPendingCustomerTwoFactorSetup(req);
+    if (!pending || pending.donorId !== donor.id || !pending.secret) {
+      return res.status(400).json({
+        error: 'Start two-factor setup before verifying a code.',
+      });
+    }
+
+    const code = typeof req.body.code === 'string' ? req.body.code.trim() : '';
+    if (!code) {
+      return res.status(400).json({ error: 'Authentication code is required.' });
+    }
+
+    if (!verifyTotp(code, pending.secret, { window: 1 })) {
+      return res.status(401).json({ error: 'Invalid authentication code.' });
+    }
+
+    const recoverySet = createRecoveryCodeSet();
+    clearPendingCustomerTwoFactorSetup(req);
+    const twoFactor = enableDonorTwoFactor(
+      donor.id,
+      pending.secret,
+      recoverySet.records.map((record) => record.codeHash)
+    );
+    req.customer.donor = getDonorById(donor.id);
+
+    logEvent('customer.two_factor.enabled', { donorId: donor.id });
+
+    return res.json({
+      success: true,
+      twoFactor,
+      recoveryCodes: recoverySet.codes,
+    });
+  })
+);
+
+router.post(
+  '/2fa/recovery-codes/regenerate',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    if (!donor.twoFactor || !donor.twoFactor.enabled) {
+      return res.status(400).json({
+        error: 'Two-factor authentication is not enabled for this account.',
+      });
+    }
+
+    const currentPassword =
+      req.body && typeof req.body.currentPassword === 'string'
+        ? req.body.currentPassword
+        : '';
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
+
+    const authRecord = getDonorAuthByEmail(donor.email);
+    const passwordMatches = await verifyPassword(
+      currentPassword,
+      authRecord && authRecord.passwordHash ? authRecord.passwordHash : ''
+    );
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    const recoverySet = createRecoveryCodeSet();
+    const twoFactor = replaceDonorTwoFactorRecoveryCodes(
+      donor.id,
+      recoverySet.records.map((record) => record.codeHash)
+    );
+    req.customer.donor = getDonorById(donor.id);
+
+    logEvent('customer.two_factor.recovery_codes_regenerated', {
+      donorId: donor.id,
+    });
+
+    return res.json({
+      success: true,
+      twoFactor,
+      recoveryCodes: recoverySet.codes,
+    });
+  })
+);
+
+router.delete(
+  '/2fa',
+  requireCustomer,
+  asyncHandler(async (req, res) => {
+    const donor = req.customer.donor;
+    const currentPassword =
+      req.body && typeof req.body.currentPassword === 'string'
+        ? req.body.currentPassword
+        : '';
+
+    if (!currentPassword) {
+      return res.status(400).json({ error: 'Current password is required.' });
+    }
+
+    const authRecord = getDonorAuthByEmail(donor.email);
+    const passwordMatches = await verifyPassword(
+      currentPassword,
+      authRecord && authRecord.passwordHash ? authRecord.passwordHash : ''
+    );
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Current password is incorrect.' });
+    }
+
+    clearPendingCustomerTwoFactorSetup(req);
+    const twoFactor = disableDonorTwoFactor(donor.id);
+    req.customer.donor = getDonorById(donor.id);
+
+    logEvent('customer.two_factor.disabled', { donorId: donor.id });
+
+    return res.json({
+      success: true,
+      twoFactor,
+    });
+  })
+);
+
+router.post(
   '/logout',
   asyncHandler(async (req, res) => {
     res.locals.sessionToken = null;
+    clearPendingCustomerLogin(req);
+    clearPendingCustomerTwoFactorSetup(req);
 
     const clearOptions = getSessionCookieOptions(req);
 
