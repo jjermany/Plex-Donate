@@ -3015,7 +3015,7 @@
           <div class="loading-spinner" aria-hidden="true">
             <div class="loading-spinner-ring"></div>
           </div>
-          <p>Loading admin workspace...</p>
+          <p id="loading-gate-message">Validating configuration and loading the admin workspace...</p>
         </div>
       </div>
 
@@ -4832,6 +4832,7 @@
       let autoRefreshTimerId = null;
       let dashboardDataPromise = null;
       let isSessionExpiring = false;
+      let initialSessionValidationPending = true;
 
       const statusClearTimers = new WeakMap();
       let toastTimerId = null;
@@ -5853,7 +5854,7 @@
         renderProspectSharePanel();
         renderShareLinks();
         if (loadingGate) {
-          loadingGate.classList.add('hidden');
+          loadingGate.classList.toggle('hidden', !initialSessionValidationPending);
         }
         if (state.authenticated) {
           showLoginPasswordForm();
@@ -6529,6 +6530,9 @@
       function renderSettings() {
         if (settingsForms.length === 0) {
           return;
+        }
+        if (settingsPanel) {
+          settingsPanel.hidden = Boolean(state.authenticated && !state.settings);
         }
         if (state.settings) {
           settingsForms.forEach((form) => {
@@ -8143,7 +8147,9 @@
           state.adminUsername = 'admin';
         }
         if (state.authenticated) {
-          enterAdminWorkspace();
+          render();
+          await loadDashboardData();
+          startDashboardAutoRefresh();
         } else {
           stopDashboardAutoRefresh();
           resetPendingTwoFactorSetup();
@@ -8169,14 +8175,15 @@
           }
           setSupportReplyStatusMessage('');
           renderSupportPanel();
-          render();
         }
       } catch (err) {
         console.error(err);
         state.authenticated = false;
         state.twoFactorPending = false;
-        render();
         setLoginStatus('Unable to verify your session. Please sign in again.', 'error');
+      } finally {
+        initialSessionValidationPending = false;
+        render();
       }
     }
 
