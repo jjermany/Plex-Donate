@@ -40,6 +40,7 @@ const adminNotifications = require('../services/admin-notifications');
 const logger = require('../utils/logger');
 const settingsStore = require('../state/settings');
 const {
+  completeInitialAdminSetup,
   disableAdminTwoFactor,
   dismissAdminTwoFactorPrompt,
   enableAdminTwoFactor,
@@ -590,12 +591,86 @@ router.get('/session', (req, res) => {
     twoFactorPending: pendingTwoFactor,
     csrfToken: res.locals.csrfToken,
     adminUsername:
-      authenticated || pendingTwoFactor ? account.username : null,
+      authenticated || pendingTwoFactor || account.onboarding.adminSetupRequired
+        ? account.username
+        : null,
     twoFactor: account.twoFactor,
     onboarding: account.onboarding,
     timezone,
   });
 });
+
+router.post(
+  '/setup',
+  authLimiter,
+  asyncHandler(async (req, res) => {
+    const account = getAdminAccount();
+    if (!account.onboarding || !account.onboarding.adminSetupRequired) {
+      return res.status(400).json({ error: 'Admin setup has already been completed.' });
+    }
+
+    const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
+    const password = typeof req.body.password === 'string' ? req.body.password : '';
+    const confirmPassword =
+      typeof req.body.confirmPassword === 'string' ? req.body.confirmPassword : '';
+
+    if (!password) {
+      return res.status(400).json({ error: 'Password is required.' });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ error: 'Password and confirmation must match.' });
+    }
+
+    let updatedAccount;
+    try {
+      updatedAccount = completeInitialAdminSetup({ username, password });
+    } catch (err) {
+      if (err && err.code === 'PASSWORD_TOO_WEAK') {
+        return res.status(400).json({ error: err.message });
+      }
+      if (err && err.code === 'ADMIN_SETUP_NOT_REQUIRED') {
+        return res.status(400).json({ error: err.message });
+      }
+      throw err;
+    }
+
+    if (!req.session || typeof req.session.regenerate !== 'function') {
+      logger.error('Session is not available for admin setup regeneration');
+      return res.status(500).json({ error: 'Failed to establish session' });
+    }
+
+    return req.session.regenerate((err) => {
+      if (err) {
+        logger.error('Failed to regenerate admin session after setup', err);
+        return res.status(500).json({ error: 'Failed to establish session' });
+      }
+
+      clearPendingAdminLogin(req);
+      clearPendingTwoFactorSetup(req);
+      req.session.isAdmin = true;
+      res.locals.sessionToken = ensureSessionToken(req);
+
+      let csrfToken;
+      try {
+        csrfToken = req.csrfToken();
+      } catch (tokenError) {
+        logger.error('Failed to refresh CSRF token after admin setup', tokenError);
+        return res.status(500).json({ error: 'Failed to establish session' });
+      }
+
+      res.locals.csrfToken = csrfToken;
+      logger.info('Admin completed first-time setup');
+      return res.json({
+        success: true,
+        csrfToken,
+        adminUsername: updatedAccount.username,
+        twoFactor: updatedAccount.twoFactor,
+        onboarding: updatedAccount.onboarding,
+        timezone: resolveEnvironmentTimezone(),
+      });
+    });
+  })
+);
 
 router.post(
   '/login',
@@ -610,6 +685,12 @@ router.post(
     if (!providedPassword) {
       return res.status(400).json({ error: 'Password is required' });
     }
+    const account = getAdminAccount();
+    if (account.onboarding && account.onboarding.adminSetupRequired) {
+      return res.status(403).json({
+        error: 'Complete the first-time admin setup before signing in.',
+      });
+    }
     if (!verifyAdminCredentials(normalizedUsername, providedPassword)) {
       return res.status(401).json({ error: 'Invalid admin credentials' });
     }
@@ -622,7 +703,6 @@ router.post(
         logger.error('Failed to regenerate admin session', err);
         return res.status(500).json({ error: 'Failed to establish session' });
       }
-
       const twoFactor = getAdminTwoFactorStatus();
       const account = getAdminAccount();
       if (twoFactor.enabled) {

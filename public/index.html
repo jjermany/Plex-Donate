@@ -3032,6 +3032,62 @@
               Sign in with your admin credentials.
             </p>
           </div>
+          <form id="admin-setup-form" class="login-form hidden" autocomplete="on">
+            <label class="visually-hidden" for="setup-username">Username</label>
+            <div class="input-shell">
+              <span class="input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </span>
+              <input
+                id="setup-username"
+                name="username"
+                type="text"
+                autocomplete="username"
+                placeholder="Choose an admin username"
+                required
+              />
+              <span aria-hidden="true" style="width: 56px; flex-shrink: 0;"></span>
+            </div>
+            <label class="visually-hidden" for="setup-password">Password</label>
+            <div class="input-shell">
+              <span class="input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </span>
+              <input
+                id="setup-password"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Create a password"
+                required
+              />
+              <span aria-hidden="true" style="width: 56px; flex-shrink: 0;"></span>
+            </div>
+            <label class="visually-hidden" for="setup-confirm-password">Confirm password</label>
+            <div class="input-shell">
+              <span class="input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </span>
+              <input
+                id="setup-confirm-password"
+                name="confirmPassword"
+                type="password"
+                autocomplete="new-password"
+                placeholder="Confirm your password"
+                required
+              />
+              <span aria-hidden="true" style="width: 56px; flex-shrink: 0;"></span>
+            </div>
+            <div class="login-actions">
+              <button id="admin-setup-submit" type="submit">Create admin account</button>
+            </div>
+          </form>
           <form id="login-form" class="login-form" autocomplete="on">
             <label class="visually-hidden" for="username">Username</label>
             <div class="input-shell">
@@ -4205,7 +4261,13 @@
       const loadingGate = document.getElementById('loading-gate');
       const loginPageWrapper = document.getElementById('login-page-wrapper');
       const loginPanel = document.getElementById('login-panel');
+      const loginTitle = loginPanel ? loginPanel.querySelector('.login-brand h2') : null;
       const loginForm = document.getElementById('login-form');
+      const adminSetupForm = document.getElementById('admin-setup-form');
+      const adminSetupUsernameInput = document.getElementById('setup-username');
+      const adminSetupPasswordInput = document.getElementById('setup-password');
+      const adminSetupConfirmPasswordInput = document.getElementById('setup-confirm-password');
+      const adminSetupSubmitButton = document.getElementById('admin-setup-submit');
       const loginUsernameInput = document.getElementById('username');
       const loginPasswordInput = document.getElementById('password');
       const loginTotpForm = document.getElementById('login-totp-form');
@@ -5627,15 +5689,20 @@
         state.adminOnboarding =
           onboarding && typeof onboarding === 'object'
             ? {
+                adminSetupRequired: Boolean(onboarding.adminSetupRequired),
                 twoFactorPromptPending: Boolean(onboarding.twoFactorPromptPending),
               }
             : {
+                adminSetupRequired: false,
                 twoFactorPromptPending: false,
               };
       }
 
       function showLoginTotpForm() {
         state.twoFactorPending = true;
+        if (adminSetupForm) {
+          adminSetupForm.classList.add('hidden');
+        }
         if (loginForm) {
           loginForm.classList.add('hidden');
         }
@@ -5646,6 +5713,9 @@
           loginHelp.textContent =
             'Enter the rotating code from your authenticator app to finish signing in.';
         }
+        if (loginTitle) {
+          loginTitle.textContent = 'Two-Factor Verification';
+        }
         if (loginTotpCodeInput) {
           loginTotpCodeInput.value = '';
           loginTotpCodeInput.focus();
@@ -5654,18 +5724,39 @@
 
       function showLoginPasswordForm() {
         state.twoFactorPending = false;
+        const requiresSetup = Boolean(
+          state.adminOnboarding && state.adminOnboarding.adminSetupRequired
+        );
+        if (adminSetupForm) {
+          adminSetupForm.classList.toggle('hidden', !requiresSetup);
+        }
         if (loginForm) {
-          loginForm.classList.remove('hidden');
+          loginForm.classList.toggle('hidden', requiresSetup);
         }
         if (loginTotpForm) {
           loginTotpForm.classList.add('hidden');
         }
+        if (loginTitle) {
+          loginTitle.textContent = requiresSetup
+            ? 'Complete First-Time Setup'
+            : 'Admin Sign In';
+        }
         if (loginHelp) {
-          loginHelp.innerHTML =
-            'Use your Plex Donate admin username and password to sign in. The default username is <code>admin</code>. On first run a temporary password is written to your server logs.';
+          loginHelp.innerHTML = requiresSetup
+            ? 'Create the first admin account for this Plex Donate install. Your existing donor and application data will remain untouched.'
+            : 'Use your Plex Donate admin username and password to sign in.';
         }
         if (loginPasswordInput) {
           loginPasswordInput.value = '';
+        }
+        if (adminSetupUsernameInput) {
+          adminSetupUsernameInput.value = state.adminUsername || '';
+        }
+        if (adminSetupPasswordInput) {
+          adminSetupPasswordInput.value = '';
+        }
+        if (adminSetupConfirmPasswordInput) {
+          adminSetupConfirmPasswordInput.value = '';
         }
       }
 
@@ -5885,8 +5976,23 @@
           } else {
             showLoginPasswordForm();
           }
-          if (loginUsernameInput && document.activeElement !== loginUsernameInput) {
+          if (
+            loginUsernameInput &&
+            !(
+              state.adminOnboarding &&
+              state.adminOnboarding.adminSetupRequired
+            ) &&
+            document.activeElement !== loginUsernameInput
+          ) {
             loginUsernameInput.value = state.adminUsername || '';
+          }
+          if (
+            adminSetupUsernameInput &&
+            state.adminOnboarding &&
+            state.adminOnboarding.adminSetupRequired &&
+            document.activeElement !== adminSetupUsernameInput
+          ) {
+            adminSetupUsernameInput.value = state.adminUsername || '';
           }
           if (prospectShareModal) {
             prospectShareModal.hidden = true;
@@ -8315,6 +8421,69 @@
           setLoginStatus('Credentials detected in URL; click Sign in to continue.');
         } else if (urlUsername || urlPassword) {
           setLoginStatus('Login credentials must be entered in the form.', 'error');
+        }
+
+        if (adminSetupForm) {
+          adminSetupForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const username = adminSetupUsernameInput ? adminSetupUsernameInput.value.trim() : '';
+            const password = adminSetupPasswordInput ? adminSetupPasswordInput.value : '';
+            const confirmPassword = adminSetupConfirmPasswordInput
+              ? adminSetupConfirmPasswordInput.value
+              : '';
+
+            if (!password) {
+              setLoginStatus('Password is required.', 'error');
+              return;
+            }
+            if (password !== confirmPassword) {
+              setLoginStatus('Password and confirmation must match.', 'error');
+              return;
+            }
+            if (password.trim().length < 12) {
+              setLoginStatus('Password must be at least 12 characters long.', 'error');
+              return;
+            }
+
+            setLoginStatus('Creating admin account...');
+            if (adminSetupSubmitButton) {
+              adminSetupSubmitButton.disabled = true;
+            }
+
+            try {
+              await ensureCsrfToken();
+              const response = await api('/api/admin/setup', {
+                method: 'POST',
+                body: { username, password, confirmPassword },
+              });
+              csrfToken = response.csrfToken;
+              state.authenticated = true;
+              state.twoFactorPending = false;
+              state.adminUsername = response.adminUsername || username || 'admin';
+              applyTwoFactorState(response && response.twoFactor ? response.twoFactor : null);
+              applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
+              const setupTimezone =
+                response && typeof response.timezone === 'string'
+                  ? response.timezone.trim()
+                  : '';
+              if (setupTimezone) {
+                state.timezone = setupTimezone;
+              }
+              isSessionExpiring = false;
+              loginRateLimitedUntil = null;
+              enterAdminWorkspace();
+              setLoginStatus('');
+            } catch (err) {
+              setLoginStatus(
+                err && err.message ? err.message : 'Failed to complete admin setup.',
+                'error'
+              );
+            } finally {
+              if (adminSetupSubmitButton) {
+                adminSetupSubmitButton.disabled = false;
+              }
+            }
+          });
         }
 
         loginForm.addEventListener('submit', async (event) => {

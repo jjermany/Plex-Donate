@@ -360,7 +360,7 @@ test('session response includes environment timezone', async (t) => {
   assert.equal(body.timezone, 'Pacific/Honolulu');
 });
 
-test('fresh install session marks two-factor onboarding prompt as pending', async (t) => {
+test('fresh install session requires admin setup before login', async (t) => {
   const agent = await startServer(t, {
     credentialsSeeder: () => {},
   });
@@ -369,10 +369,48 @@ test('fresh install session marks two-factor onboarding prompt as pending', asyn
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.authenticated, false);
-  assert.equal(body.onboarding.twoFactorPromptPending, true);
+  assert.equal(body.onboarding.adminSetupRequired, true);
+  assert.equal(body.onboarding.twoFactorPromptPending, false);
+  assert.equal(body.adminUsername, process.env.ADMIN_USERNAME);
 
   const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.equal(stored.onboarding.adminSetupRequired, true);
+  assert.equal(stored.onboarding.twoFactorPromptPending, false);
+  assert.equal(stored.passwordHash, '');
+});
+
+test('fresh install setup creates admin credentials and signs in', async (t) => {
+  const agent = await startServer(t, {
+    credentialsSeeder: () => {},
+  });
+
+  const sessionResponse = await agent.get('/api/admin/session');
+  const sessionBody = await sessionResponse.json();
+  assert.equal(sessionBody.onboarding.adminSetupRequired, true);
+
+  const setupResponse = await agent.post('/api/admin/setup', {
+    body: {
+      username: 'owner',
+      password: 'FreshInstallPass123!',
+      confirmPassword: 'FreshInstallPass123!',
+      _csrf: sessionBody.csrfToken,
+    },
+  });
+  assert.equal(setupResponse.status, 200);
+  const setupBody = await setupResponse.json();
+  assert.equal(setupBody.success, true);
+  assert.equal(setupBody.adminUsername, 'owner');
+  assert.equal(setupBody.onboarding.adminSetupRequired, false);
+  assert.equal(setupBody.onboarding.twoFactorPromptPending, true);
+
+  const dashboardResponse = await agent.get('/api/admin/dashboard');
+  assert.equal(dashboardResponse.status, 200);
+
+  const stored = JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  assert.equal(stored.username, 'owner');
+  assert.equal(stored.onboarding.adminSetupRequired, false);
   assert.equal(stored.onboarding.twoFactorPromptPending, true);
+  assert.ok(typeof stored.passwordHash === 'string' && stored.passwordHash.startsWith('pbkdf2$'));
 });
 
 test('migrates legacy admin credentials and preserves password', async (t) => {

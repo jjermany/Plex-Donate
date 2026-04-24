@@ -20,6 +20,7 @@ const DEFAULT_TWO_FACTOR = Object.freeze({
   setupCompletedAt: '',
 });
 const DEFAULT_ONBOARDING = Object.freeze({
+  adminSetupRequired: false,
   twoFactorPromptPending: false,
 });
 
@@ -47,6 +48,10 @@ function readCredentialsFile() {
     const onboarding = normalizeOnboarding(parsed.onboarding);
     if (passwordHash) {
       return { username, passwordHash, twoFactor, onboarding };
+    }
+
+    if (onboarding.adminSetupRequired) {
+      return { username, passwordHash: '', twoFactor, onboarding };
     }
 
     const legacyPassword =
@@ -79,6 +84,7 @@ function normalizeTwoFactor(value) {
 function normalizeOnboarding(value) {
   const raw = value && typeof value === 'object' ? value : {};
   return {
+    adminSetupRequired: Boolean(raw.adminSetupRequired),
     twoFactorPromptPending: Boolean(raw.twoFactorPromptPending),
   };
 }
@@ -174,6 +180,22 @@ function ensureCache() {
       return cache;
     }
 
+    if (stored.onboarding && stored.onboarding.adminSetupRequired) {
+      writeCredentialsFile({
+        username: stored.username,
+        passwordHash: '',
+        twoFactor: migratedTwoFactor,
+        onboarding: stored.onboarding,
+      });
+      cache = {
+        username: stored.username,
+        passwordHash: '',
+        twoFactor: migratedTwoFactor,
+        onboarding: normalizeOnboarding(stored.onboarding),
+      };
+      return cache;
+    }
+
     if (stored.legacyPassword) {
       const passwordHash = hashPasswordSync(stored.legacyPassword);
       writeCredentialsFile({
@@ -198,27 +220,31 @@ function ensureCache() {
   }
 
   const username = normalizeUsername(config.adminUsername) || 'admin';
-  const password = generateRandomPassword();
-  const passwordHash = hashPasswordSync(password);
   const existing = readCredentialsFile();
   writeCredentialsFile({
     username,
-    passwordHash,
+    passwordHash: '',
     twoFactor: existing && existing.twoFactor ? normalizeTwoFactor(existing.twoFactor) : undefined,
-    onboarding: { twoFactorPromptPending: true },
+    onboarding: {
+      adminSetupRequired: true,
+      twoFactorPromptPending: false,
+    },
   });
   cache = {
     username,
-    passwordHash,
+    passwordHash: '',
     twoFactor:
       existing && existing.twoFactor
         ? normalizeTwoFactor(existing.twoFactor)
         : { ...DEFAULT_TWO_FACTOR },
-    onboarding: { twoFactorPromptPending: true },
+    onboarding: {
+      adminSetupRequired: true,
+      twoFactorPromptPending: false,
+    },
   };
 
   logger.info(
-    `Generated admin credentials for first-time setup. Username: ${username}. Run the reset-admin command to set a known password securely.`
+    `Admin setup required for first-time install. Username placeholder: ${username}. Complete setup from the web UI to create admin credentials.`
   );
 
   return cache;
@@ -270,11 +296,45 @@ function persistCredentials(nextDetails) {
 
 function verifyAdminCredentials(username, password) {
   const details = ensureCache();
+  if (details.onboarding && details.onboarding.adminSetupRequired) {
+    return false;
+  }
   const normalizedUsername = normalizeUsername(username);
   if (!normalizedUsername || normalizedUsername !== details.username) {
     return false;
   }
   return verifyPasswordSync(String(password || ''), details.passwordHash);
+}
+
+function completeInitialAdminSetup({ username, password }) {
+  const details = ensureCache();
+  if (!details.onboarding || !details.onboarding.adminSetupRequired) {
+    const err = new Error('Admin setup has already been completed.');
+    err.code = 'ADMIN_SETUP_NOT_REQUIRED';
+    throw err;
+  }
+
+  const nextUsername = normalizeUsername(username) || details.username || 'admin';
+  const nextPassword = typeof password === 'string' ? password.trim() : '';
+  if (nextPassword.length < MIN_PASSWORD_LENGTH) {
+    const err = new Error(
+      `Admin password must be at least ${MIN_PASSWORD_LENGTH} characters long.`
+    );
+    err.code = 'PASSWORD_TOO_WEAK';
+    throw err;
+  }
+
+  persistCredentials({
+    username: nextUsername,
+    passwordHash: hashPasswordSync(nextPassword),
+    twoFactor: normalizeTwoFactor(details.twoFactor),
+    onboarding: {
+      adminSetupRequired: false,
+      twoFactorPromptPending: true,
+    },
+  });
+
+  return getAdminAccount();
 }
 
 function updateAdminCredentials({ currentPassword, username, newPassword }) {
@@ -377,6 +437,7 @@ function dismissAdminTwoFactorPrompt() {
 
 module.exports = {
   disableAdminTwoFactor,
+  completeInitialAdminSetup,
   dismissAdminTwoFactorPrompt,
   enableAdminTwoFactor,
   getAdminOnboardingStatus,
