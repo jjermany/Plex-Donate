@@ -2165,6 +2165,10 @@ router.post(
       // 2. The UI correctly shows status by matching against LIVE Plex shares
       // 3. Clearing would require users to re-link their Plex account if re-invited
       // 4. Only explicit admin revoke should clear the identity link
+      const accessEligibleDonors = donorsWithPlex.filter((donor) => {
+        const status = normalizeValue(donor && donor.status);
+        return status === 'active' || status === 'trial';
+      });
       let mismatchCount = 0;
       const mismatchedDonors = [];
 
@@ -2172,14 +2176,17 @@ router.post(
         const donorWithPlex = annotateDonorWithPlex(donor, syncPlexContext);
         const hasShare = donorWithPlex.plexShared;
         const diagnostics = resolvePlexMatchDiagnostics(donor, syncPlexContext);
+        const status = normalizeValue(donor && donor.status);
+        const accessEligible = status === 'active' || status === 'trial';
 
         logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`,
           {
+            accessEligible,
             ...diagnostics,
           }
         );
 
-        if (!hasShare) {
+        if (accessEligible && !hasShare) {
           mismatchCount++;
           mismatchedDonors.push({
             id: donor.id,
@@ -2198,14 +2205,25 @@ router.post(
 
       // Return updated donor list
       const { donors, plexContext } = await buildDonorListWithPlex();
+      const ignoredLinkedCount = Math.max(
+        0,
+        donorsWithPlex.length - accessEligibleDonors.length
+      );
+      let message = 'Plex sync complete.';
+
+      if (mismatchCount > 0) {
+        message = `Plex sync complete. ${mismatchCount} active donor(s) have Plex linked but no current access.`;
+      } else if (accessEligibleDonors.length > 0) {
+        message = 'Plex sync complete. All active donors with Plex linked currently have access.';
+      }
 
       res.json({
         success: true,
-        message: mismatchCount > 0
-          ? `Plex sync complete. ${mismatchCount} donor(s) have Plex linked but no current access.`
-          : 'Plex status is up to date.',
+        message,
         totalShares: currentShares.length,
         donorsChecked: donorsWithPlex.length,
+        accessEligibleDonorsChecked: accessEligibleDonors.length,
+        ignoredLinkedCount,
         mismatchCount,
         mismatchedDonors,
         donors,

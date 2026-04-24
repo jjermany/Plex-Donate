@@ -2696,6 +2696,24 @@
         line-height: 1.5;
       }
 
+      .notice-panel[data-state='success'] .confirm-panel-icon {
+        background: var(--status-success-bg);
+        color: var(--status-success-color);
+      }
+
+      .notice-panel[data-state='info'] .confirm-panel-icon {
+        background: var(--status-info-bg);
+        color: var(--status-info-color);
+      }
+
+      .notice-list {
+        margin: 0;
+        padding-left: 1.15rem;
+        color: var(--text-muted);
+        display: grid;
+        gap: 0.4rem;
+      }
+
       .confirm-panel-icon {
         width: 44px;
         height: 44px;
@@ -4255,6 +4273,69 @@
 
           document.body.appendChild(backdrop);
           backdrop.querySelector('.confirm-cancel').focus();
+        });
+      }
+
+      function showNoticeModal(title, message, options = {}) {
+        return new Promise((resolve) => {
+          const stateAttr =
+            options && typeof options.stateAttr === 'string' ? options.stateAttr : 'info';
+          const details = Array.isArray(options && options.details)
+            ? options.details.filter((item) => typeof item === 'string' && item.trim())
+            : [];
+          const closeLabel =
+            options && typeof options.closeLabel === 'string' && options.closeLabel.trim()
+              ? options.closeLabel.trim()
+              : 'OK';
+          const backdrop = document.createElement('div');
+          backdrop.className = 'confirm-backdrop';
+          backdrop.setAttribute('role', 'alertdialog');
+          backdrop.setAttribute('aria-modal', 'true');
+          backdrop.setAttribute('aria-label', title);
+
+          const detailsMarkup = details.length
+            ? `<ul class="notice-list">${details
+                .map((item) => `<li>${escapeHtml(item)}</li>`)
+                .join('')}</ul>`
+            : '';
+
+          backdrop.innerHTML = `
+            <div class="confirm-panel notice-panel" data-state="${escapeHtml(stateAttr)}">
+              <div class="confirm-panel-header">
+                <div class="confirm-panel-icon">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8h.01M12 12v4m0-14a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3>${escapeHtml(title)}</h3>
+                  <p>${escapeHtml(message)}</p>
+                </div>
+              </div>
+              ${detailsMarkup}
+              <div class="confirm-actions">
+                <button type="button" class="primary notice-close">${escapeHtml(closeLabel)}</button>
+              </div>
+            </div>
+          `;
+
+          const cleanup = () => {
+            backdrop.style.opacity = '0';
+            backdrop.style.transition = 'opacity 0.15s ease';
+            setTimeout(() => backdrop.remove(), 150);
+            resolve(true);
+          };
+
+          backdrop.querySelector('.notice-close').addEventListener('click', cleanup);
+          backdrop.addEventListener('click', (e) => {
+            if (e.target === backdrop) cleanup();
+          });
+          backdrop.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' || e.key === 'Enter') cleanup();
+          });
+
+          document.body.appendChild(backdrop);
+          backdrop.querySelector('.notice-close').focus();
         });
       }
 
@@ -8192,41 +8273,65 @@
         refreshButton.disabled = true;
       }
       try {
-        let syncSucceeded = false;
+        let syncResponse = null;
+        let plexSyncFailed = false;
 
-        // Sync Plex status if configured - this returns updated donor list
+        // Sync Plex status first when available, but always do a full dashboard reload after.
         if (state.plex && state.plex.configured) {
           try {
-            const syncResponse = await api('/api/admin/plex/sync-status-now', {
+            syncResponse = await api('/api/admin/plex/sync-status-now', {
               method: 'POST',
             });
-
-            // Update state with the synced data from response
-            if (syncResponse && Array.isArray(syncResponse.donors)) {
-              state.donors = syncResponse.donors;
-              if (syncResponse.plex) {
-                state.plex = syncResponse.plex;
-              }
-              syncSucceeded = true;
-
-              // Show success message from server
-              const message = syncResponse.message || 'Plex status synced';
-              showDashboardToast(message, 'success');
-
-              // Re-render with updated data
-              render();
-            }
           } catch (plexErr) {
             console.warn('Failed to sync Plex status during refresh:', plexErr);
-            // Fall back to normal refresh
+            plexSyncFailed = true;
           }
         }
 
-        // Only do full data reload if Plex sync didn't succeed
-        // (This avoids making duplicate API calls and hitting rate limits)
-        if (!syncSucceeded) {
-          await loadDashboardData();
+        await loadDashboardData();
+
+        const detailLines = ['Subscriber list refreshed with the latest dashboard data.'];
+
+        if (syncResponse) {
+          if (typeof syncResponse.message === 'string' && syncResponse.message.trim()) {
+            detailLines.push(syncResponse.message.trim());
+          }
+          if (Number.isFinite(syncResponse.accessEligibleDonorsChecked)) {
+            detailLines.push(
+              `${syncResponse.accessEligibleDonorsChecked} active/trial linked donor(s) checked against current Plex shares.`
+            );
+          }
+          if (
+            Number.isFinite(syncResponse.ignoredLinkedCount) &&
+            syncResponse.ignoredLinkedCount > 0
+          ) {
+            detailLines.push(
+              `${syncResponse.ignoredLinkedCount} inactive donor(s) still have Plex identity data on file and were not counted as current access issues.`
+            );
+          }
+          if (
+            Array.isArray(syncResponse.mismatchedDonors) &&
+            syncResponse.mismatchedDonors.length > 0
+          ) {
+            const donorLabels = syncResponse.mismatchedDonors
+              .slice(0, 5)
+              .map((donor) => donor.name || donor.email || `Donor #${donor.id}`);
+            detailLines.push(`Needs attention: ${donorLabels.join(', ')}.`);
+          }
+        } else if (plexSyncFailed) {
+          detailLines.push('Plex sync did not complete, but the dashboard data was still reloaded.');
         }
+
+        await showNoticeModal('Subscriber List Refreshed', 'The donor list has been updated.', {
+          stateAttr:
+            syncResponse && syncResponse.mismatchCount > 0
+              ? 'error'
+              : plexSyncFailed
+              ? 'info'
+              : 'success',
+          details: detailLines,
+          closeLabel: 'Close',
+        });
       } catch (err) {
         console.error(err);
       } finally {

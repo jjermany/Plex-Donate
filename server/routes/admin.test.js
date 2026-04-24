@@ -1099,6 +1099,55 @@ test('POST /api/admin/plex/sync-status-now logs factual mismatch diagnostics wit
   assert.equal(logMeta.shareSample, null);
 });
 
+test('POST /api/admin/plex/sync-status-now excludes inactive linked donors from mismatch summary', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  createDonor({
+    email: 'former-donor@example.com',
+    plexEmail: 'former-linked@example.com',
+    plexAccountId: 'FORMER-ID-123',
+    name: 'Former Donor',
+    status: 'cancelled',
+  });
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-sync',
+    serverIdentifier: 'server-sync',
+    librarySectionIds: '1',
+  });
+
+  const originalListUsers = plexService.listUsers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+
+  plexService.listUsers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [],
+  });
+
+  t.after(() => {
+    plexService.listUsers = originalListUsers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const response = await agent.post('/api/admin/plex/sync-status-now', {
+    headers: { 'x-csrf-token': csrfToken },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.donorsChecked, 1);
+  assert.equal(body.accessEligibleDonorsChecked, 0);
+  assert.equal(body.ignoredLinkedCount, 1);
+  assert.equal(body.mismatchCount, 0);
+  assert.equal(body.message, 'Plex sync complete.');
+});
+
 test('announcements settings round-trip through admin API', async (t) => {
   resetDatabase();
   const agent = await startServer(t);
