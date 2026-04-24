@@ -422,6 +422,58 @@
         color: var(--text-muted-soft);
       }
 
+      .input-shell.otp-shell {
+        max-width: 320px;
+        margin: 6px auto 0;
+        justify-content: center;
+        padding: 0 18px;
+        border-color: rgba(129, 140, 248, 0.38);
+        background:
+          linear-gradient(180deg, rgba(99, 102, 241, 0.12), rgba(15, 23, 42, 0.02)),
+          var(--input-background);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.06),
+          0 18px 36px -28px rgba(79, 70, 229, 0.45);
+      }
+
+      .input-shell.otp-shell:focus-within {
+        border-color: rgba(129, 140, 248, 0.9);
+        background:
+          linear-gradient(180deg, rgba(99, 102, 241, 0.16), rgba(15, 23, 42, 0.04)),
+          var(--panel-background);
+        box-shadow:
+          0 0 0 4px rgba(99, 102, 241, 0.14),
+          0 22px 44px -28px rgba(79, 70, 229, 0.68);
+      }
+
+      .input-shell.otp-shell input {
+        text-align: center;
+        padding: 16px 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.34em;
+        font-variant-numeric: tabular-nums;
+        max-width: 100%;
+      }
+
+      .input-shell.otp-shell input::placeholder {
+        letter-spacing: 0.24em;
+      }
+
+      .login-form label.otp-label {
+        display: grid;
+        gap: 10px;
+        text-align: center;
+        font-size: 0.98rem;
+        font-weight: 700;
+      }
+
+      .login-form label.otp-label .otp-help {
+        font-size: 0.82rem;
+        font-weight: 500;
+        color: var(--text-muted-soft);
+      }
+
       .input-shell button {
         margin-left: auto;
         padding: 6px 12px;
@@ -3269,17 +3321,20 @@
             </div>
           </form>
           <form id="login-totp-form" class="login-form hidden" autocomplete="one-time-code">
-            <label for="login-totp-code">
+            <label for="login-totp-code" class="otp-label">
               Authenticator code
-              <input
-                id="login-totp-code"
-                name="code"
-                type="text"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                placeholder="123456"
-                maxlength="8"
-              />
+              <span class="otp-help">Enter the current 6-digit code from your authenticator app.</span>
+              <div class="input-shell otp-shell">
+                <input
+                  id="login-totp-code"
+                  name="code"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  placeholder="123456"
+                  maxlength="8"
+                />
+              </div>
             </label>
             <div class="login-actions">
               <button id="login-totp-submit" type="submit">Verify code</button>
