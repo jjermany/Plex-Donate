@@ -240,6 +240,20 @@ test('capture payments are recorded for admin view', { concurrency: false }, asy
       '15.25 USD',
       'admin view should display captured payment amount'
     );
+
+    const duplicateResponse = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(captureEvent),
+    });
+
+    assert.equal(duplicateResponse.status, 200);
+    const donorsAfterDuplicate = listDonorsWithDetails();
+    const duplicateDonor = donorsAfterDuplicate.find(
+      (candidate) => candidate.id === donor.id
+    );
+    assert.equal(duplicateDonor.payments.length, 1);
+    assert.equal(duplicateDonor.payments[0].paypalPaymentId, 'CAPTURE-1');
   } finally {
     await server.close();
   }

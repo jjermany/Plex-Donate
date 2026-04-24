@@ -103,6 +103,7 @@ const {
   db,
   createDonor,
   createInvite,
+  getDonorById,
   listDonorsWithDetails,
   getRecentEvents,
   createSupportRequest,
@@ -1088,15 +1089,15 @@ test('POST /api/admin/plex/sync-status-now logs factual mismatch diagnostics wit
   assert.ok(!mismatchLog[0].includes('UI will correctly show as NOT shared'));
 
   const logMeta = mismatchLog[1];
-  assert.equal(logMeta.donorEmail, 'mismatch-donor@example.com');
-  assert.equal(logMeta.plexEmail, 'linked-mismatch@example.com');
-  assert.equal(logMeta.plexAccountId, 'MISMATCH-ID-999');
   assert.equal(logMeta.matchedByEmail, false);
   assert.equal(logMeta.matchedById, false);
-  assert.equal(logMeta.matchedCandidate, null);
-  assert.ok(Array.isArray(logMeta.emailCandidates));
-  assert.ok(Array.isArray(logMeta.idCandidates));
-  assert.equal(logMeta.shareSample, null);
+  assert.equal(logMeta.matchedCandidatePresent, false);
+  assert.equal(logMeta.emailCandidateCount, 2);
+  assert.equal(logMeta.idCandidateCount, 1);
+  assert.equal(logMeta.shareSamplePresent, false);
+  assert.equal(JSON.stringify(logMeta).includes('mismatch-donor@example.com'), false);
+  assert.equal(JSON.stringify(logMeta).includes('linked-mismatch@example.com'), false);
+  assert.equal(JSON.stringify(logMeta).includes('MISMATCH-ID-999'), false);
 });
 
 test('POST /api/admin/plex/sync-status-now excludes inactive linked donors from mismatch summary', async (t) => {
@@ -1146,6 +1147,52 @@ test('POST /api/admin/plex/sync-status-now excludes inactive linked donors from 
   assert.equal(body.ignoredLinkedCount, 1);
   assert.equal(body.mismatchCount, 0);
   assert.equal(body.message, 'Plex sync complete.');
+});
+
+test('POST /api/admin/plex/sync-status preserves linked donor identity', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  assert.ok(csrfToken);
+
+  const donor = createDonor({
+    email: 'legacy-sync@example.com',
+    plexEmail: 'legacy-linked@example.com',
+    plexAccountId: 'LEGACY-ID-123',
+    name: 'Legacy Sync Donor',
+    status: 'active',
+  });
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-sync',
+    serverIdentifier: 'server-sync',
+    librarySectionIds: '1',
+  });
+
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [],
+  });
+
+  t.after(() => {
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const response = await agent.post('/api/admin/plex/sync-status', {
+    headers: { 'x-csrf-token': csrfToken },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.clearedCount, 0);
+  assert.equal(body.mismatchCount, 1);
+
+  const persisted = getDonorById(donor.id);
+  assert.equal(persisted.plexEmail, 'legacy-linked@example.com');
+  assert.equal(persisted.plexAccountId, 'LEGACY-ID-123');
 });
 
 test('announcements settings round-trip through admin API', async (t) => {

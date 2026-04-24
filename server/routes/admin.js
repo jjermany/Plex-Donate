@@ -484,6 +484,34 @@ function buildPlexRevocationContext(donor) {
   };
 }
 
+function summarizePlexMatchDiagnostics(diagnostics) {
+  const emailCandidates = Array.isArray(diagnostics && diagnostics.emailCandidates)
+    ? diagnostics.emailCandidates
+    : [];
+  const idCandidates = Array.isArray(diagnostics && diagnostics.idCandidates)
+    ? diagnostics.idCandidates
+    : [];
+  const shareSample = diagnostics && diagnostics.shareSample;
+
+  return {
+    emailCandidateCount: emailCandidates.length,
+    idCandidateCount: idCandidates.length,
+    matchedByEmail: Boolean(diagnostics && diagnostics.matchedByEmail),
+    matchedById: Boolean(diagnostics && diagnostics.matchedById),
+    matchedCandidatePresent: Boolean(diagnostics && diagnostics.matchedCandidate),
+    shareSamplePresent: Boolean(shareSample),
+    shareSampleEmailCount:
+      shareSample && Array.isArray(shareSample.emails)
+        ? shareSample.emails.length
+        : 0,
+    shareSampleUserIdCount:
+      shareSample && Array.isArray(shareSample.userIds)
+        ? shareSample.userIds.length
+        : 0,
+    shareSampleStatus: shareSample && shareSample.status ? shareSample.status : null,
+  };
+}
+
 async function revokePlexAccessForDonor(donor, context) {
   const revocationContext = context || buildPlexRevocationContext(donor);
 
@@ -2113,49 +2141,21 @@ router.post(
       }
 
       const currentShares = plexResult.shares;
-      logger.info(`Syncing Plex status - found ${currentShares.length} current shares on Plex server`);
-
-      // Log what shares we found
-      logger.info('[SYNC DEBUG] Current Plex shares:', JSON.stringify(currentShares.map(s => ({
-        id: s.id,
-        emails: s.emails,
-        userIds: s.userIds,
-        status: s.status
-      })), null, 2));
+      logger.info('Syncing Plex status', {
+        shareCount: currentShares.length,
+      });
 
       // Get all donors with Plex fields set
       const allDonors = listDonorsWithDetails();
-
-      // Log ALL donors first to see what we're working with
-      logger.info(`[SYNC DEBUG] Total donors in database: ${allDonors.length}`);
-      logger.info('[SYNC DEBUG] ALL donors:', JSON.stringify(allDonors.map(d => ({
-        id: d.id,
-        email: d.email,
-        plexEmail: d.plexEmail,
-        plexAccountId: d.plexAccountId,
-        plexEmailType: typeof d.plexEmail,
-        plexAccountIdType: typeof d.plexAccountId,
-        inviteCount: d.invites ? d.invites.length : 0,
-        invites: (d.invites || []).map(inv => ({
-          id: inv.id,
-          recipientEmail: inv.recipientEmail,
-          plexEmail: inv.plexEmail,
-          plexInviteId: inv.plexInviteId,
-          revokedAt: inv.revokedAt
-        }))
-      })), null, 2));
 
       const donorsWithPlex = allDonors.filter(
         (d) => d.plexAccountId || d.plexEmail
       );
 
-      logger.info(`[SYNC DEBUG] Found ${donorsWithPlex.length} donors with Plex fields (after filter)`);
-      logger.info('[SYNC DEBUG] Donors with Plex:', JSON.stringify(donorsWithPlex.map(d => ({
-        id: d.id,
-        email: d.email,
-        plexEmail: d.plexEmail,
-        plexAccountId: d.plexAccountId
-      })), null, 2));
+      logger.info('Loaded donors for Plex sync', {
+        donorCount: allDonors.length,
+        linkedDonorCount: donorsWithPlex.length,
+      });
 
       const syncPlexContext = buildPlexSyncContextFromShares(currentShares);
 
@@ -2179,12 +2179,12 @@ router.post(
         const status = normalizeValue(donor && donor.status);
         const accessEligible = status === 'active' || status === 'trial';
 
-        logger.info(`[SYNC DEBUG] Donor ${donor.id} (${donor.email}) - Plex linked: YES, Current share: ${hasShare ? 'YES' : 'NO'}`,
-          {
-            accessEligible,
-            ...diagnostics,
-          }
-        );
+        logger.info('Checked linked donor Plex share state', {
+          donorId: donor.id,
+          accessEligible,
+          hasShare: Boolean(hasShare),
+          ...summarizePlexMatchDiagnostics(diagnostics),
+        });
 
         if (accessEligible && !hasShare) {
           mismatchCount++;
@@ -2193,12 +2193,9 @@ router.post(
             email: donor.email,
             name: donor.name,
           });
-          logger.info(`Donor ${donor.id} has Plex link but no current share`, {
+          logger.info('Donor has Plex link but no current share', {
             donorId: donor.id,
-            donorEmail: donor.email,
-            plexEmail: donor.plexEmail || null,
-            plexAccountId: donor.plexAccountId || null,
-            ...diagnostics,
+            ...summarizePlexMatchDiagnostics(diagnostics),
           });
         }
       }
@@ -2263,8 +2260,8 @@ router.post(
         (d) => d.plexAccountId || d.plexEmail
       );
 
-      let clearedCount = 0;
-      const clearedDonors = [];
+      let mismatchCount = 0;
+      const mismatchedDonors = [];
 
       // Check each donor against current Plex shares
       for (const donor of donorsWithPlex) {
@@ -2292,37 +2289,30 @@ router.post(
           return false;
         });
 
-        // If donor doesn't have a current share, clear their Plex fields
         if (!hasShare) {
-          updateDonorPlexIdentity(donor.id, {
-            plexAccountId: null,
-            plexEmail: null,
-          });
-
-          clearedCount++;
-          clearedDonors.push({
+          mismatchCount++;
+          mismatchedDonors.push({
             id: donor.id,
             email: donor.email,
             name: donor.name,
           });
 
-          logger.info(`Cleared stale Plex data for donor ${donor.id} (${donor.email || donor.name})`);
-
           logEvent('plex.access.synced', {
             donorId: donor.id,
-            email: donor.email,
-            action: 'cleared_stale_data',
+            action: 'missing_current_share_detected',
           });
         }
       }
 
       res.json({
         success: true,
-        message: `Synced Plex status. Cleared ${clearedCount} stale record(s).`,
+        message: `Synced Plex status. Found ${mismatchCount} linked donor(s) without current Plex access.`,
         totalShares: currentShares.length,
         donorsChecked: donorsWithPlex.length,
-        clearedCount,
-        clearedDonors,
+        clearedCount: 0,
+        clearedDonors: [],
+        mismatchCount,
+        mismatchedDonors,
       });
     } catch (err) {
       logger.error('Failed to sync Plex status', err);

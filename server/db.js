@@ -131,6 +131,32 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
 
+DELETE FROM payments
+ WHERE paypal_payment_id IS NOT NULL
+   AND id NOT IN (
+     SELECT MIN(id)
+       FROM payments
+      WHERE paypal_payment_id IS NOT NULL
+      GROUP BY paypal_payment_id
+   );
+
+DELETE FROM payments
+ WHERE stripe_payment_id IS NOT NULL
+   AND id NOT IN (
+     SELECT MIN(id)
+       FROM payments
+      WHERE stripe_payment_id IS NOT NULL
+      GROUP BY stripe_payment_id
+   );
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_paypal_payment_id_unique
+  ON payments(paypal_payment_id)
+  WHERE paypal_payment_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS payments_stripe_payment_id_unique
+  ON payments(stripe_payment_id)
+  WHERE stripe_payment_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS donor_two_factor_recovery_codes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   donor_id INTEGER NOT NULL,
@@ -938,6 +964,12 @@ const statements = {
   insertPayment: db.prepare(
     `INSERT INTO payments (donor_id, payment_provider, paypal_payment_id, stripe_payment_id, amount, currency, paid_at)
      VALUES (@donorId, @paymentProvider, @paypalPaymentId, @stripePaymentId, @amount, @currency, @paidAt)`
+  ),
+  getPaymentByPaypalPaymentId: db.prepare(
+    'SELECT * FROM payments WHERE paypal_payment_id = ?'
+  ),
+  getPaymentByStripePaymentId: db.prepare(
+    'SELECT * FROM payments WHERE stripe_payment_id = ?'
   ),
   insertEvent: db.prepare(
     `INSERT INTO events (event_type, payload)
@@ -1834,6 +1866,21 @@ function recordPayment({ donorId, paymentProvider, paypalPaymentId, stripePaymen
   if (!donorId) {
     throw new Error('donorId is required to record payment');
   }
+
+  if (paypalPaymentId) {
+    const existing = statements.getPaymentByPaypalPaymentId.get(paypalPaymentId);
+    if (existing) {
+      return mapPayment(existing);
+    }
+  }
+
+  if (stripePaymentId) {
+    const existing = statements.getPaymentByStripePaymentId.get(stripePaymentId);
+    if (existing) {
+      return mapPayment(existing);
+    }
+  }
+
   statements.insertPayment.run({
     donorId,
     paymentProvider: paymentProvider || 'paypal',
@@ -1843,6 +1890,14 @@ function recordPayment({ donorId, paymentProvider, paypalPaymentId, stripePaymen
     currency: currency || null,
     paidAt,
   });
+
+  if (paypalPaymentId) {
+    return mapPayment(statements.getPaymentByPaypalPaymentId.get(paypalPaymentId));
+  }
+  if (stripePaymentId) {
+    return mapPayment(statements.getPaymentByStripePaymentId.get(stripePaymentId));
+  }
+  return null;
 }
 
 function logEvent(eventType, payload) {

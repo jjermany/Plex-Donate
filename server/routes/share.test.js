@@ -1287,6 +1287,85 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
     }
   });
 
+  await t.test('expired and used share links are rejected', async () => {
+    resetDatabase();
+    const app = createApp();
+    const server = await startServer(app);
+
+    try {
+      const expiredDonor = createDonor({
+        email: 'expired-link@example.com',
+        name: 'Expired Link',
+        status: 'pending',
+      });
+      const expiredLink = createOrUpdateShareLink({
+        donorId: expiredDonor.id,
+        token: 'expired-token',
+        sessionToken: 'expired-session',
+      });
+      db.prepare(
+        "UPDATE invite_links SET expires_at = DATETIME('now', '-1 minute') WHERE id = ?"
+      ).run(expiredLink.id);
+
+      const expiredGet = await requestJson(
+        server,
+        'GET',
+        `/share/${expiredLink.token}`
+      );
+      assert.equal(expiredGet.status, 410);
+      assert.match(expiredGet.body.error, /expired/i);
+
+      const expiredPost = await requestJson(
+        server,
+        'POST',
+        `/share/${expiredLink.token}/account`,
+        {
+          headers: { Authorization: `Bearer ${expiredLink.sessionToken}` },
+          body: {
+            email: expiredDonor.email,
+            password: 'ExpiredLinkPass123!',
+            confirmPassword: 'ExpiredLinkPass123!',
+            sessionToken: expiredLink.sessionToken,
+          },
+        }
+      );
+      assert.equal(expiredPost.status, 410);
+      assert.match(expiredPost.body.error, /expired/i);
+
+      const usedDonor = createDonor({
+        email: 'used-link@example.com',
+        name: 'Used Link',
+        status: 'pending',
+      });
+      const usedLink = createOrUpdateShareLink({
+        donorId: usedDonor.id,
+        token: 'used-token',
+        sessionToken: 'used-session',
+      });
+      db.prepare('UPDATE invite_links SET used_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+        usedLink.id
+      );
+
+      const usedGet = await requestJson(server, 'GET', `/share/${usedLink.token}`);
+      assert.equal(usedGet.status, 410);
+      assert.match(usedGet.body.error, /already been used/i);
+
+      const usedCheckout = await requestJson(
+        server,
+        'POST',
+        `/share/${usedLink.token}/paypal-checkout`,
+        {
+          headers: { Authorization: `Bearer ${usedLink.sessionToken}` },
+          body: { sessionToken: usedLink.sessionToken },
+        }
+      );
+      assert.equal(usedCheckout.status, 410);
+      assert.match(usedCheckout.body.error, /already been used/i);
+    } finally {
+      await server.close();
+    }
+  });
+
   await t.test('share invite enforces cooldown window', async () => {
     resetDatabase();
     const app = createApp();

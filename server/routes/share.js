@@ -99,7 +99,13 @@ function isShareInviteExpired(shareInvite) {
     return false;
   }
 
-  const expiresAtMs = Date.parse(shareInvite.expiresAt);
+  const rawExpiresAt = String(shareInvite.expiresAt).trim();
+  const looksLikeSqliteUtc = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(
+    rawExpiresAt
+  );
+  const expiresAtMs = looksLikeSqliteUtc
+    ? Date.parse(`${rawExpiresAt.replace(' ', 'T')}Z`)
+    : Date.parse(rawExpiresAt);
   if (!Number.isFinite(expiresAtMs)) {
     return false;
   }
@@ -120,6 +126,38 @@ function isShareInviteUsed(shareInvite) {
     return Boolean(shareInvite.usedAt);
   }
 
+  return true;
+}
+
+function getShareLinkUnavailableError(shareLink) {
+  if (!shareLink) {
+    return null;
+  }
+
+  if (isShareInviteExpired(shareLink)) {
+    return {
+      status: 410,
+      error: 'Share link has expired. Contact the server admin for a new link.',
+    };
+  }
+
+  if (isShareInviteUsed(shareLink)) {
+    return {
+      status: 410,
+      error: 'Share link has already been used. Sign in from the dashboard instead.',
+    };
+  }
+
+  return null;
+}
+
+function rejectUnavailableShareLink(shareLink, res) {
+  const unavailable = getShareLinkUnavailableError(shareLink);
+  if (!unavailable) {
+    return false;
+  }
+
+  res.status(unavailable.status).json({ error: unavailable.error });
   return true;
 }
 
@@ -515,6 +553,9 @@ router.get(
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
     }
+    if (rejectUnavailableShareLink(shareLink, res)) {
+      return;
+    }
 
     let donor = null;
     if (shareLink.donorId) {
@@ -581,6 +622,9 @@ router.post(
     const shareLink = getShareLinkByToken(req.params.token);
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
+    }
+    if (rejectUnavailableShareLink(shareLink, res)) {
+      return;
     }
 
     let donor = null;
@@ -846,6 +890,9 @@ router.post(
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
     }
+    if (rejectUnavailableShareLink(shareLink, res)) {
+      return;
+    }
 
     if (!shareLink.donorId) {
       return res.status(404).json({ error: 'Share link is no longer valid' });
@@ -952,6 +999,9 @@ router.post(
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
     }
+    if (rejectUnavailableShareLink(shareLink, res)) {
+      return;
+    }
 
     const providedSessionToken = getProvidedSessionToken(req);
     if (!providedSessionToken || providedSessionToken !== shareLink.sessionToken) {
@@ -1056,6 +1106,9 @@ router.post(
     const shareLink = getShareLinkByToken(req.params.token);
     if (!shareLink) {
       return res.status(404).json({ error: 'Share link not found' });
+    }
+    if (rejectUnavailableShareLink(shareLink, res)) {
+      return;
     }
 
     let donor = null;
