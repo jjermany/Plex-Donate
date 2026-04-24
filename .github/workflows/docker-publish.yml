@@ -3,7 +3,7 @@ name: Publish GHCR Image
 on:
   push:
     branches:
-      - '**'
+      - main
     tags:
       - "v*"
   release:
