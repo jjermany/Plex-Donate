@@ -4427,9 +4427,7 @@
         'account',
       ];
       const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
-      const hasDashboardPreference = Boolean(
-        parseDashboardViewFromHash() || getStoredDashboardView()
-      );
+      const hasDashboardPreference = Boolean(parseDashboardViewFromHash());
 
       if (prospectShareCopy) {
         prospectShareCopy.disabled = true;
@@ -4451,45 +4449,6 @@
 
       function hasNonEmptyValue(value) {
         return value !== undefined && value !== null && String(value).trim() !== '';
-      }
-
-      function isIntegrationConfigured(settings) {
-        if (!settings) {
-          return false;
-        }
-        const paypal = settings.paypal || {};
-        const smtp = settings.smtp || {};
-        const plex = settings.plex || {};
-
-        const paypalConfigured = [
-          paypal.clientId,
-          paypal.clientSecret,
-          paypal.webhookId,
-          paypal.planId,
-        ].some(hasNonEmptyValue);
-
-        const smtpConfigured = [smtp.host, smtp.user, smtp.pass, smtp.from].some(
-          hasNonEmptyValue
-        );
-
-        const plexConfigured = [
-          plex.baseUrl,
-          plex.token,
-          plex.serverIdentifier,
-        ].some(hasNonEmptyValue);
-
-        return paypalConfigured || smtpConfigured || plexConfigured;
-      }
-
-      function maybeDefaultToIntegrationLanding() {
-        if (dashboardViewPreferenceLocked) {
-          return;
-        }
-        if (!state.settings || isIntegrationConfigured(state.settings)) {
-          return;
-        }
-        dashboardViewPreferenceLocked = true;
-        setActiveDashboardView('integration', { persist: true, updateHash: true });
       }
 
       function normalizeDashboardView(view) {
@@ -4668,13 +4627,11 @@
         });
       }
 
-      const storedDashboardView = getStoredDashboardView();
       const hashDashboardView = parseDashboardViewFromHash();
-      const initialDashboardView =
-        hashDashboardView || storedDashboardView || DASHBOARD_VIEW_DEFAULT;
+      const initialDashboardView = hashDashboardView || DASHBOARD_VIEW_DEFAULT;
       setActiveDashboardView(initialDashboardView, {
-        persist: hashDashboardView ? true : !storedDashboardView,
-        updateHash: hashDashboardView ? false : true,
+        persist: true,
+        updateHash: false,
         force: true,
       });
 
@@ -6911,7 +6868,6 @@
         plexLibraryOptionsDirty = true;
         settingsForms.forEach((form) => setFormStatus(form, ''));
         renderServiceSummary();
-        maybeDefaultToIntegrationLanding();
       }
 
       function applyPaypalPlanPayload(payload) {

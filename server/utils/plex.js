@@ -189,6 +189,7 @@ function annotateDonorWithPlex(donor, context) {
 
   const plexShared = Boolean(matchedEntry && !matchedEntry.pending);
   const plexPendingFromUser = Boolean(matchedEntry && matchedEntry.pending);
+  const plexLookupFailed = Boolean(context && context.error);
   const hasActiveInvite = invites.some(
     (invite) =>
       invite &&
@@ -209,8 +210,15 @@ function annotateDonorWithPlex(donor, context) {
   const plexPending = statusAllowsAccess && plexPendingFromUser;
   const hasEmail = emailSet.size > 0 && normalizeValue((donor && donor.email) || '') !== '';
   const canInvite = Boolean(context && context.configured && hasEmail && statusAllowsAccess);
-  const needsPlexInvite = canInvite && !plexShared && !plexPending && !hasActiveInvite;
-  const plexShareState = plexShared ? 'shared' : plexPending ? 'pending' : 'not_shared';
+  const needsPlexInvite =
+    canInvite && !plexLookupFailed && !plexShared && !plexPending && !hasActiveInvite;
+  const plexShareState = plexShared
+    ? 'shared'
+    : plexPending
+    ? 'pending'
+    : plexLookupFailed
+    ? 'unknown'
+    : 'not_shared';
 
   return {
     ...(donor || {}),

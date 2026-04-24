@@ -1,6 +1,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -187,6 +188,30 @@ const sessionTtlHours = Number.parseFloat(
   process.env.SESSION_TTL_HOURS || String(DEFAULT_SESSION_TTL_HOURS)
 );
 
+function resolveDatabaseFile() {
+  const configuredDatabaseFile = process.env.DATABASE_FILE
+    ? path.resolve(process.env.DATABASE_FILE)
+    : '';
+  const defaultDatabaseFile = path.join(dataDir, 'plex-donate.db');
+
+  if (env === 'test') {
+    const normalizedDataDir = `${dataDir}${path.sep}`;
+    const usesProjectDataFile =
+      configuredDatabaseFile &&
+      (configuredDatabaseFile === defaultDatabaseFile ||
+        configuredDatabaseFile.startsWith(normalizedDataDir));
+
+    if (!configuredDatabaseFile || configuredDatabaseFile === ':memory:' || usesProjectDataFile) {
+      const testDbDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'plex-donate-config-test-db-')
+      );
+      return path.join(testDbDir, 'database.sqlite');
+    }
+  }
+
+  return configuredDatabaseFile || defaultDatabaseFile;
+}
+
 const config = {
   env,
   port: Number.parseInt(process.env.PORT || '3000', 10),
@@ -195,9 +220,7 @@ const config = {
   upsWebhookToken: process.env.UPS_WEBHOOK_TOKEN || '',
   sessionTtlHours,
   sessionTtlMs: Math.round(sessionTtlHours * 60 * 60 * 1000),
-  databaseFile: process.env.DATABASE_FILE
-    ? path.resolve(process.env.DATABASE_FILE)
-    : path.join(dataDir, 'plex-donate.db'),
+  databaseFile: resolveDatabaseFile(),
   sessionCookieSecure: parseBoolean(process.env.SESSION_COOKIE_SECURE, isProduction),
   logLevel: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
   logDir: process.env.LOG_DIR || path.join(rootDir, 'logs'),
