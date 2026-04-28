@@ -1,0 +1,3792 @@
+const state = {
+        data: null,
+        inviteLimitReached: false,
+        nextInviteAvailableAt: null,
+        pendingPlexLink: null,
+        pendingTwoFactorSetup: null,
+        latestRecoveryCodes: [],
+        announcement: null,
+        lastInviteId: null,
+        support: {
+          threads: [],
+          activeThreadId: null,
+          donorId: null,
+          replyDrafts: {},
+        },
+      };
+      const INVITE_MODAL_COPY =
+        'Your Plex invite was just sent. Check your email (and spam folder) to accept it.';
+      let inviteCooldownTimer = null;
+      let inviteCooldownTimerType = null;
+      let plexLinkPollTimer = null;
+      let plexLinkCountdownTimer = null;
+      let plexLinkCountdownExpiryMs = null;
+      let plexLinkAuthWindow = null;
+      let plexLinkStatusSticky = false;
+      let supportPanelOpen = true;
+      let supportLoading = false;
+      let supportThreadsRequest = null;
+      const INVITE_SEEN_KEY = 'plexDonateLastInviteId';
+      try {
+        state.lastInviteId = window.sessionStorage.getItem(INVITE_SEEN_KEY);
+      } catch (err) {
+        state.lastInviteId = null;
+      }
+
+      const loadingPanel = document.getElementById('loading');
+      const errorPanel = document.getElementById('error-panel');
+      const app = document.getElementById('app');
+      const unauthenticatedHero = document.getElementById('unauthenticated-hero');
+      const loginPanel = document.getElementById('login-panel');
+      const dashboardPanel = document.getElementById('dashboard-panel');
+      const dashboardTablist = document.querySelector('[data-dashboard-tablist]');
+      const dashboardTabButtons = dashboardTablist
+        ? Array.from(
+            dashboardTablist.querySelectorAll('[data-dashboard-tab]')
+          )
+        : [];
+      const dashboardTabPanels = Array.from(
+        document.querySelectorAll('[data-dashboard-panel]')
+      );
+      const DASHBOARD_TAB_DEFAULT = dashboardTabButtons.length > 0
+        ? dashboardTabButtons[0].getAttribute('data-dashboard-tab') || 'account'
+        : 'account';
+      let activeDashboardTab = DASHBOARD_TAB_DEFAULT;
+
+      const loginForm = document.getElementById('login-form');
+      const loginButton = document.getElementById('login-button');
+      const loginStatus = document.getElementById('login-status');
+      const loginPassword = document.getElementById('login-password');
+      const loginEmail = document.getElementById('login-email');
+      const loginRelayWarning = document.getElementById('login-relay-warning');
+      const loginTwoFactorForm = document.getElementById('login-two-factor-form');
+      const loginTwoFactorCode = document.getElementById('login-two-factor-code');
+      const loginTwoFactorSubmit = document.getElementById('login-two-factor-submit');
+      const loginTwoFactorCancel = document.getElementById('login-two-factor-cancel');
+      const loginTwoFactorStatus = document.getElementById('login-two-factor-status');
+      const loginRecoveryCode = document.getElementById('login-recovery-code');
+      const loginRecoverySubmit = document.getElementById('login-recovery-submit');
+      const loginCardContent = document.getElementById('login-card-content');
+      const resetCardContent = document.getElementById('reset-card-content');
+      const passwordResetForm = document.getElementById('password-reset-form');
+      const passwordResetTokenInput = document.getElementById('password-reset-token');
+      const passwordResetPassword = document.getElementById('password-reset-password');
+      const passwordResetConfirm = document.getElementById('password-reset-confirm');
+      const passwordResetStatus = document.getElementById('password-reset-status');
+      const passwordResetSubmit = document.getElementById('password-reset-submit');
+      const passwordResetCancel = document.getElementById('password-reset-cancel');
+      const forgotPasswordLink = document.getElementById('forgot-password-link');
+      const forgotPasswordPanel = document.getElementById('forgot-password-panel');
+      const forgotPasswordForm = document.getElementById('forgot-password-form');
+      const forgotPasswordEmail = document.getElementById('forgot-password-email');
+      const forgotPasswordStatus = document.getElementById('forgot-password-status');
+      const forgotPasswordSubmit = document.getElementById('forgot-password-submit');
+      const forgotPasswordCancel = document.getElementById('forgot-password-cancel');
+      const defaultForgotPasswordLinkText = forgotPasswordLink
+        ? forgotPasswordLink.textContent
+        : 'Forgot your password?';
+      let activePasswordResetToken = null;
+      const PASSWORD_RESET_SUCCESS_MESSAGE =
+        'If we find an account for that email, we will send a reset link shortly.';
+      const announcementBanner = document.getElementById('announcement-banner');
+      const announcementChip = document.getElementById('announcement-chip');
+      const announcementTitle = document.getElementById('announcement-title');
+      const announcementBody = document.getElementById('announcement-body');
+      const announcementCta = document.getElementById('announcement-cta');
+      const announcementDismissButton = document.getElementById('announcement-dismiss');
+      const inviteModal = document.getElementById('invite-modal');
+      const inviteModalMessage = document.getElementById('invite-modal-message');
+      const inviteModalOk = document.getElementById('invite-modal-ok');
+
+      const logoutButton = document.getElementById('logout-button');
+      const memberNameEl = document.getElementById('member-name');
+      const memberEmailEl = document.getElementById('member-email');
+      const memberStatusEl = document.getElementById('member-status');
+      const memberPlanEl = document.getElementById('member-plan');
+      const memberSubscriptionRow = document.getElementById('member-subscription-row');
+      const memberSubscriptionId = document.getElementById('member-subscription-id');
+      const memberLastPaymentRow = document.getElementById('member-last-payment-row');
+      const memberLastPayment = document.getElementById('member-last-payment');
+      const subscriptionCta = document.getElementById('subscription-cta');
+      const subscriptionButton = document.getElementById('subscription-button');
+      const subscriptionNote = document.getElementById('subscription-note');
+      const trialButton = document.getElementById('trial-button');
+      const trialStatus = document.getElementById('trial-status');
+      const trialPanel = document.getElementById('trial-panel');
+      const trialDaysRemainingValue = document.getElementById(
+        'trial-days-remaining'
+      );
+      const trialDaysLabel = document.getElementById('trial-days-label');
+      const trialEndDate = document.getElementById('trial-end-date');
+      const trialCountdownDetail = document.getElementById(
+        'trial-countdown-detail'
+      );
+      const memberStatusMessage = document.getElementById('member-status-message');
+      const plexLinkButton = document.getElementById('plex-link-button');
+      const plexLinkStatus = document.getElementById('plex-link-status');
+      const plexLinkPin = document.getElementById('plex-link-pin');
+      const plexLinkPinCode = document.getElementById('plex-link-pin-code');
+      const plexLinkPinExpiry = document.getElementById('plex-link-pin-expiry');
+      const changePasswordButton = document.getElementById('change-password-button');
+      const onboardingPanel = document.getElementById('onboarding-panel');
+      const stepSubscription = document.getElementById('step-subscription');
+      const stepPlex = document.getElementById('step-plex');
+      const stepInvite = document.getElementById('step-invite');
+      const stepSubscriptionNote = document.getElementById('step-subscription-note');
+      const stepPlexNote = document.getElementById('step-plex-note');
+      const plexRelayWarning = document.getElementById('plex-relay-warning');
+      const stepInviteNote = document.getElementById('step-invite-note');
+      const overseerrSection = document.getElementById('overseerr-section');
+      const overseerrLink = document.getElementById('overseerr-link');
+      const supportToggle = document.getElementById('support-toggle');
+      const supportContainer = document.getElementById('support-container');
+      const supportForm = document.getElementById('support-form');
+      const supportNameInput = document.getElementById('support-name');
+      const supportSubjectInput = document.getElementById('support-subject');
+      const supportMessageInput = document.getElementById('support-message');
+      const supportSubmit = document.getElementById('support-submit');
+      const supportStatus = document.getElementById('support-status');
+      const supportThreads = document.getElementById('support-threads');
+      const supportThreadList = document.getElementById('support-thread-list');
+      const supportThreadDetail = document.getElementById('support-thread-detail');
+      const supportThreadSubject = document.getElementById('support-thread-subject');
+      const supportThreadStatus = document.getElementById('support-thread-status');
+      const supportMessages = document.getElementById('support-messages');
+      const supportEmpty = document.getElementById('support-empty');
+      const supportReplyForm = document.getElementById('support-reply-form');
+      const supportReplyMessage = document.getElementById('support-reply-message');
+      const supportReplyStatus = document.getElementById('support-reply-status');
+      const supportReplySubmit = document.getElementById('support-reply-submit');
+      const themeToggleButton = document.getElementById('theme-toggle');
+      const themeMeta = document.querySelector('meta[name="theme-color"]');
+      const rootElement = document.documentElement;
+      const THEME_STORAGE_KEY = 'plexDonateTheme';
+      const defaultSubscriptionButtonLabel = subscriptionButton
+        ? subscriptionButton.textContent
+        : 'Start subscription';
+      if (subscriptionButton) {
+        subscriptionButton.disabled = true;
+        subscriptionButton.dataset.available = 'false';
+      }
+      const defaultTrialButtonLabel = trialButton
+        ? trialButton.textContent
+        : 'Start risk-free trial';
+      if (trialButton) {
+        trialButton.disabled = true;
+        trialButton.dataset.available = 'false';
+      }
+      let inviteIntent = 'referral';
+
+      if (loginEmail) {
+        loginEmail.addEventListener('input', () => {
+          renderRelayWarnings({ loginEmailValue: loginEmail.value || '' });
+        });
+      }
+
+      if (supportReplyMessage) {
+        supportReplyMessage.addEventListener('input', () => {
+          const activeThreadId = state.support.activeThreadId;
+          if (!activeThreadId) {
+            return;
+          }
+          if (!state.support.replyDrafts) {
+            state.support.replyDrafts = {};
+          }
+          const value = supportReplyMessage.value;
+          if (!value) {
+            delete state.support.replyDrafts[activeThreadId];
+          } else {
+            state.support.replyDrafts[activeThreadId] = value;
+          }
+        });
+      }
+
+      const SESSION_TOKEN_QUERY_PARAM = 'session';
+      const VERIFICATION_TOKEN_QUERY_PARAM = 'token';
+      const RESET_TOKEN_QUERY_PARAM = 'reset';
+      let sessionToken = null;
+      let initialVerificationToken = null;
+      let initialPasswordResetToken = null;
+      let verificationInFlight = false;
+
+      function storeThemePreference(theme) {
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+        } catch (err) {
+          /* noop */
+        }
+      }
+
+      function applyTheme(theme, persist = true) {
+        const normalized = theme === 'light' ? 'light' : 'dark';
+        rootElement.dataset.theme = normalized;
+        if (persist) {
+          storeThemePreference(normalized);
+        }
+        if (themeMeta) {
+          themeMeta.setAttribute('content', normalized === 'dark' ? '#050818' : '#f8fafc');
+        }
+        if (themeToggleButton) {
+          themeToggleButton.setAttribute(
+            'aria-pressed',
+            normalized === 'dark' ? 'true' : 'false'
+          );
+          themeToggleButton.textContent =
+            normalized === 'dark' ? 'Light mode' : 'Dark mode';
+        }
+      }
+
+      applyTheme(rootElement.dataset.theme || 'dark', false);
+
+      if (themeToggleButton) {
+        themeToggleButton.addEventListener('click', () => {
+          const nextTheme = rootElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          applyTheme(nextTheme);
+        });
+      }
+
+
+      function isAppleRelayEmail(email) {
+        const normalized = (email || '').trim().toLowerCase();
+        return normalized.endsWith('@privaterelay.appleid.com');
+      }
+
+      function getRelayWarningMessage(email, serverWarning = '') {
+        const advisory =
+          typeof serverWarning === 'string' ? serverWarning.trim() : '';
+        if (advisory) {
+          return advisory;
+        }
+        if (isAppleRelayEmail(email)) {
+          return "If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.";
+        }
+        return '';
+      }
+
+      function renderRelayWarnings({ loginEmailValue = '', donor = null, warning = '' } = {}) {
+        const message = getRelayWarningMessage(
+          (donor && (donor.email || donor.plexEmail)) || loginEmailValue,
+          warning
+        );
+        if (loginRelayWarning) {
+          loginRelayWarning.textContent = message;
+          loginRelayWarning.classList.toggle('hidden', !message);
+        }
+        if (plexRelayWarning) {
+          plexRelayWarning.textContent = message;
+          plexRelayWarning.classList.toggle('hidden', !message);
+        }
+      }
+
+      const ANNOUNCEMENT_TONE_LABELS = {
+        info: 'Information',
+        success: 'Success',
+        warning: 'Warning',
+        danger: 'Alert',
+        neutral: 'Update',
+      };
+      const ANNOUNCEMENT_DISMISSAL_KEY = 'plexDonateAnnouncementDismissed';
+      let dismissedAnnouncementFingerprint = null;
+
+      try {
+        dismissedAnnouncementFingerprint =
+          window.localStorage.getItem(ANNOUNCEMENT_DISMISSAL_KEY) || null;
+      } catch (err) {
+        dismissedAnnouncementFingerprint = null;
+      }
+
+      function normalizeSessionToken(token) {
+        if (typeof token !== 'string') {
+          return null;
+        }
+        const trimmed = token.trim();
+        return trimmed ? trimmed : null;
+      }
+
+      function applySessionTokenToUrl(token) {
+        try {
+          const url = new URL(window.location.href);
+          if (token) {
+            url.searchParams.set(SESSION_TOKEN_QUERY_PARAM, token);
+          } else {
+            url.searchParams.delete(SESSION_TOKEN_QUERY_PARAM);
+          }
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+        } catch (err) {
+          // Ignore URL manipulation errors.
+        }
+      }
+
+      function setSessionToken(token) {
+        const normalized = normalizeSessionToken(token);
+        if (normalized === sessionToken) {
+          return;
+        }
+        sessionToken = normalized;
+        applySessionTokenToUrl(sessionToken);
+      }
+
+      (function initializeSessionTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const existing = url.searchParams.get(SESSION_TOKEN_QUERY_PARAM);
+          if (existing) {
+            setSessionToken(existing);
+          }
+        } catch (err) {
+          sessionToken = null;
+        }
+      })();
+
+      function extractVerificationTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const tokenValue = url.searchParams.get(VERIFICATION_TOKEN_QUERY_PARAM);
+          if (!tokenValue) {
+            return null;
+          }
+          url.searchParams.delete(VERIFICATION_TOKEN_QUERY_PARAM);
+          if (/\/verify\/?$/i.test(url.pathname)) {
+            const withoutSegment = url.pathname.replace(/\/verify\/?$/i, '/');
+            if (withoutSegment.length > 1 && withoutSegment.endsWith('/')) {
+              url.pathname = withoutSegment.slice(0, -1);
+            } else {
+              url.pathname = withoutSegment || '/';
+            }
+          }
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+          return tokenValue;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      initialVerificationToken = extractVerificationTokenFromUrl();
+      function extractPasswordResetTokenFromUrl() {
+        try {
+          const url = new URL(window.location.href);
+          const tokenValue = url.searchParams.get(RESET_TOKEN_QUERY_PARAM);
+          if (!tokenValue) {
+            return null;
+          }
+          url.searchParams.delete(RESET_TOKEN_QUERY_PARAM);
+          const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+          window.history.replaceState({}, '', nextUrl);
+          return tokenValue;
+        } catch (err) {
+          return null;
+        }
+      }
+
+      initialPasswordResetToken = extractPasswordResetTokenFromUrl();
+
+      function withSessionToken(path) {
+        if (!sessionToken) {
+          return path;
+        }
+        try {
+          const url = new URL(path, window.location.origin);
+          url.searchParams.set(SESSION_TOKEN_QUERY_PARAM, sessionToken);
+          return url.toString();
+        } catch (err) {
+          return path;
+        }
+      }
+
+      function updateSessionTokenFromResponse(data) {
+        if (!data || typeof data !== 'object') {
+          return;
+        }
+        if (Object.prototype.hasOwnProperty.call(data, 'sessionToken')) {
+          setSessionToken(data.sessionToken);
+        }
+      }
+
+      function setActivePasswordResetToken(token) {
+        const normalized = typeof token === 'string' ? token.trim() : '';
+        activePasswordResetToken = normalized || null;
+        if (passwordResetTokenInput) {
+          passwordResetTokenInput.value = activePasswordResetToken || '';
+        }
+      }
+
+      function showPasswordResetForm(token) {
+        if (token) {
+          setActivePasswordResetToken(token);
+        }
+        if (passwordResetPassword) {
+          passwordResetPassword.value = '';
+        }
+        if (passwordResetConfirm) {
+          passwordResetConfirm.value = '';
+        }
+        if (passwordResetStatus) {
+          setStatusText(passwordResetStatus, '');
+        }
+        if (forgotPasswordStatus) {
+          setStatusText(forgotPasswordStatus, '');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.add('hidden');
+        }
+        if (resetCardContent) {
+          resetCardContent.classList.remove('hidden');
+        }
+      }
+
+      function showLoginForm() {
+        setActivePasswordResetToken(null);
+        if (passwordResetStatus) {
+          setStatusText(passwordResetStatus, '');
+        }
+        if (passwordResetPassword) {
+          passwordResetPassword.value = '';
+        }
+        if (passwordResetConfirm) {
+          passwordResetConfirm.value = '';
+        }
+        if (forgotPasswordStatus) {
+          setStatusText(forgotPasswordStatus, '');
+        }
+        if (forgotPasswordPanel) {
+          forgotPasswordPanel.classList.add('hidden');
+        }
+        if (forgotPasswordLink) {
+          forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+          forgotPasswordLink.setAttribute('aria-expanded', 'false');
+        }
+        if (resetCardContent) {
+          resetCardContent.classList.add('hidden');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.remove('hidden');
+        }
+        if (loginTwoFactorForm) {
+          loginTwoFactorForm.classList.add('hidden');
+        }
+        if (loginTwoFactorCode) {
+          loginTwoFactorCode.value = '';
+        }
+        if (loginRecoveryCode) {
+          loginRecoveryCode.value = '';
+        }
+        if (loginTwoFactorStatus) {
+          setStatusText(loginTwoFactorStatus, '');
+        }
+      }
+
+      function showLoginTwoFactorForm() {
+        if (resetCardContent) {
+          resetCardContent.classList.add('hidden');
+        }
+        if (loginCardContent) {
+          loginCardContent.classList.add('hidden');
+        }
+        if (loginTwoFactorForm) {
+          loginTwoFactorForm.classList.remove('hidden');
+        }
+        if (loginTwoFactorCode) {
+          loginTwoFactorCode.value = '';
+          try {
+            loginTwoFactorCode.focus();
+          } catch (err) {
+            // Ignore focus errors.
+          }
+        }
+        if (loginRecoveryCode) {
+          loginRecoveryCode.value = '';
+        }
+        if (loginTwoFactorStatus) {
+          setStatusText(loginTwoFactorStatus, '');
+        }
+      }
+
+      function renderRecoveryCodes(codes) {
+        state.latestRecoveryCodes = Array.isArray(codes) ? codes.slice() : [];
+        if (!customerTwoFactorRecoveryPanel || !customerTwoFactorRecoveryCodes) {
+          return;
+        }
+
+        const shouldShow = state.latestRecoveryCodes.length > 0;
+        customerTwoFactorRecoveryPanel.classList.toggle('hidden', !shouldShow);
+        customerTwoFactorRecoveryCodes.innerHTML = '';
+
+        if (!shouldShow) {
+          return;
+        }
+
+        state.latestRecoveryCodes.forEach((code) => {
+          const item = document.createElement('li');
+          item.textContent = code;
+          customerTwoFactorRecoveryCodes.appendChild(item);
+        });
+      }
+
+      function resetPendingCustomerTwoFactorSetup() {
+        state.pendingTwoFactorSetup = null;
+        if (customerTwoFactorSetupPanel) {
+          customerTwoFactorSetupPanel.classList.add('hidden');
+        }
+        if (customerTwoFactorQr) {
+          customerTwoFactorQr.removeAttribute('src');
+        }
+        if (customerTwoFactorManualKey) {
+          customerTwoFactorManualKey.value = '';
+        }
+        if (customerTwoFactorCode) {
+          customerTwoFactorCode.value = '';
+        }
+        if (customerTwoFactorVerify) {
+          customerTwoFactorVerify.disabled = true;
+        }
+      }
+
+      function renderCustomerTwoFactorPanel(donor) {
+        if (!customerTwoFactorPanel) {
+          return;
+        }
+
+        const emailVerified = Boolean(donor && donor.emailVerified);
+        const enabled = Boolean(donor && donor.twoFactor && donor.twoFactor.enabled);
+
+        if (customerTwoFactorDescription) {
+          customerTwoFactorDescription.textContent = !emailVerified
+            ? 'Verify your email before enabling two-factor authentication.'
+            : enabled
+            ? 'Authenticator app 2FA is enabled. Keep your recovery codes somewhere safe.'
+            : 'Add an authenticator app and recovery codes to better protect your donor dashboard.';
+        }
+
+        if (customerTwoFactorBadge) {
+          customerTwoFactorBadge.textContent = enabled ? '2FA on' : '2FA off';
+          customerTwoFactorBadge.className = `two-factor-status-badge${enabled ? ' enabled' : ''}`;
+        }
+
+        if (customerTwoFactorStart) {
+          customerTwoFactorStart.disabled = !emailVerified;
+          customerTwoFactorStart.textContent = enabled ? 'New setup QR' : 'Set up 2FA';
+        }
+        if (customerTwoFactorVerify) {
+          customerTwoFactorVerify.disabled = !state.pendingTwoFactorSetup;
+        }
+        if (customerTwoFactorRegenerate) {
+          customerTwoFactorRegenerate.disabled = !emailVerified || !enabled;
+        }
+        if (customerTwoFactorDisable) {
+          customerTwoFactorDisable.disabled = !emailVerified || !enabled;
+        }
+
+        if (customerTwoFactorSetupPanel) {
+          customerTwoFactorSetupPanel.classList.toggle(
+            'hidden',
+            !state.pendingTwoFactorSetup
+          );
+        }
+        if (customerTwoFactorQr && state.pendingTwoFactorSetup) {
+          customerTwoFactorQr.src = state.pendingTwoFactorSetup.qrCodeDataUrl || '';
+        }
+        if (customerTwoFactorManualKey && state.pendingTwoFactorSetup) {
+          customerTwoFactorManualKey.value =
+            state.pendingTwoFactorSetup.manualEntryKey || '';
+        }
+
+        renderRecoveryCodes(state.latestRecoveryCodes);
+      }
+
+      function normalizeAnnouncementPayload(payload) {
+        if (!payload || typeof payload !== 'object') {
+          return null;
+        }
+        const toneRaw = typeof payload.tone === 'string'
+          ? payload.tone.trim().toLowerCase()
+          : '';
+        const tone = Object.prototype.hasOwnProperty.call(
+          ANNOUNCEMENT_TONE_LABELS,
+          toneRaw
+        )
+          ? toneRaw
+          : 'info';
+        const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+        const body = typeof payload.body === 'string' ? payload.body.trim() : '';
+        const dismissible = Boolean(payload.dismissible);
+        const enabled = Boolean(payload.enabled);
+        let cta = null;
+        if (payload.cta && typeof payload.cta === 'object') {
+          const label =
+            typeof payload.cta.label === 'string' ? payload.cta.label.trim() : '';
+          const url = typeof payload.cta.url === 'string' ? payload.cta.url.trim() : '';
+          const openInNewTab = Boolean(payload.cta.openInNewTab);
+          if (label && url) {
+            cta = { label, url, openInNewTab };
+          }
+        }
+        return { enabled, title, body, tone, dismissible, cta };
+      }
+
+      function buildAnnouncementFingerprint(announcement) {
+        if (!announcement) {
+          return '';
+        }
+        return JSON.stringify({
+          tone: announcement.tone,
+          title: announcement.title,
+          body: announcement.body,
+          dismissible: announcement.dismissible,
+          ctaLabel: announcement.cta ? announcement.cta.label : '',
+          ctaUrl: announcement.cta ? announcement.cta.url : '',
+        });
+      }
+
+      function isAnnouncementDismissed(announcement) {
+        if (!announcement || !announcement.dismissible) {
+          return false;
+        }
+        const fingerprint = buildAnnouncementFingerprint(announcement);
+        return fingerprint && fingerprint === dismissedAnnouncementFingerprint;
+      }
+
+      function rememberAnnouncementDismissal(announcement) {
+        if (!announcement || !announcement.dismissible) {
+          return;
+        }
+        const fingerprint = buildAnnouncementFingerprint(announcement);
+        if (!fingerprint) {
+          return;
+        }
+        dismissedAnnouncementFingerprint = fingerprint;
+        try {
+          window.localStorage.setItem(ANNOUNCEMENT_DISMISSAL_KEY, fingerprint);
+        } catch (err) {
+          // ignore storage errors
+        }
+      }
+
+      function setElementVisibility(element, visible) {
+        if (!element) {
+          return;
+        }
+        if (visible) {
+          element.classList.remove('hidden');
+          element.removeAttribute('hidden');
+        } else {
+          element.classList.add('hidden');
+          element.setAttribute('hidden', '');
+        }
+      }
+
+      function getInviteIdentifier(invite) {
+        if (!invite) {
+          return '';
+        }
+        if (invite.id) {
+          return String(invite.id);
+        }
+        if (invite.inviteId) {
+          return String(invite.inviteId);
+        }
+        if (invite.inviteUrl) {
+          return String(invite.inviteUrl);
+        }
+        return '';
+      }
+
+      function setLastInviteId(inviteId) {
+        const normalized = inviteId ? String(inviteId) : '';
+        state.lastInviteId = normalized || null;
+        try {
+          if (normalized) {
+            window.sessionStorage.setItem(INVITE_SEEN_KEY, normalized);
+          } else {
+            window.sessionStorage.removeItem(INVITE_SEEN_KEY);
+          }
+        } catch (err) {
+          // ignore storage errors
+        }
+      }
+
+      function showInviteModal(message, inviteId) {
+        if (!inviteModal) {
+          return;
+        }
+        if (inviteModalMessage) {
+          inviteModalMessage.textContent = message;
+        }
+        setElementVisibility(inviteModal, true);
+        if (inviteId) {
+          setLastInviteId(inviteId);
+        }
+      }
+
+      function maybeShowInviteModal(message, invite) {
+        const inviteId = getInviteIdentifier(invite);
+        if (!inviteId) {
+          return;
+        }
+        if (state.lastInviteId === inviteId) {
+          return;
+        }
+        showInviteModal(message, inviteId);
+      }
+
+      function isValidDashboardTab(value) {
+        if (!value) {
+          return false;
+        }
+        return dashboardTabPanels.some((panel) => {
+          const panelName =
+            (panel.dataset && panel.dataset.dashboardPanel) ||
+            panel.getAttribute('data-dashboard-panel');
+          return panelName === value;
+        });
+      }
+
+      function applyActiveDashboardTab() {
+        if (dashboardTabButtons.length === 0 || dashboardTabPanels.length === 0) {
+          return;
+        }
+
+        dashboardTabButtons.forEach((button) => {
+          const tabName = button.getAttribute('data-dashboard-tab');
+          const isActive = tabName === activeDashboardTab;
+          button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          button.setAttribute('tabindex', isActive ? '0' : '-1');
+          button.classList.toggle('is-active', isActive);
+        });
+
+        dashboardTabPanels.forEach((panel) => {
+          const panelName =
+            (panel.dataset && panel.dataset.dashboardPanel) ||
+            panel.getAttribute('data-dashboard-panel');
+          const isActive = panelName === activeDashboardTab;
+          if (isActive) {
+            panel.removeAttribute('hidden');
+            panel.setAttribute('tabindex', '0');
+          } else {
+            panel.setAttribute('hidden', '');
+            panel.setAttribute('tabindex', '-1');
+          }
+        });
+      }
+
+      function setActiveDashboardTab(next, options = {}) {
+        if (dashboardTabButtons.length === 0 || dashboardTabPanels.length === 0) {
+          return;
+        }
+        const { force = false } = options;
+        const normalized = isValidDashboardTab(next)
+          ? next
+          : DASHBOARD_TAB_DEFAULT;
+        if (!force && normalized === activeDashboardTab) {
+          return;
+        }
+        activeDashboardTab = normalized;
+        applyActiveDashboardTab();
+        if (activeDashboardTab === 'support') {
+          loadSupportThreads({ silent: true });
+        }
+      }
+
+      if (dashboardTabButtons.length > 0) {
+        const focusDashboardTabByIndex = (index) => {
+          const button = dashboardTabButtons[index];
+          if (!button) {
+            return;
+          }
+          const target = button.getAttribute('data-dashboard-tab');
+          setActiveDashboardTab(target);
+          try {
+            button.focus();
+          } catch (err) {
+            // ignore focus errors
+          }
+        };
+
+        dashboardTabButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            const target = button.getAttribute('data-dashboard-tab');
+            setActiveDashboardTab(target);
+          });
+        });
+
+        if (dashboardTablist) {
+          dashboardTablist.addEventListener('keydown', (event) => {
+            const { key } = event;
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) {
+              return;
+            }
+            event.preventDefault();
+            const activeElement = document.activeElement;
+            let currentIndex = dashboardTabButtons.indexOf(activeElement);
+            if (currentIndex === -1) {
+              currentIndex = dashboardTabButtons.findIndex((button) =>
+                button.getAttribute('data-dashboard-tab') === activeDashboardTab
+              );
+            }
+            if (key === 'Home') {
+              focusDashboardTabByIndex(0);
+              return;
+            }
+            if (key === 'End') {
+              focusDashboardTabByIndex(dashboardTabButtons.length - 1);
+              return;
+            }
+            if (key === 'ArrowLeft') {
+              const previousIndex =
+                currentIndex <= 0
+                  ? dashboardTabButtons.length - 1
+                  : currentIndex - 1;
+              focusDashboardTabByIndex(previousIndex);
+            } else if (key === 'ArrowRight') {
+              const nextIndex = (currentIndex + 1) % dashboardTabButtons.length;
+              focusDashboardTabByIndex(nextIndex);
+            }
+          });
+        }
+
+        setActiveDashboardTab(activeDashboardTab, { force: true });
+      }
+
+      function resetAnnouncementCta() {
+        if (!announcementCta) {
+          return;
+        }
+        announcementCta.classList.add('hidden');
+        announcementCta.textContent = '';
+        announcementCta.removeAttribute('href');
+        announcementCta.removeAttribute('target');
+        announcementCta.removeAttribute('rel');
+      }
+
+      function renderAnnouncementBanner(payload) {
+        if (!announcementBanner) {
+          state.announcement = null;
+          return;
+        }
+
+        const normalized = normalizeAnnouncementPayload(payload);
+        state.announcement = normalized;
+
+        if (
+          !normalized ||
+          !normalized.enabled ||
+          (!normalized.title && !normalized.body) ||
+          isAnnouncementDismissed(normalized)
+        ) {
+          announcementBanner.classList.add('hidden');
+          announcementBanner.dataset.tone = 'info';
+          if (announcementTitle) {
+            announcementTitle.textContent = '';
+          }
+          if (announcementBody) {
+            announcementBody.textContent = '';
+            announcementBody.classList.add('hidden');
+          }
+          resetAnnouncementCta();
+          if (announcementDismissButton) {
+            announcementDismissButton.classList.add('hidden');
+            announcementDismissButton.setAttribute('aria-hidden', 'true');
+          }
+          return;
+        }
+
+        announcementBanner.classList.remove('hidden');
+        announcementBanner.dataset.tone = normalized.tone;
+
+        if (announcementChip) {
+          announcementChip.textContent =
+            ANNOUNCEMENT_TONE_LABELS[normalized.tone] || 'Information';
+        }
+
+        if (announcementTitle) {
+          announcementTitle.textContent = normalized.title || 'Notice';
+        }
+
+        if (announcementBody) {
+          if (normalized.body) {
+            announcementBody.textContent = normalized.body;
+            announcementBody.classList.remove('hidden');
+          } else {
+            announcementBody.textContent = '';
+            announcementBody.classList.add('hidden');
+          }
+        }
+
+        if (normalized.cta && announcementCta) {
+          announcementCta.classList.remove('hidden');
+          announcementCta.textContent = normalized.cta.label;
+          announcementCta.href = normalized.cta.url;
+          if (normalized.cta.openInNewTab) {
+            announcementCta.target = '_blank';
+            announcementCta.rel = 'noopener';
+          } else {
+            announcementCta.removeAttribute('target');
+            announcementCta.removeAttribute('rel');
+          }
+        } else {
+          resetAnnouncementCta();
+        }
+
+        if (announcementDismissButton) {
+          if (normalized.dismissible) {
+            announcementDismissButton.classList.remove('hidden');
+            announcementDismissButton.removeAttribute('aria-hidden');
+          } else {
+            announcementDismissButton.classList.add('hidden');
+            announcementDismissButton.setAttribute('aria-hidden', 'true');
+          }
+        }
+      }
+
+      function renderOverseerrIntegration(integrations) {
+        if (!overseerrSection) {
+          return;
+        }
+
+        const payload =
+          integrations && typeof integrations === 'object'
+            ? integrations.overseerr || null
+            : null;
+        const rawUrl =
+          payload && payload.url ? String(payload.url).trim() : '';
+
+        if (rawUrl) {
+          overseerrSection.classList.remove('hidden');
+          if (overseerrLink) {
+            overseerrLink.href = rawUrl;
+            overseerrLink.removeAttribute('aria-disabled');
+            overseerrLink.target = '_blank';
+            overseerrLink.rel = 'noopener noreferrer';
+          }
+          return;
+        }
+
+        overseerrSection.classList.add('hidden');
+        if (overseerrLink) {
+          overseerrLink.href = '#';
+          overseerrLink.setAttribute('aria-disabled', 'true');
+          overseerrLink.removeAttribute('target');
+          overseerrLink.removeAttribute('rel');
+        }
+      }
+
+      if (announcementDismissButton) {
+        announcementDismissButton.addEventListener('click', () => {
+          if (!state.announcement || !state.announcement.dismissible) {
+            return;
+          }
+          rememberAnnouncementDismissal(state.announcement);
+          renderAnnouncementBanner(null);
+        });
+      }
+
+      function buildSessionRequest(path, options = {}) {
+        const requestUrl = withSessionToken(path);
+        const requestOptions = { ...options };
+        requestOptions.headers = options && options.headers
+          ? { ...options.headers }
+          : {};
+        if (sessionToken) {
+          requestOptions.headers['X-Session-Token'] = sessionToken;
+        }
+        return { requestUrl, requestOptions };
+      }
+
+      async function sessionFetch(path, options = {}) {
+        const { requestUrl, requestOptions } = buildSessionRequest(path, options);
+        return fetch(requestUrl, requestOptions);
+      }
+
+      async function submitVerificationToken(token) {
+        if (!token || verificationInFlight) {
+          return;
+        }
+        verificationInFlight = true;
+        try {
+          showLoading();
+          const response = await fetch('/api/customer/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          let payload = {};
+          try {
+            payload = await response.json();
+          } catch (err) {
+            payload = {};
+          }
+          updateSessionTokenFromResponse(payload);
+          if (!response.ok) {
+            const errorMessage =
+              (payload && payload.error) ||
+              'Failed to verify email. Try again shortly.';
+            throw new Error(errorMessage);
+          }
+          renderDashboard(payload);
+          if (memberStatusMessage) {
+            setStatusText(
+              memberStatusMessage,
+              'Email verified successfully! Welcome back to the dashboard.',
+              'success'
+            );
+            memberStatusMessage.classList.add('small');
+          }
+        } catch (err) {
+          const message = err && err.message
+            ? err.message
+            : 'Failed to verify email. Try again shortly.';
+          if (state.data && state.data.authenticated) {
+            if (memberStatusMessage) {
+              setStatusText(memberStatusMessage, message, 'error');
+              memberStatusMessage.classList.add('small');
+            }
+          } else {
+            renderDashboard({ authenticated: false });
+            setStatusText(loginStatus, message, 'error');
+          }
+          fetchSession({ silent: true });
+        } finally {
+          verificationInFlight = false;
+          initialVerificationToken = null;
+        }
+      }
+
+      const profileForm = document.getElementById('profile-form');
+      const profileEmail = document.getElementById('profile-email');
+      const profileName = document.getElementById('profile-name');
+      const profileSubscription = document.getElementById('profile-subscription');
+      const profileStatus = document.getElementById('profile-status');
+      const profileSave = document.getElementById('profile-save');
+      const passwordForm = document.getElementById('password-form');
+      const passwordCurrentRow = document.getElementById('password-current-row');
+      const passwordCurrent = document.getElementById('password-current');
+      const passwordNew = document.getElementById('password-new');
+      const passwordConfirm = document.getElementById('password-confirm');
+      const passwordStatus = document.getElementById('password-status');
+      const passwordSave = document.getElementById('password-save');
+      const passwordGuidance = document.getElementById('password-guidance');
+      const passwordPanel = document.getElementById('password-panel');
+      const customerTwoFactorPanel = document.getElementById('customer-two-factor-panel');
+      const customerTwoFactorDescription = document.getElementById('customer-two-factor-description');
+      const customerTwoFactorBadge = document.getElementById('customer-two-factor-badge');
+      const customerTwoFactorSetupPanel = document.getElementById('customer-two-factor-setup-panel');
+      const customerTwoFactorQr = document.getElementById('customer-two-factor-qr');
+      const customerTwoFactorManualKey = document.getElementById('customer-two-factor-manual-key');
+      const customerTwoFactorCode = document.getElementById('customer-two-factor-code');
+      const customerTwoFactorStart = document.getElementById('customer-two-factor-start');
+      const customerTwoFactorVerify = document.getElementById('customer-two-factor-verify');
+      const customerTwoFactorRegenerate = document.getElementById('customer-two-factor-regenerate');
+      const customerTwoFactorDisable = document.getElementById('customer-two-factor-disable');
+      const customerTwoFactorStatus = document.getElementById('customer-two-factor-status');
+      const customerTwoFactorRecoveryPanel = document.getElementById('customer-two-factor-recovery-panel');
+      const customerTwoFactorRecoveryCodes = document.getElementById('customer-two-factor-recovery-codes');
+
+      const inviteForm = document.getElementById('invite-form');
+      const inviteEmail = document.getElementById('invite-email');
+      const inviteNote = document.getElementById('invite-note');
+      const inviteStatus = document.getElementById('invite-status');
+      const inviteSubmit = document.getElementById('invite-submit');
+      const inviteReady = document.getElementById('invite-ready');
+      const inviteLinkEl = document.getElementById('invite-link');
+      const inviteEmailDisplay = document.getElementById('invite-email-display');
+      const inviteCreated = document.getElementById('invite-created');
+      const inviteDescription = document.getElementById('invite-description');
+      const inviteEmailLabel = document.getElementById('invite-email-label');
+      const inviteNoteLabel = document.getElementById('invite-note-label');
+      const inviteIntentButtons = [
+        document.getElementById('invite-intent-referral'),
+        document.getElementById('invite-intent-restore'),
+      ].filter(Boolean);
+
+      function showLoading() {
+        loadingPanel.classList.remove('hidden');
+        errorPanel.classList.add('hidden');
+        app.classList.add('hidden');
+      }
+
+      function showError(message) {
+        loadingPanel.classList.add('hidden');
+        errorPanel.textContent = message || 'Something went wrong.';
+        errorPanel.classList.remove('hidden');
+        app.classList.add('hidden');
+      }
+
+      function showApp() {
+        loadingPanel.classList.add('hidden');
+        errorPanel.classList.add('hidden');
+        app.classList.remove('hidden');
+      }
+
+      function formatPrice(amount, currency) {
+        if (!Number.isFinite(amount) || amount <= 0) {
+          return '';
+        }
+        try {
+          return new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: currency || 'USD',
+            minimumFractionDigits: 2,
+          }).format(amount);
+        } catch (err) {
+          return `${amount.toFixed(2)} ${currency || ''}`.trim();
+        }
+      }
+
+      function formatDate(value) {
+        if (!value) {
+          return '';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return value;
+        }
+        return date.toLocaleString();
+      }
+
+      function parseDate(value) {
+        if (!value) {
+          return null;
+        }
+        if (value instanceof Date) {
+          return Number.isNaN(value.getTime()) ? null : value;
+        }
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function formatDateTime(value) {
+        const date = parseDate(value);
+        if (!date) {
+          return '';
+        }
+        try {
+          return new Intl.DateTimeFormat(undefined, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          }).format(date);
+        } catch (err) {
+          return date.toLocaleString();
+        }
+      }
+
+      function getPlexCountdownLabel(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return '';
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return '';
+        }
+        const minutes = Math.max(0, Math.floor(diff / 60000));
+        const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      }
+
+      function getTrialCountdownLabel(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return '';
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return '';
+        }
+        const totalMinutes = Math.max(0, Math.floor(diff / 60000));
+        const minutesPerDay = 24 * 60;
+        const minutesPerHour = 60;
+        const days = Math.floor(totalMinutes / minutesPerDay);
+        const hours = Math.floor((totalMinutes % minutesPerDay) / minutesPerHour);
+        const minutes = totalMinutes % minutesPerHour;
+        const parts = [];
+        if (days > 0) {
+          parts.push(`${days} day${days === 1 ? '' : 's'}`);
+        }
+        if (hours > 0) {
+          parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+        }
+        if (parts.length < 2 && minutes > 0) {
+          parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+        }
+        if (parts.length === 0) {
+          return 'less than a minute';
+        }
+        if (parts.length === 1) {
+          return parts[0];
+        }
+        return `${parts[0]} and ${parts[1]}`;
+      }
+
+      function getTrialDaysRemaining(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          return null;
+        }
+        const diff = date.getTime() - Date.now();
+        if (diff <= 0) {
+          return 0;
+        }
+        const MS_PER_DAY = 24 * 60 * 60 * 1000;
+        return Math.floor(diff / MS_PER_DAY);
+      }
+
+      function clearInviteCooldownTimer() {
+        if (!inviteCooldownTimer) {
+          return;
+        }
+        if (inviteCooldownTimerType === 'interval') {
+          window.clearInterval(inviteCooldownTimer);
+        } else {
+          window.clearTimeout(inviteCooldownTimer);
+        }
+        inviteCooldownTimer = null;
+        inviteCooldownTimerType = null;
+      }
+
+      function scheduleInviteCooldownRefresh(nextAvailableAt) {
+        clearInviteCooldownTimer();
+        const nextDate = parseDate(nextAvailableAt);
+        state.nextInviteAvailableAt = nextDate
+          ? nextDate.toISOString()
+          : null;
+        if (!nextDate) {
+          return;
+        }
+        const delay = nextDate.getTime() - Date.now();
+        if (delay <= 0) {
+          fetchSession({ silent: true });
+          return;
+        }
+        const MAX_TIMEOUT = 2_147_483_647;
+        if (delay > MAX_TIMEOUT) {
+          inviteCooldownTimer = window.setInterval(() => {
+            if (Date.now() >= nextDate.getTime()) {
+              clearInviteCooldownTimer();
+              fetchSession({ silent: true });
+            }
+          }, 60 * 60 * 1000);
+          inviteCooldownTimerType = 'interval';
+        } else {
+          inviteCooldownTimer = window.setTimeout(() => {
+            clearInviteCooldownTimer();
+            fetchSession({ silent: true });
+          }, delay);
+          inviteCooldownTimerType = 'timeout';
+        }
+      }
+
+      function setStatusText(el, message, statusClass) {
+        if (!el) return;
+        el.textContent = message || '';
+        el.className = 'status-text';
+        if (statusClass) {
+          el.classList.add(statusClass);
+        }
+      }
+
+      function formatSupportTimestamp(value) {
+        if (!value) {
+          return '';
+        }
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) {
+          return '';
+        }
+        return date.toLocaleString();
+      }
+
+      function getSupportThreadLocal(id) {
+        const threads = Array.isArray(state.support.threads)
+          ? state.support.threads
+          : [];
+        return threads.find(
+          (thread) => thread && thread.request && thread.request.id === id
+        );
+      }
+
+      function renderSupportThreadDetail() {
+        if (!supportThreadDetail || !supportThreadSubject || !supportMessages) {
+          return;
+        }
+        const thread = getSupportThreadLocal(state.support.activeThreadId);
+        if (!thread) {
+          supportThreadDetail.classList.add('hidden');
+          return;
+        }
+        supportThreadDetail.classList.remove('hidden');
+        supportThreadSubject.textContent =
+          thread.request.subject || `Request #${thread.request.id}`;
+        const isResolved = Boolean(thread.request.resolved);
+        supportThreadStatus.textContent = isResolved ? 'Resolved' : 'Open';
+        supportThreadStatus.classList.toggle('support-status-open', !isResolved);
+        supportThreadStatus.classList.toggle('support-status-resolved', isResolved);
+        supportMessages.innerHTML = '';
+        const messages = Array.isArray(thread.messages) ? thread.messages : [];
+        if (messages.length === 0) {
+          const emptyMessage = document.createElement('p');
+          emptyMessage.className = 'support-empty';
+          emptyMessage.textContent = 'No messages yet.';
+          supportMessages.appendChild(emptyMessage);
+        } else {
+          messages.forEach((message) => {
+            const messageEl = document.createElement('div');
+            messageEl.className = 'support-message';
+            messageEl.dataset.author = message.authorRole || 'donor';
+
+            const authorEl = document.createElement('div');
+            authorEl.className = 'support-message-author';
+            authorEl.textContent =
+              message.authorName ||
+              (message.authorRole === 'admin' ? 'Admin' : 'You');
+
+            const metaEl = document.createElement('div');
+            metaEl.className = 'support-message-meta';
+            metaEl.textContent = formatSupportTimestamp(message.createdAt);
+
+            const bodyEl = document.createElement('div');
+            bodyEl.textContent = message.body || '';
+
+            messageEl.append(authorEl, metaEl, bodyEl);
+            supportMessages.appendChild(messageEl);
+          });
+          supportMessages.scrollTop = supportMessages.scrollHeight;
+        }
+
+        if (supportReplyMessage) {
+          const drafts = state.support.replyDrafts || {};
+          const draftValue = drafts[thread.request.id] || '';
+          supportReplyMessage.value = draftValue;
+        }
+        if (supportReplyStatus) {
+          setStatusText(supportReplyStatus, '');
+        }
+      }
+
+      function renderSupportThreads() {
+        if (!supportThreadList || !supportThreads) {
+          return;
+        }
+        const threads = Array.isArray(state.support.threads)
+          ? state.support.threads
+          : [];
+        supportThreadList.innerHTML = '';
+        if (threads.length === 0) {
+          if (supportEmpty) {
+            supportEmpty.classList.remove('hidden');
+          }
+          supportThreadDetail && supportThreadDetail.classList.add('hidden');
+          return;
+        }
+
+        if (supportEmpty) {
+          supportEmpty.classList.add('hidden');
+        }
+
+        if (!threads.some((thread) => thread.request.id === state.support.activeThreadId)) {
+          state.support.activeThreadId = threads[0].request.id;
+        }
+
+        threads.forEach((thread) => {
+          if (!thread || !thread.request) {
+            return;
+          }
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'support-thread-button';
+          const isActive = thread.request.id === state.support.activeThreadId;
+          button.setAttribute('aria-current', isActive ? 'true' : 'false');
+
+          const titleEl = document.createElement('h3');
+          titleEl.textContent = thread.request.subject || `Request #${thread.request.id}`;
+
+          const statusEl = document.createElement('span');
+          const resolved = Boolean(thread.request.resolved);
+          statusEl.className = `support-status-pill ${resolved ? 'support-status-resolved' : 'support-status-open'}`;
+          statusEl.textContent = resolved ? 'Resolved' : 'Open';
+
+          button.append(titleEl, statusEl);
+          button.addEventListener('click', () => {
+            state.support.activeThreadId = thread.request.id;
+            renderSupportThreads();
+          });
+
+          supportThreadList.appendChild(button);
+        });
+
+        renderSupportThreadDetail();
+      }
+
+      async function loadSupportThreads(options = {}) {
+        while (supportThreadsRequest) {
+          try {
+            await supportThreadsRequest;
+          } catch (err) {
+            // Previous invocation already handled the error display.
+          }
+        }
+
+        const request = (async () => {
+          supportLoading = true;
+          try {
+            const response = await sessionFetch('/api/customer/support');
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                payload && payload.error
+                  ? payload.error
+                  : 'Failed to load support requests'
+              );
+            }
+            const threads = Array.isArray(payload.threads) ? payload.threads : [];
+            state.support.threads = threads;
+            if (threads.length === 0) {
+              state.support.activeThreadId = null;
+            }
+            renderSupportThreads();
+            return payload;
+          } catch (err) {
+            if (!options.silent && supportStatus) {
+              setStatusText(
+                supportStatus,
+                err.message || 'Failed to load support requests.',
+                'error'
+              );
+            }
+            return null;
+          } finally {
+            supportLoading = false;
+          }
+        })();
+
+        supportThreadsRequest = request.finally(() => {
+          supportThreadsRequest = null;
+        });
+
+        return supportThreadsRequest;
+      }
+
+      async function setSupportPanelOpen(open) {
+        if (!supportContainer) {
+          return;
+        }
+        supportPanelOpen = Boolean(open);
+        supportContainer.classList.toggle('hidden', !supportPanelOpen);
+        if (supportToggle) {
+          supportToggle.textContent = supportPanelOpen ? 'Hide support' : 'Contact support';
+        }
+        if (supportPanelOpen) {
+          await loadSupportThreads({ silent: true });
+        }
+      }
+
+      function clearPlexLinkPollTimer() {
+        if (!plexLinkPollTimer) {
+          return;
+        }
+        window.clearTimeout(plexLinkPollTimer);
+        plexLinkPollTimer = null;
+      }
+
+      function schedulePlexLinkStatusPoll(intervalMs) {
+        if (!state.pendingPlexLink) {
+          clearPlexLinkPollTimer();
+          return;
+        }
+        const normalized = Number(intervalMs ?? state.pendingPlexLink.pollIntervalMs);
+        const delay = Number.isFinite(normalized) && normalized > 0 ? normalized : 5000;
+        clearPlexLinkPollTimer();
+        plexLinkPollTimer = window.setTimeout(() => {
+          plexLinkPollTimer = null;
+          pollPlexLinkStatus();
+        }, delay);
+      }
+
+      function clearPlexLinkCountdownTimer({ resetText = true } = {}) {
+        if (plexLinkCountdownTimer) {
+          window.clearInterval(plexLinkCountdownTimer);
+          plexLinkCountdownTimer = null;
+        }
+        plexLinkCountdownExpiryMs = null;
+        if (resetText && plexLinkPinExpiry) {
+          plexLinkPinExpiry.textContent = '';
+        }
+      }
+
+      function updatePlexLinkCountdownDisplay() {
+        if (!plexLinkPinExpiry || !Number.isFinite(plexLinkCountdownExpiryMs)) {
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          return '';
+        }
+        const diff = plexLinkCountdownExpiryMs - Date.now();
+        if (diff <= 0) {
+          plexLinkPinExpiry.textContent = 'PIN expired';
+          return '';
+        }
+        const minutes = Math.max(0, Math.floor(diff / 60000));
+        const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
+        const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        plexLinkPinExpiry.textContent = `Expires in ${formatted}`;
+        return formatted;
+      }
+
+      function startPlexLinkCountdown(expiresAt) {
+        const date = parseDate(expiresAt);
+        if (!date) {
+          clearPlexLinkCountdownTimer();
+          return '';
+        }
+        const targetMs = date.getTime();
+        if (plexLinkCountdownTimer && plexLinkCountdownExpiryMs === targetMs) {
+          return updatePlexLinkCountdownDisplay();
+        }
+        clearPlexLinkCountdownTimer();
+        plexLinkCountdownExpiryMs = targetMs;
+        const initial = updatePlexLinkCountdownDisplay();
+        if (!initial) {
+          return '';
+        }
+        plexLinkCountdownTimer = window.setInterval(() => {
+          const next = updatePlexLinkCountdownDisplay();
+          if (!next) {
+            clearPlexLinkCountdownTimer({ resetText: false });
+          }
+        }, 1000);
+        return initial;
+      }
+
+      function closePlexAuthWindow() {
+        if (plexLinkAuthWindow && !plexLinkAuthWindow.closed) {
+          try {
+            plexLinkAuthWindow.close();
+          } catch (err) {
+            // Ignore window close errors.
+          }
+        }
+        plexLinkAuthWindow = null;
+      }
+
+      function setPlexLinkStatus(message, tone, { sticky = false, force = false } = {}) {
+        if (!force && plexLinkStatusSticky && !sticky) {
+          return;
+        }
+        plexLinkStatusSticky = sticky;
+        if (!plexLinkStatus) {
+          return;
+        }
+        setStatusText(plexLinkStatus, message, tone || null);
+        plexLinkStatus.classList.add('small');
+      }
+
+      function clearPlexLinkStatus({ force = false } = {}) {
+        if (!force && plexLinkStatusSticky) {
+          return;
+        }
+        plexLinkStatusSticky = false;
+        if (!plexLinkStatus) {
+          return;
+        }
+        setStatusText(plexLinkStatus, '', null);
+        plexLinkStatus.classList.add('small');
+      }
+
+      async function pollPlexLinkStatus() {
+        if (!state.pendingPlexLink) {
+          clearPlexLinkPollTimer();
+          return;
+        }
+        let response;
+        try {
+          response = await sessionFetch('/api/customer/plex/link/status');
+        } catch (err) {
+          setPlexLinkStatus('Unable to reach Plex right now. Retrying…', 'error', {
+            force: true,
+          });
+          schedulePlexLinkStatusPoll(state.pendingPlexLink.pollIntervalMs);
+          return;
+        }
+        let payload = {};
+        try {
+          payload = await response.json();
+        } catch (err) {
+          payload = {};
+        }
+        updateSessionTokenFromResponse(payload);
+        if (!response.ok) {
+          const payloadData = payload && payload.payload ? payload.payload : null;
+          if (payloadData) {
+            renderDashboard(payloadData);
+          } else {
+            applyPlexLinkState(null, null);
+          }
+          const plexErrorMessage = payload && payload.error
+            ? `${payload.error} Try starting the link again.`
+            : 'Failed to verify Plex authentication. Try starting the link again.';
+          setPlexLinkStatus(plexErrorMessage, 'error', { sticky: true, force: true });
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer({ resetText: false });
+          closePlexAuthWindow();
+          return;
+        }
+        renderDashboard(payload);
+      }
+
+      function applyPlexLinkState(donor, plexLink) {
+        const plexLinked = Boolean(donor && donor.plexLinked);
+        const pending = plexLink && plexLink.pending ? plexLink : null;
+
+        if (pending) {
+          state.pendingPlexLink = {
+            code: pending.code || '',
+            authUrl: pending.authUrl || '',
+            expiresAt: pending.expiresAt || null,
+            pollIntervalMs: Number(pending.pollIntervalMs) || null,
+          };
+        } else {
+          state.pendingPlexLink = null;
+        }
+
+        if (plexLinkButton) {
+          if (plexLinked || pending) {
+            plexLinkButton.classList.add('hidden');
+            plexLinkButton.disabled = true;
+          } else {
+            plexLinkButton.classList.remove('hidden');
+            plexLinkButton.disabled = false;
+          }
+        }
+
+        if (pending) {
+          if (plexLinkPin) {
+            plexLinkPin.classList.remove('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = state.pendingPlexLink.code || '----';
+          }
+          const countdown = startPlexLinkCountdown(state.pendingPlexLink.expiresAt);
+          const baseMessage =
+            'Waiting for Plex to confirm your account. Complete the Plex prompt in the new tab.';
+          const message = countdown
+            ? `${baseMessage} PIN expires in ${countdown}.`
+            : baseMessage;
+          setPlexLinkStatus(message, 'info', { force: true });
+          schedulePlexLinkStatusPoll(state.pendingPlexLink.pollIntervalMs);
+        } else {
+          clearPlexLinkCountdownTimer();
+          clearPlexLinkPollTimer();
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          if (plexLinked) {
+            setPlexLinkStatus('Plex account linked successfully.', 'success', {
+              force: true,
+            });
+            // Keep the user on Setup & billing so the next available action,
+            // trial or checkout, stays directly in view.
+          } else {
+            setPlexLinkStatus(
+              'Link your Plex account so we can enable PayPal checkout and invites.',
+              'info'
+            );
+          }
+          closePlexAuthWindow();
+        }
+      }
+
+      function updateMembershipStatusMessage(
+        donor,
+        {
+          showSubscriptionCta,
+          nextInviteMessage = '',
+          cooldownActive = false,
+          refreshError = '',
+          plexLinked = false,
+          emailVerified = true,
+        } = {}
+      ) {
+        if (!memberStatusMessage) {
+          return;
+        }
+
+        const normalizedRefreshError =
+          typeof refreshError === 'string' ? refreshError.trim() : '';
+        if (normalizedRefreshError) {
+          setStatusText(memberStatusMessage, normalizedRefreshError, 'error');
+          memberStatusMessage.classList.add('small');
+          return;
+        }
+
+        if (donor && !emailVerified) {
+          setStatusText(
+            memberStatusMessage,
+            'Check your inbox for the verification email to unlock your dashboard.',
+            'error'
+          );
+          memberStatusMessage.classList.add('small');
+          return;
+        }
+
+        const normalizedStatus = (donor && donor.status
+          ? donor.status
+          : 'pending'
+        ).toLowerCase();
+        const lastPayment = donor && donor.lastPaymentAt ? formatDate(donor.lastPaymentAt) : '';
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdown = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresOn = formatDateTime(accessExpiresAt);
+
+        let tone = 'info';
+        let message = '';
+
+        switch (normalizedStatus) {
+          case 'active':
+            tone = 'success';
+            if (nextInviteMessage && cooldownActive) {
+              message = `${nextInviteMessage} We'll refresh this dashboard automatically when your next invite unlocks. Use referral mode to invite someone else or restore mode if you lost Plex access.`;
+            } else if (nextInviteMessage) {
+              message = `Your subscription is active. ${nextInviteMessage} Use referral mode when it unlocks, or restore mode if you lost Plex access.`;
+            } else if (lastPayment) {
+              message = `Your subscription is active. Last payment recorded ${lastPayment}. Send a referral below when you're ready, or switch to restore mode if you lost Plex access.`;
+            } else {
+              message = 'Your subscription is active. Send a referral below to welcome someone new, or switch to restore mode if you lost Plex access.';
+            }
+            if (
+              donor &&
+              donor.needsPlexInvite === true &&
+              donor.plexShared === false
+            ) {
+              message = `${message} Check your email (and spam folder) for the Plex library invite. If it never arrived, you can resend the invite below or update your email and try again.`;
+            }
+            break;
+          case 'trial':
+            tone = 'info';
+            if (trialCountdown) {
+              message = `Your 7-day trial is active. Access expires in ${trialCountdown}.`;
+            } else if (trialExpiresOn) {
+              message = `Your 7-day trial is active. Access expires on ${trialExpiresOn}.`;
+            } else {
+              message = 'Your 7-day trial is active.';
+            }
+            if (showSubscriptionCta) {
+              message += ' Subscribe before the trial ends to keep streaming without interruption.';
+            } else {
+              message += ' No billing info was needed to start. Add a subscription only if you want to keep streaming after the trial.';
+            }
+            break;
+          case 'trial_expired':
+            tone = 'error';
+            if (trialExpiresOn) {
+              message = `Your free trial ended on ${trialExpiresOn}.`;
+            } else {
+              message = 'Your free trial has ended.';
+            }
+            if (showSubscriptionCta) {
+              message += ' Start a subscription above to continue access.';
+            } else {
+              message += ' Add a subscription only if you want to restore access.';
+            }
+            break;
+          case 'pending':
+            tone = 'info';
+            if (!donor || !donor.subscriptionId) {
+              if (showSubscriptionCta) {
+                message =
+                  'Start the risk-free trial above, or subscribe if you already know you want to keep access.';
+              } else {
+                message =
+                  'Already subscribed? Add your subscription ID below so we can link it to your account.';
+              }
+            } else {
+              message =
+                'We are waiting to confirm your first payment. This usually takes just a moment.';
+            }
+            break;
+          case 'cancelled':
+            tone = 'error';
+            message =
+              'Your subscription was canceled. Start a new subscription to regain access.';
+            break;
+          case 'suspended':
+            tone = 'error';
+            message =
+              'Your subscription is suspended. Update your billing details to resume access.';
+            break;
+          case 'expired':
+            tone = 'error';
+            message =
+              'Your subscription expired. Start a new subscription to continue access.';
+            break;
+          case 'past_due':
+            tone = 'error';
+            message =
+              'Your subscription payment is past due. Update your billing information to avoid interruptions.';
+            break;
+          default:
+            tone = 'info';
+            message =
+              'Your subscription status is being updated. Contact the server admin if this looks wrong.';
+            break;
+        }
+
+        setStatusText(memberStatusMessage, message, tone);
+        memberStatusMessage.classList.add('small');
+      }
+
+      function renderInvite(
+        invite,
+        limitReached,
+        nextInviteAvailableAt,
+        { emailVerified = true } = {}
+      ) {
+        applyInviteIntent();
+        const limitHit = Boolean(limitReached);
+        const nextAvailableDate = parseDate(nextInviteAvailableAt);
+        const cooldownActive =
+          limitHit && nextAvailableDate && nextAvailableDate.getTime() > Date.now();
+        const nextInviteMessage = cooldownActive
+          ? `Next referral invite available on ${formatDateTime(nextAvailableDate)}.`
+          : '';
+        const restoreMode = inviteIntent === 'restore';
+
+        if (inviteStatus) {
+          if (!emailVerified) {
+            setStatusText(
+              inviteStatus,
+              'Verify your email to unlock referral invites.',
+              'info'
+            );
+          } else {
+            setStatusText(inviteStatus, '');
+          }
+        }
+
+        if (inviteForm) {
+          if (limitHit) {
+            inviteForm.classList.add('hidden');
+          } else {
+            inviteForm.classList.remove('hidden');
+          }
+        }
+
+          if (!invite || !invite.inviteUrl) {
+            inviteReady.classList.add('hidden');
+            inviteLinkEl.removeAttribute('href');
+            inviteLinkEl.textContent = '';
+            inviteEmailDisplay.textContent = '';
+            inviteCreated.textContent = '';
+          if (cooldownActive && nextInviteMessage) {
+            inviteDescription.textContent =
+              `${nextInviteMessage} We'll refresh this dashboard automatically when you're eligible to send another referral invite.`;
+          } else {
+            inviteDescription.textContent = limitHit
+              ? 'This month’s referral invite has already been used. Contact the server admin if you lost access and need the link restored.'
+              : 'Active subscribers can send one referral invite each month. Use the form below when you are ready to share it—and only regenerate your own link if you have lost access.';
+          }
+          if (inviteSubmit) {
+            if (cooldownActive) {
+              inviteSubmit.textContent = 'Referral invite cooling down…';
+            } else {
+              inviteSubmit.textContent = limitHit
+                ? 'Referral invite already sent'
+                : 'Send referral invite';
+            }
+            inviteSubmit.disabled = limitHit;
+          }
+          if (cooldownActive && nextInviteMessage) {
+            inviteDescription.textContent =
+              `${nextInviteMessage} We'll refresh this dashboard automatically when the next invite unlocks.`;
+          } else {
+            inviteDescription.textContent = limitHit
+              ? 'This month’s invite has already been used. Contact the server admin if you need a link restored before the next unlock.'
+              : restoreMode
+              ? 'Use your own account email to request a fresh Plex access link. This uses the same monthly invite allowance as referrals.'
+              : 'Send a referral invite when you are ready to welcome someone new. Switch to restore mode if you need a fresh link for yourself.';
+          }
+          if (inviteSubmit) {
+            inviteSubmit.textContent = limitHit
+              ? 'Invite already sent'
+              : restoreMode
+              ? 'Send recovery invite'
+              : 'Send referral invite';
+            if (cooldownActive) {
+              inviteSubmit.textContent = 'Invite cooling down…';
+            }
+          }
+          return;
+        }
+
+          inviteReady.classList.remove('hidden');
+          inviteLinkEl.href = invite.inviteUrl;
+          inviteLinkEl.textContent = invite.inviteUrl;
+        inviteEmailDisplay.textContent = invite.recipientEmail
+          ? `Delivering to ${invite.recipientEmail}`
+          : '';
+        inviteCreated.textContent = invite.createdAt
+          ? `Created ${formatDate(invite.createdAt)}`
+          : '';
+        if (cooldownActive && nextInviteMessage) {
+          inviteDescription.textContent =
+            `${nextInviteMessage} We'll refresh this dashboard automatically when the referral cooldown ends.`;
+        } else {
+          inviteDescription.textContent = limitHit
+            ? 'Referral invite ready! Reach out to the server admin if you lost access and need the link refreshed.'
+            : 'Referral invite ready! Share the link below with your recipient—only follow it yourself if you’re restoring access.';
+        }
+        if (inviteSubmit) {
+          if (cooldownActive) {
+            inviteSubmit.textContent = 'Referral invite cooling down…';
+          } else {
+            inviteSubmit.textContent = limitHit
+              ? 'Referral invite already sent'
+              : 'Send another referral invite';
+          }
+          inviteSubmit.disabled = limitHit;
+        }
+        if (!cooldownActive) {
+          inviteDescription.textContent = limitHit
+            ? 'Invite ready. Reach out to the server admin if you need the link refreshed before the next unlock.'
+            : restoreMode
+            ? 'Recovery invite ready. Follow the link yourself to restore Plex access.'
+            : 'Referral invite ready. Share the link below with your recipient.';
+        }
+        if (inviteSubmit) {
+          inviteSubmit.textContent = limitHit
+            ? 'Invite already sent'
+            : restoreMode
+            ? 'Send another recovery invite'
+            : 'Send another referral invite';
+          if (cooldownActive) {
+            inviteSubmit.textContent = 'Invite cooling down…';
+          }
+        }
+      }
+
+      function getCurrentDonor() {
+        return state.data && state.data.donor ? state.data.donor : null;
+      }
+
+      function applyInviteIntent(options = {}) {
+        const normalized = inviteIntent === 'restore' ? 'restore' : 'referral';
+        const donor = getCurrentDonor();
+        inviteIntentButtons.forEach((button) => {
+          const isActive = button.dataset.inviteIntent === normalized;
+          button.classList.toggle('is-active', isActive);
+          button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        if (inviteEmailLabel) {
+          inviteEmailLabel.textContent =
+            normalized === 'restore'
+              ? 'Your Plex account email'
+              : 'Email for this referral invite';
+        }
+        if (inviteNoteLabel) {
+          inviteNoteLabel.textContent =
+            normalized === 'restore'
+              ? 'Optional note for the admin'
+              : 'Optional note for the recipient';
+        }
+        if (normalized === 'restore' && inviteEmail && donor && donor.email) {
+          const shouldPrefill = options.forcePrefill || !inviteEmail.value.trim();
+          if (shouldPrefill && document.activeElement !== inviteEmail) {
+            inviteEmail.value = donor.email;
+          }
+        }
+      }
+
+      function setInviteIntent(nextIntent, options = {}) {
+        inviteIntent = nextIntent === 'restore' ? 'restore' : 'referral';
+        applyInviteIntent({ forcePrefill: inviteIntent === 'restore' });
+        if (inviteStatus) {
+          setStatusText(
+            inviteStatus,
+            inviteIntent === 'restore'
+              ? 'We will send the link to your account email so you can restore Plex access.'
+              : 'Send this link to someone else when you are ready to share access.',
+            'info'
+          );
+          inviteStatus.classList.add('small');
+        }
+        if (options.focus && inviteEmail) {
+          inviteEmail.focus();
+        }
+      }
+
+      function setStepState(stepEl, state) {
+        if (!stepEl) {
+          return;
+        }
+        const allowed = new Set(['complete', 'current', 'upcoming']);
+        const normalized = allowed.has(state) ? state : 'upcoming';
+        stepEl.dataset.state = normalized;
+        const numberEl = stepEl.querySelector('.step-number');
+        if (numberEl && numberEl.dataset && numberEl.dataset.stepNumber) {
+          if (normalized === 'complete') {
+            numberEl.textContent = '✓';
+          } else {
+            numberEl.textContent = numberEl.dataset.stepNumber;
+          }
+        }
+      }
+
+      function updateOnboarding(
+        data,
+        {
+          showSubscriptionCta,
+          inviteCooldownActive = false,
+          nextInviteMessage = '',
+          emailVerified = true,
+        } = {}
+      ) {
+        if (!onboardingPanel) {
+          return;
+        }
+
+        const donor = data && data.donor ? data.donor : null;
+        if (donor && !emailVerified) {
+          setElementVisibility(onboardingPanel, true);
+          if (stepPlex) {
+            setStepState(stepPlex, 'upcoming');
+          }
+          if (stepSubscription) {
+            setStepState(stepSubscription, 'upcoming');
+          }
+          if (stepInvite) {
+            setStepState(stepInvite, 'upcoming');
+          }
+          const verificationNote =
+            'Verify your email from the link we sent to unlock the rest of your setup steps.';
+          if (stepPlexNote) {
+            stepPlexNote.textContent = verificationNote;
+          }
+          if (stepSubscriptionNote) {
+            stepSubscriptionNote.textContent = verificationNote;
+          }
+          if (stepInviteNote) {
+            stepInviteNote.textContent = verificationNote;
+          }
+          return;
+        }
+
+        const normalizedStatus = donor && donor.status
+          ? donor.status.toLowerCase()
+          : 'pending';
+        const isTrial = normalizedStatus === 'trial';
+        const isTrialExpired = normalizedStatus === 'trial_expired';
+        const subscriptionComplete = normalizedStatus === 'active';
+        const subscriptionStarted = Boolean(donor && donor.subscriptionId) || isTrial;
+        const plexLinked = Boolean(donor && donor.plexLinked);
+        const plexLinkPending = Boolean(
+          data &&
+            data.plexLink &&
+            typeof data.plexLink.pending === 'boolean' &&
+            data.plexLink.pending
+        );
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdown = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresOn = formatDateTime(accessExpiresAt);
+          const inviteReadyState = Boolean(
+            data && data.invite && data.invite.inviteUrl
+          );
+        const inviteLimitReached = Boolean(data && data.inviteLimitReached);
+        const allComplete = plexLinked && subscriptionComplete && inviteReadyState;
+
+        if (allComplete) {
+          setElementVisibility(onboardingPanel, false);
+          return;
+        }
+
+        setElementVisibility(onboardingPanel, true);
+
+        const steps = [
+          { el: stepPlex, complete: plexLinked },
+          { el: stepSubscription, complete: subscriptionComplete },
+          { el: stepInvite, complete: inviteReadyState },
+        ];
+
+        let currentAssigned = false;
+        for (const step of steps) {
+          if (!step.el) {
+            continue;
+          }
+          if (step.complete) {
+            setStepState(step.el, 'complete');
+          } else if (!currentAssigned) {
+            setStepState(step.el, 'current');
+            currentAssigned = true;
+          } else {
+            setStepState(step.el, 'upcoming');
+          }
+        }
+
+        if (stepPlexNote) {
+          if (plexLinked) {
+            if (subscriptionComplete) {
+              stepPlexNote.textContent =
+                'Plex account verified—time to send your referral invite!';
+            } else {
+              stepPlexNote.textContent =
+                'Plex account verified—head to the next step to start your membership.';
+            }
+          } else if (plexLinkPending) {
+            const countdownLabel =
+              data && data.plexLink
+                ? getPlexCountdownLabel(data.plexLink.expiresAt)
+                : '';
+            if (countdownLabel) {
+              stepPlexNote.textContent =
+                `Plex authentication in progress—finish the prompt before it expires in ${countdownLabel}. We'll refresh this card automatically.`;
+            } else {
+              stepPlexNote.textContent =
+                'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
+            }
+          } else {
+            stepPlexNote.textContent =
+              'Use the button below to launch the Plex authentication prompt and link your streaming account. We will update this step as soon as verification completes.';
+          }
+        }
+
+        if (stepSubscriptionNote) {
+          if (!plexLinked) {
+            stepSubscriptionNote.textContent =
+              'Finish Plex authentication first. Billing actions unlock here right after.';
+          } else if (isTrial) {
+            if (trialCountdown) {
+              stepSubscriptionNote.textContent =
+                `Risk-free trial active. Access expires in ${trialCountdown}. Subscribe here before it ends.`;
+            } else if (trialExpiresOn) {
+              stepSubscriptionNote.textContent =
+                `Risk-free trial active until ${trialExpiresOn}. Subscribe here when you're ready.`;
+            } else {
+              stepSubscriptionNote.textContent =
+                'Risk-free trial active. Subscribe here if you want to keep streaming once it ends.';
+            }
+          } else if (isTrialExpired) {
+            stepSubscriptionNote.textContent =
+              'Your trial has ended. Start a subscription here to restore access.';
+          } else if (!subscriptionStarted) {
+            stepSubscriptionNote.textContent =
+              'Plex is linked. Start your 7-day risk-free trial here. No payment info required.';
+          } else if (!subscriptionComplete) {
+            stepSubscriptionNote.textContent =
+              'We are waiting to confirm your first payment. Check Account if you need to update profile details.';
+          } else {
+            stepSubscriptionNote.textContent =
+              'Subscription active! You are ready for the next step.';
+          }
+        }
+
+        if (stepInviteNote) {
+          if (!plexLinked) {
+            stepInviteNote.textContent =
+              'Finish Plex authentication and we’ll enable referral invites.';
+          } else if (!subscriptionComplete) {
+            stepInviteNote.textContent =
+              'Referral invites unlock after your subscription is active.';
+          } else if (!inviteReadyState) {
+            stepInviteNote.textContent =
+              'Use the form below to send a referral invite as soon as you are verified. Only regenerate your own link if you have lost access.';
+          } else if (inviteLimitReached) {
+            if (inviteCooldownActive && nextInviteMessage) {
+              stepInviteNote.textContent =
+                `${nextInviteMessage} We'll refresh this dashboard automatically when you can send the next referral invite.`;
+            } else {
+              stepInviteNote.textContent =
+                'Your referral invite is ready below. Reach out to the server admin if you lost access and need it refreshed.';
+            }
+          } else {
+            stepInviteNote.textContent =
+              'Referral invite ready! Share it with your recipient—only use it yourself if you’re restoring access.';
+          }
+        }
+      }
+
+      function renderDashboard(data) {
+        const previousInvite = state.data && state.data.invite ? state.data.invite : null;
+        const previousInviteId = getInviteIdentifier(previousInvite);
+        const previouslyAuthenticated = Boolean(
+          state.data && state.data.authenticated
+        );
+        state.data = data;
+        renderRelayWarnings({ loginEmailValue: loginEmail ? loginEmail.value : '', donor: data && data.donor ? data.donor : null, warning: data && data.warning ? data.warning : '' });
+        showApp();
+
+        const hasAnnouncement =
+          data && Object.prototype.hasOwnProperty.call(data, 'announcement');
+        const announcementPayload = hasAnnouncement
+          ? data.announcement
+          : state.announcement;
+        renderAnnouncementBanner(announcementPayload);
+        renderOverseerrIntegration(data && data.integrations);
+
+        if (!data || !data.authenticated) {
+          loginPanel.classList.remove('hidden');
+          dashboardPanel.classList.add('hidden');
+          if (unauthenticatedHero) {
+            unauthenticatedHero.classList.remove('hidden');
+          }
+          setActiveDashboardTab(DASHBOARD_TAB_DEFAULT, { force: true });
+          loginForm.reset();
+          setStatusText(loginStatus, '');
+          setStatusText(memberStatusMessage, '');
+          clearInviteCooldownTimer();
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer();
+          closePlexAuthWindow();
+          state.inviteLimitReached = false;
+          state.nextInviteAvailableAt = null;
+          state.pendingPlexLink = null;
+          plexLinkStatusSticky = false;
+          clearPlexLinkStatus({ force: true });
+          if (plexLinkButton) {
+            plexLinkButton.disabled = false;
+            plexLinkButton.classList.remove('hidden');
+          }
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          showLoginForm();
+          renderRelayWarnings({ loginEmailValue: loginEmail ? loginEmail.value : '' });
+          if (initialPasswordResetToken) {
+            showPasswordResetForm(initialPasswordResetToken);
+          }
+          if (onboardingPanel) {
+            setElementVisibility(onboardingPanel, false);
+          }
+          if (passwordForm) {
+            passwordForm.reset();
+          }
+          if (passwordStatus) {
+            setStatusText(passwordStatus, '');
+          }
+          if (passwordSave) {
+            passwordSave.disabled = false;
+          }
+          if (profileSubscription) {
+            profileSubscription.value = '';
+          }
+          resetPendingCustomerTwoFactorSetup();
+          if (!(data && data.requiresTwoFactor)) {
+            renderRecoveryCodes([]);
+          }
+          if (data && data.requiresTwoFactor) {
+            showLoginTwoFactorForm();
+          }
+          return;
+        }
+
+        loginPanel.classList.add('hidden');
+        dashboardPanel.classList.remove('hidden');
+        if (unauthenticatedHero) {
+          unauthenticatedHero.classList.add('hidden');
+        }
+        if (!previouslyAuthenticated) {
+          // If the user has verified their email but hasn't linked Plex yet,
+          // surface the Plex setup tab so they can complete linking there.
+          const _donorForTab = (data && data.donor) ? data.donor : {};
+          const _emailVerified = Boolean(_donorForTab.emailVerified);
+          const _plexLinked = Boolean(_donorForTab.plexLinked);
+          if (_emailVerified && !_plexLinked) {
+            setActiveDashboardTab('plex', { force: true });
+          } else {
+            setActiveDashboardTab('account', { force: true });
+          }
+        }
+
+        const donor = data.donor || {};
+        const emailVerified = Boolean(donor.emailVerified);
+        if (emailVerified) {
+          applyPlexLinkState(donor, data.plexLink || null);
+        } else {
+          clearPlexLinkCountdownTimer();
+          clearPlexLinkPollTimer();
+          closePlexAuthWindow();
+          state.pendingPlexLink = null;
+          plexLinkStatusSticky = true;
+          if (plexLinkButton) {
+            plexLinkButton.disabled = true;
+            plexLinkButton.classList.remove('hidden');
+          }
+          if (plexLinkPin) {
+            plexLinkPin.classList.add('hidden');
+          }
+          if (plexLinkPinCode) {
+            plexLinkPinCode.textContent = '----';
+          }
+          if (plexLinkPinExpiry) {
+            plexLinkPinExpiry.textContent = '';
+          }
+          setPlexLinkStatus(
+            'Verify your email address to unlock Plex linking.',
+            'info',
+            { force: true }
+          );
+        }
+        memberNameEl.textContent = donor.name
+          ? `Hi ${donor.name}!`
+          : 'Add a display name below so we know how to greet you.';
+        memberEmailEl.textContent = donor.email
+          ? donor.email
+          : 'Set your preferred streaming email under profile settings.';
+
+        const normalizedStatus = (donor.status || 'pending').toLowerCase();
+        const plexLinked = Boolean(donor.plexLinked);
+        if (memberStatusEl) {
+          memberStatusEl.dataset.status = normalizedStatus;
+          memberStatusEl.textContent = normalizedStatus || 'pending';
+        }
+
+        if (donor.subscriptionId) {
+          memberSubscriptionRow.classList.remove('hidden');
+          memberSubscriptionId.textContent = donor.subscriptionId;
+        } else {
+          memberSubscriptionRow.classList.add('hidden');
+          memberSubscriptionId.textContent = '';
+        }
+
+        if (donor.lastPaymentAt) {
+          memberLastPaymentRow.classList.remove('hidden');
+          memberLastPayment.textContent = formatDate(donor.lastPaymentAt);
+        } else {
+          memberLastPaymentRow.classList.add('hidden');
+          memberLastPayment.textContent = '';
+        }
+
+        const price = formatPrice(
+          Number(data.paypal && data.paypal.subscriptionPrice),
+          data.paypal && data.paypal.currency
+        );
+        if (price) {
+          memberPlanEl.classList.remove('hidden');
+          memberPlanEl.innerHTML = `<span class="label">Monthly support</span><span>${price}</span>`;
+        } else {
+          memberPlanEl.classList.add('hidden');
+          memberPlanEl.innerHTML = '';
+        }
+
+        const subscriptionCheckoutEligible = Boolean(
+          emailVerified &&
+            data.paypal &&
+            data.paypal.subscriptionCheckoutAvailable &&
+            (!donor.subscriptionId || normalizedStatus !== 'active')
+        );
+        const showSubscriptionCta = Boolean(
+          subscriptionCheckoutEligible && plexLinked
+        );
+
+        const limitReached = Boolean(data.inviteLimitReached);
+        state.inviteLimitReached = limitReached;
+        const nextInviteAvailableAt = data.nextInviteAvailableAt || null;
+        const nextInviteDate = parseDate(nextInviteAvailableAt);
+        const nextInviteInFuture =
+          nextInviteDate && nextInviteDate.getTime() > Date.now();
+        const nextInviteMessage = nextInviteInFuture
+          ? `Next invite available on ${formatDateTime(nextInviteDate)}.`
+          : '';
+        const inviteCooldownActive = limitReached && nextInviteInFuture;
+        scheduleInviteCooldownRefresh(
+          inviteCooldownActive ? nextInviteAvailableAt : null
+        );
+
+        updateMembershipStatusMessage(donor, {
+          showSubscriptionCta,
+          nextInviteMessage,
+          cooldownActive: inviteCooldownActive,
+          refreshError:
+            data.paypal && typeof data.paypal.refreshError === 'string'
+              ? data.paypal.refreshError
+              : '',
+          plexLinked,
+          emailVerified,
+        });
+        updateOnboarding(data, {
+          showSubscriptionCta,
+          inviteCooldownActive,
+          nextInviteMessage,
+          emailVerified,
+        });
+
+        const accessExpiresAt = donor ? donor.accessExpiresAt : null;
+        const trialCountdownLabel = getTrialCountdownLabel(accessExpiresAt);
+        const trialExpiresLabel = formatDateTime(accessExpiresAt);
+        const trialDaysRemaining = getTrialDaysRemaining(accessExpiresAt);
+        const trialExpiresDate = parseDate(accessExpiresAt);
+        const trialHasTimeRemaining = Boolean(
+          trialExpiresDate && trialExpiresDate.getTime() > Date.now()
+        );
+
+        if (trialPanel) {
+          const shouldShowTrialPanel =
+            normalizedStatus === 'trial' && trialHasTimeRemaining;
+          setElementVisibility(trialPanel, shouldShowTrialPanel);
+
+          if (shouldShowTrialPanel) {
+            const normalizedDaysRemaining =
+              typeof trialDaysRemaining === 'number'
+                ? Math.max(0, trialDaysRemaining)
+                : 0;
+            if (trialDaysRemainingValue) {
+              trialDaysRemainingValue.textContent = `${normalizedDaysRemaining}`;
+            }
+            if (trialDaysLabel) {
+              trialDaysLabel.textContent =
+                normalizedDaysRemaining === 1
+                  ? 'day remaining'
+                  : 'days remaining';
+            }
+            if (trialEndDate) {
+              trialEndDate.textContent = trialExpiresLabel || '—';
+            }
+            if (trialCountdownDetail) {
+              if (trialCountdownLabel) {
+                if (normalizedDaysRemaining === 0) {
+                  trialCountdownDetail.textContent = `Less than a day remaining (${trialCountdownLabel}).`;
+                } else {
+                  trialCountdownDetail.textContent = `Approximately ${trialCountdownLabel} left in your trial.`;
+                }
+              } else if (trialHasTimeRemaining) {
+                trialCountdownDetail.textContent =
+                  'Less than a day left in your trial.';
+              } else {
+                trialCountdownDetail.textContent = '';
+              }
+            }
+          } else {
+            if (trialCountdownDetail) {
+              trialCountdownDetail.textContent = '';
+            }
+            if (trialDaysRemainingValue) {
+              trialDaysRemainingValue.textContent = '0';
+            }
+            if (trialDaysLabel) {
+              trialDaysLabel.textContent = 'days remaining';
+            }
+            if (trialEndDate) {
+              trialEndDate.textContent = '—';
+            }
+          }
+        }
+
+        if (subscriptionCta) {
+          let subscriptionButtonVisible = false;
+          let subscriptionButtonAvailable = false;
+          let subscriptionNoteMessage = '';
+          let subscriptionNoteTone = 'info';
+
+          if (subscriptionButton) {
+            subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+
+            if (!emailVerified) {
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage =
+                'Verify your email to unlock subscription checkout.';
+            } else if (showSubscriptionCta) {
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = true;
+              subscriptionNoteMessage = 'Opens PayPal checkout in a new tab.';
+            } else if (subscriptionCheckoutEligible && !plexLinked) {
+              subscriptionButtonVisible = false;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage =
+                'Link your Plex account from the Setup & billing tab to unlock the risk-free trial. Subscription checkout will also be available there when you are ready.';
+            } else {
+              subscriptionButtonVisible = false;
+              subscriptionButtonAvailable = false;
+              subscriptionNoteMessage = '';
+              subscriptionNoteTone = '';
+            }
+
+            subscriptionButton.classList.toggle(
+              'hidden',
+              !subscriptionButtonVisible
+            );
+            subscriptionButton.disabled = !subscriptionButtonAvailable;
+            subscriptionButton.dataset.available = subscriptionButtonAvailable
+              ? 'true'
+              : 'false';
+
+            if (subscriptionNote) {
+              setStatusText(
+                subscriptionNote,
+                subscriptionNoteMessage,
+                subscriptionNoteTone
+              );
+              if (subscriptionNoteMessage) {
+                subscriptionNote.classList.add('small');
+              } else {
+                subscriptionNote.classList.remove('small');
+              }
+            }
+          }
+
+          let trialButtonHidden = true;
+          let trialButtonAvailable = false;
+          let trialStatusMessage = '';
+          let trialStatusTone = '';
+
+          if (trialButton) {
+            trialButton.textContent = defaultTrialButtonLabel;
+          }
+
+          if (trialButton || trialStatus) {
+            if (!emailVerified) {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              trialStatusMessage =
+                'Verify your email to unlock the 7-day risk-free trial.';
+              trialStatusTone = 'info';
+            } else if (!plexLinked) {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              trialStatusMessage = '';
+              trialStatusTone = 'info';
+            } else if (normalizedStatus === 'active') {
+              trialButtonHidden = true;
+              trialButtonAvailable = false;
+              trialStatusMessage = '';
+            } else if (normalizedStatus === 'trial') {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              if (trialCountdownLabel) {
+                trialStatusMessage = `Trial active! Access expires in ${trialCountdownLabel}.`;
+              } else if (trialExpiresLabel) {
+                trialStatusMessage = `Trial active! Access expires on ${trialExpiresLabel}.`;
+              } else {
+                trialStatusMessage = 'Trial active! Access expires soon.';
+              }
+              trialStatusTone = 'success';
+            } else if (normalizedStatus === 'trial_expired') {
+              trialButtonHidden = false;
+              trialButtonAvailable = false;
+              if (trialExpiresLabel) {
+                trialStatusMessage = `Trial ended on ${trialExpiresLabel}. Start a subscription to continue.`;
+              } else {
+                trialStatusMessage =
+                  'Trial ended. Start a subscription to continue.';
+              }
+              trialStatusTone = 'error';
+            } else {
+              trialButtonHidden = false;
+              trialButtonAvailable = true;
+              trialStatusMessage =
+                'Try the server free for 7 days. No payment info required.';
+              trialStatusTone = 'info';
+            }
+          }
+
+          if (trialButton) {
+            trialButton.classList.toggle('hidden', trialButtonHidden);
+            trialButton.disabled = !trialButtonAvailable;
+            trialButton.dataset.available = trialButtonAvailable ? 'true' : 'false';
+          }
+
+          if (trialStatus) {
+            setStatusText(trialStatus, trialStatusMessage, trialStatusTone);
+            if (trialStatusMessage) {
+              trialStatus.classList.add('small');
+            } else {
+              trialStatus.classList.remove('small');
+            }
+          }
+
+          const subscriptionButtonVisibleNow = Boolean(
+            subscriptionButton &&
+              !subscriptionButton.classList.contains('hidden')
+          );
+          const trialVisible = Boolean(
+            trialButton && !trialButton.classList.contains('hidden')
+          );
+          const trialMessageVisible = Boolean(
+            trialStatus && trialStatus.textContent.trim().length > 0
+          );
+
+          const shouldShowSubscriptionCta =
+            subscriptionButtonVisibleNow || trialVisible || trialMessageVisible;
+
+          setElementVisibility(subscriptionCta, shouldShowSubscriptionCta);
+        }
+
+        profileEmail.value = donor.email || '';
+        profileName.value = donor.name || '';
+        if (profileSubscription) {
+          profileSubscription.value = donor.subscriptionId || '';
+        }
+        if (profileEmail) {
+          profileEmail.disabled = !emailVerified;
+        }
+        if (profileName) {
+          profileName.disabled = !emailVerified;
+        }
+        if (profileSubscription) {
+          profileSubscription.disabled = !emailVerified;
+        }
+        if (profileSave) {
+          profileSave.disabled = !emailVerified;
+        }
+        if (passwordForm) {
+          passwordForm.reset();
+        }
+        if (passwordStatus) {
+          setStatusText(passwordStatus, '');
+        }
+        if (passwordGuidance) {
+          if (!emailVerified) {
+            passwordGuidance.textContent =
+              'Verify your email to enable password updates.';
+          } else {
+            passwordGuidance.textContent = donor.hasPassword
+              ? 'Update your dashboard password to keep your account secure.'
+              : 'Set a password so you can return to the dashboard anytime.';
+          }
+        }
+        if (passwordCurrentRow) {
+          if (donor.hasPassword) {
+            passwordCurrentRow.classList.remove('hidden');
+          } else {
+            passwordCurrentRow.classList.add('hidden');
+          }
+        }
+        if (passwordCurrent) {
+          passwordCurrent.disabled = !emailVerified || !donor.hasPassword;
+          passwordCurrent.required = Boolean(emailVerified && donor.hasPassword);
+        }
+        if (passwordNew) {
+          passwordNew.disabled = !emailVerified;
+        }
+        if (passwordConfirm) {
+          passwordConfirm.disabled = !emailVerified;
+        }
+        if (passwordSave) {
+          passwordSave.disabled = !emailVerified;
+        }
+        renderCustomerTwoFactorPanel(donor);
+        inviteEmail.value = donor.email || '';
+        if (supportNameInput) {
+          const preferredName = donor.name || donor.email || '';
+          if (!supportNameInput.value) {
+            supportNameInput.value = preferredName;
+          }
+          supportNameInput.placeholder = preferredName || 'Display name';
+        }
+        if (state.support.donorId !== donor.id) {
+          state.support.donorId = donor.id;
+          state.support.threads = [];
+          state.support.activeThreadId = null;
+          state.support.replyDrafts = {};
+          loadSupportThreads({ silent: true });
+        }
+
+        renderInvite(data.invite, limitReached, nextInviteAvailableAt, {
+          emailVerified,
+        });
+        const currentInvite = data && data.invite ? data.invite : null;
+        const currentInviteId = getInviteIdentifier(currentInvite);
+        if (currentInviteId && currentInviteId !== previousInviteId) {
+          maybeShowInviteModal(INVITE_MODAL_COPY, currentInvite);
+        }
+
+        const inviteBlocked = !emailVerified || normalizedStatus !== 'active' || limitReached;
+        if (inviteSubmit) {
+          inviteSubmit.disabled = inviteBlocked;
+        }
+        if (inviteEmail) {
+          inviteEmail.disabled = inviteBlocked;
+        }
+        if (inviteNote) {
+          inviteNote.disabled = inviteBlocked;
+        }
+
+        if (!emailVerified) {
+          inviteDescription.textContent =
+            'Verify your email to unlock referral invites.';
+        } else if (inviteBlocked && !limitReached) {
+          inviteDescription.textContent = showSubscriptionCta
+            ? 'Start your subscription to unlock referral invites.'
+            : 'Referral invites unlock once your subscription is active.';
+        }
+
+        const identifier = donor.name || donor.email || donor.subscriptionId || '';
+        if (identifier) {
+          document.title = `Plex Dashboard • ${identifier}`;
+        }
+      }
+
+      async function openDashboardSubscriptionCheckout() {
+        if (!subscriptionButton || subscriptionButton.dataset.available !== 'true') {
+          return;
+        }
+
+        subscriptionButton.disabled = true;
+        subscriptionButton.textContent = 'Opening PayPal…';
+        setStatusText(
+          subscriptionNote,
+          'Opening PayPal checkout in a new tab…',
+          'info'
+        );
+        subscriptionNote.classList.add('small');
+
+        const payload = {};
+        const emailValue = profileEmail ? profileEmail.value.trim() : '';
+        const nameValue = profileName ? profileName.value.trim() : '';
+        if (emailValue) {
+          payload.email = emailValue;
+        }
+        if (nameValue) {
+          payload.name = nameValue;
+        }
+
+        const requestInit = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        };
+
+        let checkoutWindow = null;
+        try {
+          checkoutWindow = window.open('', '_blank');
+          if (checkoutWindow) {
+            try {
+              checkoutWindow.opener = null;
+            } catch (err) {
+              // Ignore browsers that prevent direct assignment.
+            }
+          }
+        } catch (err) {
+          checkoutWindow = null;
+        }
+
+        try {
+          const response = await sessionFetch('/api/customer/paypal-checkout', requestInit);
+          let data;
+          try {
+            data = await response.json();
+          } catch (err) {
+            data = {};
+          }
+
+          updateSessionTokenFromResponse(data);
+
+          if (!response.ok) {
+            throw new Error(data.error || 'Unable to start PayPal checkout.');
+          }
+
+          if (data.approvalUrl) {
+            let opened = false;
+            if (checkoutWindow) {
+              checkoutWindow.location = data.approvalUrl;
+              opened = true;
+            } else {
+              const fallbackWindow = window.open(data.approvalUrl, '_blank');
+              if (fallbackWindow) {
+                opened = true;
+                checkoutWindow = fallbackWindow;
+                try {
+                  fallbackWindow.opener = null;
+                } catch (err) {
+                  // Ignore browsers that prevent direct assignment.
+                }
+              }
+            }
+
+            if (!opened) {
+              throw new Error(
+                'Your browser blocked the PayPal checkout window. Allow pop-ups and try again.'
+              );
+            }
+            setStatusText(
+              subscriptionNote,
+              'Follow the steps in the PayPal tab to complete your subscription.',
+              'success'
+            );
+            subscriptionNote.classList.add('small');
+          } else {
+            throw new Error('PayPal did not return a checkout URL.');
+          }
+        } catch (err) {
+          setStatusText(subscriptionNote, err.message, 'error');
+          subscriptionNote.classList.add('small');
+          if (checkoutWindow) {
+            try {
+              checkoutWindow.close();
+            } catch (closeErr) {
+              // Ignore close errors.
+            }
+          }
+        } finally {
+          subscriptionButton.disabled = false;
+          subscriptionButton.textContent = defaultSubscriptionButtonLabel;
+        }
+      }
+
+      async function fetchSession(options = {}) {
+        const silent = options && options.silent;
+        if (!silent) {
+          showLoading();
+        }
+        try {
+          const response = await sessionFetch('/api/customer/session');
+          const payload = await response.json();
+          updateSessionTokenFromResponse(payload);
+          renderDashboard(payload);
+        } catch (err) {
+          showError(err.message);
+        }
+      }
+
+      if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', (event) => {
+          event.preventDefault();
+          if (!forgotPasswordPanel) {
+            return;
+          }
+          const isHidden = forgotPasswordPanel.classList.contains('hidden');
+          if (isHidden) {
+            forgotPasswordPanel.classList.remove('hidden');
+            forgotPasswordLink.setAttribute('aria-expanded', 'true');
+            forgotPasswordLink.textContent = 'Hide reset options';
+            if (forgotPasswordEmail && loginEmail && loginEmail.value) {
+              forgotPasswordEmail.value = loginEmail.value;
+            }
+            try {
+              if (forgotPasswordEmail) {
+                forgotPasswordEmail.focus();
+              }
+            } catch (err) {
+              // Ignore focus errors.
+            }
+          } else {
+            forgotPasswordPanel.classList.add('hidden');
+            forgotPasswordLink.setAttribute('aria-expanded', 'false');
+            forgotPasswordLink.textContent = defaultForgotPasswordLinkText;
+            if (forgotPasswordStatus) {
+              setStatusText(forgotPasswordStatus, '');
+            }
+          }
+        });
+      }
+
+      if (forgotPasswordCancel) {
+        forgotPasswordCancel.addEventListener('click', () => {
+          showLoginForm();
+        });
+      }
+
+      if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const emailValue =
+            (forgotPasswordEmail && forgotPasswordEmail.value.trim()) ||
+            (loginEmail && loginEmail.value.trim()) ||
+            '';
+          if (!emailValue) {
+            setStatusText(
+              forgotPasswordStatus,
+              'Enter the email associated with your dashboard account.',
+              'error'
+            );
+            return;
+          }
+
+          setStatusText(forgotPasswordStatus, 'Sending reset link…', 'info');
+          if (forgotPasswordSubmit) {
+            forgotPasswordSubmit.disabled = true;
+          }
+
+          try {
+            const response = await fetch('/api/customer/password/reset/request', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: emailValue }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                (payload && payload.error) ||
+                  'Unable to send a reset link right now. Try again shortly.'
+              );
+            }
+
+            setStatusText(
+              forgotPasswordStatus,
+              (payload && payload.message) || PASSWORD_RESET_SUCCESS_MESSAGE,
+              'success'
+            );
+          } catch (err) {
+            setStatusText(
+              forgotPasswordStatus,
+              err && err.message
+                ? err.message
+                : 'Unable to send a reset link right now. Try again shortly.',
+              'error'
+            );
+          } finally {
+            if (forgotPasswordSubmit) {
+              forgotPasswordSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (passwordResetCancel) {
+        passwordResetCancel.addEventListener('click', () => {
+          initialPasswordResetToken = null;
+          showLoginForm();
+        });
+      }
+
+      if (passwordResetForm) {
+        passwordResetForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const token =
+            (passwordResetTokenInput && passwordResetTokenInput.value.trim()) ||
+            activePasswordResetToken ||
+            '';
+          if (!token) {
+            setStatusText(
+              passwordResetStatus,
+              'Paste your reset link from the email to continue.',
+              'error'
+            );
+            return;
+          }
+
+          const newPassword = passwordResetPassword ? passwordResetPassword.value : '';
+          const confirmPassword = passwordResetConfirm ? passwordResetConfirm.value : '';
+          if (!newPassword || !confirmPassword) {
+            setStatusText(
+              passwordResetStatus,
+              'Enter and confirm your new password to continue.',
+              'error'
+            );
+            return;
+          }
+
+          setStatusText(passwordResetStatus, 'Updating password…', 'info');
+          if (passwordResetSubmit) {
+            passwordResetSubmit.disabled = true;
+          }
+
+          try {
+            const response = await fetch('/api/customer/password/reset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                token,
+                password: newPassword,
+                confirmPassword,
+              }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                (payload && payload.error) ||
+                  'Unable to update your password right now. Try again shortly.'
+              );
+            }
+
+            setStatusText(
+              passwordResetStatus,
+              'Password updated! Signing you in…',
+              'success'
+            );
+            initialPasswordResetToken = null;
+            setActivePasswordResetToken(null);
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(
+              passwordResetStatus,
+              err && err.message
+                ? err.message
+                : 'Unable to update your password right now. Try again shortly.',
+              'error'
+            );
+          } finally {
+            if (passwordResetSubmit) {
+              passwordResetSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (changePasswordButton) {
+        changePasswordButton.addEventListener('click', () => {
+          setActiveDashboardTab('account');
+          if (passwordPanel) {
+            passwordPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          window.setTimeout(() => {
+            if (passwordNew) {
+              try {
+                passwordNew.focus();
+              } catch (err) {
+                // Ignore focus errors.
+              }
+            }
+          }, 200);
+        });
+      }
+
+      if (passwordForm) {
+        passwordForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (!passwordSave) {
+            return;
+          }
+          setStatusText(passwordStatus, 'Saving…', 'info');
+          passwordSave.disabled = true;
+          const payload = {
+            currentPassword: passwordCurrent ? passwordCurrent.value : '',
+            newPassword: passwordNew ? passwordNew.value : '',
+            confirmPassword: passwordConfirm ? passwordConfirm.value : '',
+          };
+
+          try {
+            const response = await sessionFetch('/api/customer/password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            let responseBody;
+            try {
+              responseBody = await response.json();
+            } catch (err) {
+              responseBody = {};
+            }
+            updateSessionTokenFromResponse(responseBody);
+            if (!response.ok) {
+              throw new Error(responseBody.error || 'Failed to update password');
+            }
+            renderDashboard(responseBody);
+            setStatusText(
+              passwordStatus,
+              'Password updated successfully.',
+              'success'
+            );
+            if (passwordForm) {
+              passwordForm.reset();
+            }
+          } catch (err) {
+            setStatusText(passwordStatus, err.message, 'error');
+          } finally {
+            if (passwordSave) {
+              passwordSave.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (loginTwoFactorForm) {
+        loginTwoFactorForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const code = loginTwoFactorCode ? loginTwoFactorCode.value.trim() : '';
+          if (!code) {
+            setStatusText(loginTwoFactorStatus, 'Enter the authenticator code to continue.', 'error');
+            return;
+          }
+
+          setStatusText(loginTwoFactorStatus, 'Verifying code…', 'info');
+          if (loginTwoFactorSubmit) {
+            loginTwoFactorSubmit.disabled = true;
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/login/totp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to verify two-factor code.');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(loginTwoFactorStatus, err.message, 'error');
+          } finally {
+            if (loginTwoFactorSubmit) {
+              loginTwoFactorSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (loginRecoverySubmit) {
+        loginRecoverySubmit.addEventListener('click', async () => {
+          const recoveryCode = loginRecoveryCode ? loginRecoveryCode.value.trim() : '';
+          if (!recoveryCode) {
+            setStatusText(loginTwoFactorStatus, 'Enter a recovery code to continue.', 'error');
+            return;
+          }
+
+          setStatusText(loginTwoFactorStatus, 'Checking recovery code…', 'info');
+          loginRecoverySubmit.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/login/recovery', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recoveryCode }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to verify recovery code.');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            setStatusText(loginTwoFactorStatus, err.message, 'error');
+          } finally {
+            loginRecoverySubmit.disabled = false;
+          }
+        });
+      }
+
+      if (loginTwoFactorCancel) {
+        loginTwoFactorCancel.addEventListener('click', async () => {
+          try {
+            await fetch('/api/customer/login/totp/cancel', { method: 'POST' });
+          } catch (err) {
+            // Ignore cancellation errors.
+          }
+          showLoginForm();
+        });
+      }
+
+      if (customerTwoFactorStart) {
+        customerTwoFactorStart.addEventListener('click', async () => {
+          setStatusText(customerTwoFactorStatus, 'Preparing your authenticator setup…', 'info');
+          customerTwoFactorStart.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/setup', {
+              method: 'POST',
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to start 2FA setup.');
+            }
+            state.pendingTwoFactorSetup = payload && payload.setup ? payload.setup : null;
+            renderCustomerTwoFactorPanel(
+              state.data && state.data.donor ? state.data.donor : null
+            );
+            setStatusText(
+              customerTwoFactorStatus,
+              'Scan the QR code, then enter the 6-digit code from your app.',
+              'success'
+            );
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorStart.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorVerify) {
+        customerTwoFactorVerify.addEventListener('click', async () => {
+          const code = customerTwoFactorCode ? customerTwoFactorCode.value.trim() : '';
+          if (!code) {
+            setStatusText(customerTwoFactorStatus, 'Enter the authenticator code from your app.', 'error');
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Verifying authenticator app…', 'info');
+          customerTwoFactorVerify.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/setup/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to enable 2FA.');
+            }
+            resetPendingCustomerTwoFactorSetup();
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || { enabled: true };
+            }
+            renderRecoveryCodes(payload.recoveryCodes || []);
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'Two-factor authentication enabled. Save your recovery codes now.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorVerify.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorRegenerate) {
+        customerTwoFactorRegenerate.addEventListener('click', async () => {
+          const currentPassword = window.prompt('Enter your current password to regenerate recovery codes:');
+          if (!currentPassword) {
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Generating new recovery codes…', 'info');
+          customerTwoFactorRegenerate.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa/recovery-codes/regenerate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentPassword }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to regenerate recovery codes.');
+            }
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || state.data.donor.twoFactor;
+            }
+            renderRecoveryCodes(payload.recoveryCodes || []);
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'New recovery codes generated. Replace the old set anywhere you saved it.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorRegenerate.disabled = false;
+          }
+        });
+      }
+
+      if (customerTwoFactorDisable) {
+        customerTwoFactorDisable.addEventListener('click', async () => {
+          const currentPassword = window.prompt('Enter your current password to turn off 2FA:');
+          if (!currentPassword) {
+            return;
+          }
+
+          setStatusText(customerTwoFactorStatus, 'Turning off two-factor authentication…', 'info');
+          customerTwoFactorDisable.disabled = true;
+          try {
+            const response = await sessionFetch('/api/customer/2fa', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ currentPassword }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to disable 2FA.');
+            }
+            resetPendingCustomerTwoFactorSetup();
+            renderRecoveryCodes([]);
+            if (state.data && state.data.donor) {
+              state.data.donor.twoFactor = payload.twoFactor || {
+                enabled: false,
+                setupCompletedAt: null,
+                recoveryCodesGeneratedAt: null,
+              };
+            }
+            renderCustomerTwoFactorPanel(state.data && state.data.donor ? state.data.donor : null);
+            setStatusText(customerTwoFactorStatus, 'Two-factor authentication turned off.', 'success');
+          } catch (err) {
+            setStatusText(customerTwoFactorStatus, err.message, 'error');
+          } finally {
+            customerTwoFactorDisable.disabled = false;
+          }
+        });
+      }
+
+      loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const email = loginEmail.value.trim();
+        const password = loginPassword.value;
+
+        if (!email || !password) {
+          setStatusText(
+            loginStatus,
+            'Enter both your email and password to continue.',
+            'error'
+          );
+          return;
+        }
+
+        setStatusText(loginStatus, 'Signing in…', 'info');
+        loginButton.disabled = true;
+        try {
+          const response = await sessionFetch('/api/customer/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+          });
+          const payload = await response.json();
+          updateSessionTokenFromResponse(payload);
+          if (!response.ok) {
+            throw new Error(payload.error || 'Unable to sign in');
+          }
+          setStatusText(loginStatus, 'Signed in successfully!', 'success');
+          renderDashboard(payload);
+          loginPassword.value = '';
+        } catch (err) {
+          setStatusText(loginStatus, err.message, 'error');
+        } finally {
+          loginButton.disabled = false;
+        }
+      });
+
+      logoutButton.addEventListener('click', async () => {
+        logoutButton.disabled = true;
+        try {
+          await sessionFetch('/api/customer/logout', { method: 'POST' });
+          renderDashboard({ authenticated: false });
+        } catch (err) {
+          // ignore logout errors and show login anyway
+          renderDashboard({ authenticated: false });
+        } finally {
+          setSessionToken(null);
+          logoutButton.disabled = false;
+        }
+      });
+
+      if (inviteModalOk) {
+        inviteModalOk.addEventListener('click', () => {
+          setElementVisibility(inviteModal, false);
+        });
+      }
+
+      if (subscriptionButton) {
+        subscriptionButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (subscriptionButton.disabled || subscriptionButton.dataset.available !== 'true') {
+            return;
+          }
+          await openDashboardSubscriptionCheckout();
+        });
+      }
+
+      inviteIntentButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          setInviteIntent(button.dataset.inviteIntent, { focus: true });
+        });
+      });
+
+      if (trialButton) {
+        trialButton.addEventListener('click', async (event) => {
+          event.preventDefault();
+          if (trialButton.disabled || trialButton.dataset.available !== 'true') {
+            return;
+          }
+
+          trialButton.disabled = true;
+          trialButton.dataset.available = 'false';
+          trialButton.textContent = 'Starting risk-free trial…';
+
+          if (trialStatus) {
+            setStatusText(trialStatus, 'Activating your 7-day risk-free trial…', 'info');
+            trialStatus.classList.add('small');
+          }
+
+          try {
+            const response = await sessionFetch('/api/customer/trial', {
+              method: 'POST',
+            });
+            let payload;
+            try {
+              payload = await response.json();
+            } catch (err) {
+              payload = {};
+            }
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(payload.error || 'Unable to start a trial.');
+            }
+            if (trialStatus) {
+              // Check if there was an invite error
+              if (payload.inviteError) {
+                setStatusText(
+                  trialStatus,
+                  `Trial activated, but invite failed: ${payload.inviteError}`,
+                  'warning'
+                );
+              } else {
+                setStatusText(
+                  trialStatus,
+                  'Trial activated! Check your email for the Plex invite.',
+                  'success'
+                );
+                maybeShowInviteModal(INVITE_MODAL_COPY, payload.invite);
+              }
+              trialStatus.classList.add('small');
+            }
+            renderDashboard(payload);
+          } catch (err) {
+            if (trialStatus) {
+              setStatusText(trialStatus, err.message, 'error');
+              trialStatus.classList.add('small');
+            }
+            trialButton.disabled = false;
+            trialButton.dataset.available = 'true';
+          } finally {
+            trialButton.textContent = defaultTrialButtonLabel;
+          }
+        });
+      }
+
+      if (plexLinkButton) {
+        plexLinkButton.addEventListener('click', async () => {
+          if (plexLinkButton.disabled) {
+            return;
+          }
+
+          setPlexLinkStatus('Starting Plex authentication…', 'info', {
+            force: true,
+          });
+          plexLinkButton.disabled = true;
+          clearPlexLinkPollTimer();
+          clearPlexLinkCountdownTimer();
+          closePlexAuthWindow();
+          state.pendingPlexLink = null;
+
+          let authWindow = null;
+          try {
+            authWindow = window.open('', '_blank');
+            if (authWindow) {
+              try {
+                authWindow.opener = null;
+              } catch (err) {
+                // Ignore browsers that prevent direct assignment.
+              }
+            }
+          } catch (err) {
+            authWindow = null;
+          }
+
+          let responseData = null;
+          try {
+            const response = await sessionFetch('/api/customer/plex/link/start', {
+              method: 'POST',
+            });
+            try {
+              responseData = await response.json();
+            } catch (err) {
+              responseData = {};
+            }
+            updateSessionTokenFromResponse(responseData);
+            if (!response.ok) {
+              throw new Error(
+                (responseData && responseData.error) ||
+                  'Failed to start Plex authentication. Try again shortly.'
+              );
+            }
+
+            renderDashboard(responseData);
+
+            const authUrl =
+              responseData &&
+              responseData.plexLink &&
+              responseData.plexLink.authUrl
+                ? responseData.plexLink.authUrl
+                : '';
+
+            if (authUrl) {
+              let opened = false;
+              if (authWindow) {
+                authWindow.location = authUrl;
+                plexLinkAuthWindow = authWindow;
+                opened = true;
+              } else {
+                const fallbackWindow = window.open(authUrl, '_blank');
+                if (fallbackWindow) {
+                  opened = true;
+                  plexLinkAuthWindow = fallbackWindow;
+                  try {
+                    fallbackWindow.opener = null;
+                  } catch (err) {
+                    // Ignore browsers that prevent direct assignment.
+                  }
+                }
+              }
+
+              if (!opened) {
+                throw new Error(
+                  'Your browser blocked the Plex authentication window. Allow pop-ups and try again.'
+                );
+              }
+            } else if (authWindow) {
+              try {
+                authWindow.close();
+              } catch (err) {
+                // Ignore window close errors.
+              }
+              plexLinkAuthWindow = null;
+            }
+          } catch (err) {
+            if (authWindow) {
+              try {
+                authWindow.close();
+              } catch (closeErr) {
+                // Ignore window close errors.
+              }
+            }
+            plexLinkAuthWindow = null;
+            setPlexLinkStatus(err.message || 'Failed to start Plex authentication.', 'error', {
+              sticky: true,
+              force: true,
+            });
+            plexLinkButton.disabled = false;
+            plexLinkButton.classList.remove('hidden');
+            clearPlexLinkCountdownTimer();
+            clearPlexLinkPollTimer();
+            state.pendingPlexLink = null;
+            if (plexLinkPin) {
+              plexLinkPin.classList.add('hidden');
+            }
+            if (plexLinkPinCode) {
+              plexLinkPinCode.textContent = '----';
+            }
+            if (plexLinkPinExpiry) {
+              plexLinkPinExpiry.textContent = '';
+            }
+          }
+        });
+      }
+
+      if (supportToggle && supportContainer) {
+        supportToggle.addEventListener('click', async () => {
+          await setSupportPanelOpen(!supportPanelOpen);
+        });
+      }
+
+      if (supportForm) {
+        supportForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          if (supportSubmit) {
+            supportSubmit.disabled = true;
+          }
+          setStatusText(supportStatus, 'Sending support request…', 'info');
+          try {
+            const response = await sessionFetch('/api/customer/support', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subject: supportSubjectInput ? supportSubjectInput.value.trim() : '',
+                message: supportMessageInput ? supportMessageInput.value.trim() : '',
+                displayName: supportNameInput ? supportNameInput.value.trim() : '',
+              }),
+            });
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error(
+                (payload && payload.error) || 'Failed to submit support request.'
+              );
+            }
+            if (supportSubjectInput) {
+              supportSubjectInput.value = '';
+            }
+            if (supportMessageInput) {
+              supportMessageInput.value = '';
+            }
+            setStatusText(
+              supportStatus,
+              'Support request sent! We will email you when we respond.',
+              'success'
+            );
+            if (payload && payload.thread && payload.thread.request) {
+              state.support.activeThreadId = payload.thread.request.id;
+            }
+            await loadSupportThreads({ silent: true });
+          } catch (err) {
+            setStatusText(
+              supportStatus,
+              err && err.message ? err.message : 'Failed to submit support request.',
+              'error'
+            );
+          } finally {
+            if (supportSubmit) {
+              supportSubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      if (supportReplyForm) {
+        supportReplyForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const activeThreadId = state.support.activeThreadId;
+          if (!activeThreadId) {
+            setStatusText(
+              supportReplyStatus,
+              'Select a support request first.',
+              'error'
+            );
+            return;
+          }
+          const messageValue = supportReplyMessage
+            ? supportReplyMessage.value.trim()
+            : '';
+          if (!messageValue) {
+            setStatusText(supportReplyStatus, 'Enter a reply before sending.', 'error');
+            return;
+          }
+          if (supportReplySubmit) {
+            supportReplySubmit.disabled = true;
+          }
+          setStatusText(supportReplyStatus, 'Sending reply…', 'info');
+          let replyThreadId = activeThreadId;
+          try {
+            const response = await sessionFetch(
+              `/api/customer/support/${activeThreadId}/replies`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message: messageValue,
+                  displayName: supportNameInput ? supportNameInput.value.trim() : '',
+                }),
+              }
+            );
+            const payload = await response.json();
+            updateSessionTokenFromResponse(payload);
+            if (!response.ok) {
+              throw new Error((payload && payload.error) || 'Failed to send reply.');
+            }
+            if (payload && payload.thread && payload.thread.request) {
+              replyThreadId = payload.thread.request.id;
+              state.support.activeThreadId = payload.thread.request.id;
+            }
+            setStatusText(supportReplyStatus, 'Reply sent!', 'success');
+            await loadSupportThreads({ silent: true });
+            if (replyThreadId && state.support.replyDrafts) {
+              delete state.support.replyDrafts[replyThreadId];
+            }
+            renderSupportThreadDetail();
+          } catch (err) {
+            setStatusText(
+              supportReplyStatus,
+              err && err.message ? err.message : 'Failed to send reply.',
+              'error'
+            );
+          } finally {
+            if (supportReplySubmit) {
+              supportReplySubmit.disabled = false;
+            }
+          }
+        });
+      }
+
+      profileForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        setStatusText(profileStatus, 'Saving…', 'info');
+        profileSave.disabled = true;
+        try {
+          const response = await sessionFetch('/api/customer/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: profileEmail.value.trim(),
+              name: profileName.value.trim(),
+              subscriptionId: profileSubscription
+                ? profileSubscription.value.trim()
+                : '',
+            }),
+          });
+          const payload = await response.json();
+          updateSessionTokenFromResponse(payload);
+          if (!response.ok) {
+            throw new Error(payload.error || 'Failed to update profile');
+          }
+          setStatusText(profileStatus, 'Profile updated', 'success');
+          renderDashboard(payload);
+        } catch (err) {
+          setStatusText(profileStatus, err.message, 'error');
+        } finally {
+          profileSave.disabled = false;
+        }
+      });
+
+      inviteForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (
+          inviteSubmit.disabled ||
+          (inviteForm && inviteForm.classList.contains('hidden')) ||
+          (state.data && state.data.inviteLimitReached)
+        ) {
+          return;
+        }
+        setStatusText(
+          inviteStatus,
+          inviteIntent === 'restore'
+            ? 'Sending recovery invite…'
+            : 'Sending referral invite…',
+          'info'
+        );
+        inviteSubmit.disabled = true;
+        let responseData = null;
+        try {
+          const response = await sessionFetch('/api/customer/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: inviteEmail.value.trim(),
+              note:
+                inviteIntent === 'restore'
+                  ? `Access recovery${inviteNote.value.trim() ? `: ${inviteNote.value.trim()}` : ''}`
+                  : inviteNote.value.trim(),
+            }),
+          });
+          const payload = await response.json();
+          responseData = payload;
+          updateSessionTokenFromResponse(payload);
+          if (!response.ok) {
+            if (payload && payload.payload) {
+              renderDashboard(payload.payload);
+            }
+            throw new Error(payload.error || 'Failed to send referral invite');
+          }
+          setStatusText(
+            inviteStatus,
+            inviteIntent === 'restore'
+              ? 'Recovery invite ready! Follow the link below to restore Plex access.'
+              : 'Referral invite ready! Share the link below with your recipient.',
+            'success'
+          );
+          inviteNote.value = '';
+          renderDashboard(payload);
+        } catch (err) {
+          setStatusText(inviteStatus, err.message, 'error');
+        } finally {
+          const limitHit = Boolean(
+            (responseData && responseData.inviteLimitReached) ||
+              (state.data && state.data.inviteLimitReached)
+          );
+          if (!limitHit) {
+            inviteSubmit.disabled = false;
+          }
+        }
+      });
+
+      if (initialPasswordResetToken) {
+        showPasswordResetForm(initialPasswordResetToken);
+      }
+
+      if (initialVerificationToken) {
+        submitVerificationToken(initialVerificationToken);
+      } else {
+        fetchSession();
+      }
+
