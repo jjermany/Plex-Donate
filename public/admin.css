@@ -3519,3 +3519,386 @@
       .skip-link:focus {
         top: 16px;
       }
+
+      /* Calmer admin UI pass: denser layout, quieter surfaces, clearer hierarchy. */
+      :root {
+        font-family: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+        --panel-shadow: 0 18px 48px -38px rgba(15, 23, 42, 0.45);
+        --button-primary-shadow: 0 12px 28px -22px rgba(15, 118, 110, 0.7);
+        --button-secondary-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.32);
+        --button-danger-shadow: 0 8px 18px -16px rgba(185, 28, 28, 0.42);
+      }
+
+      :root[data-theme='dark'] {
+        --background-gradient:
+          radial-gradient(circle at 16% 0%, rgba(20, 184, 166, 0.1), transparent 28rem),
+          linear-gradient(180deg, #0b1220 0%, #111827 100%);
+        --panel-background: rgba(15, 23, 42, 0.92);
+        --panel-border-color: rgba(100, 116, 139, 0.38);
+        --table-border: rgba(100, 116, 139, 0.42);
+        --input-border: rgba(100, 116, 139, 0.5);
+        --input-background: rgba(15, 23, 42, 0.58);
+        --text-muted: #b6c2d6;
+        --button-secondary-bg: rgba(51, 65, 85, 0.74);
+      }
+
+      .container {
+        max-width: 1180px;
+        padding: 22px 20px 48px;
+      }
+
+      header,
+      .dashboard-legend,
+      .panel,
+      .settings-form,
+      .donor-detail,
+      .donor-info-card,
+      .payment-history,
+      .support-conversation,
+      .support-request-card,
+      .form-actions {
+        box-shadow: none;
+      }
+
+      header {
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 20px;
+      }
+
+      h1,
+      h2,
+      h3,
+      h4,
+      button,
+      .admin-metric-card strong,
+      .event-title {
+        letter-spacing: 0;
+      }
+
+      h1 {
+        font-size: clamp(1.7rem, 2vw, 2.25rem);
+      }
+
+      button {
+        min-height: 36px;
+        border-radius: 10px;
+        padding: 8px 14px;
+        font-weight: 700;
+        background: var(--button-primary-bg);
+        transition:
+          background 0.14s ease,
+          border-color 0.14s ease,
+          color 0.14s ease,
+          box-shadow 0.14s ease;
+      }
+
+      button:hover:not(:disabled) {
+        transform: none;
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--text-primary);
+        border-color: var(--table-border);
+      }
+
+      button.secondary:hover:not(:disabled) {
+        background: var(--table-hover);
+        border-color: rgba(20, 184, 166, 0.46);
+      }
+
+      button.danger,
+      button.danger.secondary {
+        background: transparent;
+        color: var(--status-danger-color);
+        border-color: rgba(248, 113, 113, 0.48);
+      }
+
+      button.danger:hover:not(:disabled),
+      button.danger.secondary:hover:not(:disabled) {
+        background: var(--status-danger-bg);
+        color: var(--status-danger-color);
+      }
+
+      button:disabled {
+        opacity: 0.42;
+      }
+
+      .panel {
+        border-radius: 14px;
+        padding: clamp(18px, 2.2vw, 24px);
+        margin-bottom: 18px;
+      }
+
+      .dashboard-legend {
+        top: 10px;
+        gap: 6px;
+        padding: 6px;
+        margin-bottom: 18px;
+        border-radius: 14px;
+      }
+
+      .dashboard-legend button {
+        border-radius: 10px;
+        padding: 9px 14px;
+        font-size: 0.93rem;
+        font-weight: 700;
+        color: var(--text-muted);
+      }
+
+      .dashboard-legend button[aria-selected='true'] {
+        background: rgba(20, 184, 166, 0.16);
+        color: #0f766e;
+        box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.5);
+        transform: none;
+      }
+
+      :root[data-theme='dark'] .dashboard-legend button[aria-selected='true'] {
+        color: #5eead4;
+      }
+
+      .admin-metric-grid {
+        gap: 12px;
+        margin: 14px 0 18px;
+      }
+
+      .admin-metric-card,
+      .admin-metric-card.accent-blue,
+      .admin-metric-card.accent-gold,
+      .admin-metric-card.accent-rose,
+      :root[data-theme='dark'] .admin-metric-card,
+      :root[data-theme='dark'] .admin-metric-card.accent-blue,
+      :root[data-theme='dark'] .admin-metric-card.accent-gold,
+      :root[data-theme='dark'] .admin-metric-card.accent-rose {
+        border-color: var(--table-border);
+        border-radius: 12px;
+        padding: 15px;
+        background: rgba(255, 255, 255, 0.52);
+      }
+
+      :root[data-theme='dark'] .admin-metric-card,
+      :root[data-theme='dark'] .admin-metric-card.accent-blue,
+      :root[data-theme='dark'] .admin-metric-card.accent-gold,
+      :root[data-theme='dark'] .admin-metric-card.accent-rose {
+        background: rgba(15, 23, 42, 0.62);
+      }
+
+      .admin-metric-card::after {
+        display: none;
+      }
+
+      .admin-metric-label {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+
+      .admin-metric-card strong {
+        font-size: clamp(1.9rem, 3vw, 2.4rem);
+        font-weight: 750;
+      }
+
+      .donors-filter-tabs {
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+
+      .donors-filter-tab {
+        border-radius: 10px;
+        padding: 7px 12px;
+        font-size: 0.84rem;
+      }
+
+      .donors-filter-tab.active {
+        background: rgba(20, 184, 166, 0.16);
+        color: #0f766e;
+        border-color: rgba(20, 184, 166, 0.5);
+      }
+
+      :root[data-theme='dark'] .donors-filter-tab.active {
+        color: #5eead4;
+      }
+
+      .donors-layout {
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+      }
+
+      .donors-list,
+      .donor-detail,
+      .events-list,
+      .support-message-thread {
+        scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+        scrollbar-width: thin;
+      }
+
+      .donors-list::-webkit-scrollbar,
+      .donor-detail::-webkit-scrollbar,
+      .events-list::-webkit-scrollbar,
+      .support-message-thread::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .donors-list::-webkit-scrollbar-thumb,
+      .donor-detail::-webkit-scrollbar-thumb,
+      .events-list::-webkit-scrollbar-thumb,
+      .support-message-thread::-webkit-scrollbar-thumb {
+        background: rgba(148, 163, 184, 0.45);
+        border-radius: 999px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+      }
+
+      .donor-card {
+        border-radius: 10px;
+        padding: 11px 12px;
+      }
+
+      .donor-card.selected {
+        background: rgba(20, 184, 166, 0.1);
+        border-color: rgba(20, 184, 166, 0.44);
+      }
+
+      .donor-detail {
+        border-radius: 14px;
+        padding: 20px;
+        gap: 18px;
+      }
+
+      .donor-detail-header {
+        padding-bottom: 14px;
+        border-bottom-width: 1px;
+      }
+
+      .donor-detail-header h3 {
+        font-size: 1.25rem;
+        font-weight: 750;
+      }
+
+      .donor-detail-cards {
+        gap: 12px;
+      }
+
+      .donor-info-card,
+      .payment-history {
+        border-radius: 12px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      :root[data-theme='dark'] .donor-info-card,
+      :root[data-theme='dark'] .payment-history {
+        background: rgba(15, 23, 42, 0.46);
+      }
+
+      .donor-detail-actions {
+        border-radius: 12px;
+        padding: 12px;
+        gap: 8px;
+        background: transparent;
+      }
+
+      :root[data-theme='dark'] .donor-detail-actions {
+        background: transparent;
+      }
+
+      .donor-detail-actions button {
+        border-radius: 10px;
+        font-size: 0.82rem;
+        padding: 8px 12px;
+      }
+
+      .donor-detail-actions button[data-action='refresh'] {
+        background: var(--button-primary-bg);
+        color: var(--button-primary-color);
+        border-color: transparent;
+      }
+
+      .settings-form {
+        border-radius: 12px;
+        padding: 18px;
+        gap: 14px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      :root[data-theme='dark'] .settings-form {
+        background: rgba(15, 23, 42, 0.44);
+      }
+
+      .settings-form input[type='text'],
+      .settings-form input[type='password'],
+      .settings-form input[type='url'],
+      .settings-form input[type='number'],
+      .settings-form input[type='email'],
+      .settings-form textarea,
+      .settings-form select {
+        border-radius: 10px;
+        box-shadow: none;
+      }
+
+      .settings-form input[type='text']:focus,
+      .settings-form input[type='password']:focus,
+      .settings-form input[type='url']:focus,
+      .settings-form input[type='number']:focus,
+      .settings-form input[type='email']:focus,
+      .settings-form textarea:focus,
+      .settings-form select:focus {
+        border-color: rgba(20, 184, 166, 0.75);
+        box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+      }
+
+      #notification-settings-panel .settings-form {
+        max-width: 880px;
+      }
+
+      #notification-settings-panel .field-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      #notification-settings-panel .settings-form .checkbox-row {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        min-height: 46px;
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--table-border);
+        font-weight: 650;
+      }
+
+      #notification-settings-panel .settings-form .checkbox-row:last-child {
+        border-bottom: 0;
+      }
+
+      #notification-settings-panel .checkbox-row input[type='checkbox'] {
+        accent-color: var(--button-primary-bg);
+        width: 16px;
+        height: 16px;
+      }
+
+      .form-actions {
+        width: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      :root[data-theme='dark'] .form-actions {
+        background: transparent;
+      }
+
+      @media (max-width: 720px) {
+        .dashboard-legend {
+          gap: 4px;
+          padding: 6px;
+        }
+
+        .dashboard-legend button {
+          text-align: center;
+        }
+      }
