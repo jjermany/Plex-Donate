@@ -7695,7 +7695,7 @@
           if (invites.length > 0) {
             const invite = invites[0];
             if (invite.inviteUrl) {
-              inviteParts.push(`<a href="${invite.inviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+              inviteParts.push(`<a href="${invite.inviteUrl}">Invite link</a>`);
             }
             if (invite.recipientEmail) {
               inviteParts.push(`<span class="badge badge-note">For ${escapeHtml(invite.recipientEmail)}</span>`);
@@ -7712,7 +7712,7 @@
 
           const shareUrl = buildShareUrl(donor.shareLink);
           if (shareUrl) {
-            inviteParts.push(`<a href="${shareUrl}" target="_blank" rel="noopener">Setup page</a>`);
+            inviteParts.push(`<a href="${shareUrl}">Setup page</a>`);
             if (donor.shareLink.lastUsedAt) {
               const usedDate = new Date(donor.shareLink.lastUsedAt);
               inviteParts.push(`<span class="badge badge-visited">Visited ${usedDate.toLocaleDateString()}</span>`);
@@ -8102,7 +8102,7 @@
           if (invites.length > 0) {
             const invite = invites[0];
             if (invite.inviteUrl) {
-              inviteParts.push(`<a href="${invite.inviteUrl}" target="_blank" rel="noopener">Invite link</a>`);
+              inviteParts.push(`<a href="${invite.inviteUrl}">Invite link</a>`);
             }
             if (invite.recipientEmail) {
               inviteParts.push(
@@ -8124,7 +8124,7 @@
           const shareUrl = buildShareUrl(donor.shareLink);
           if (shareUrl) {
             inviteParts.push(
-              `<a href="${shareUrl}" target="_blank" rel="noopener">Setup page</a>`
+              `<a href="${shareUrl}">Setup page</a>`
             );
             if (donor.shareLink.lastUsedAt) {
               const usedDate = new Date(donor.shareLink.lastUsedAt);
