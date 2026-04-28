@@ -1,4 +1,4 @@
-/* ?? Styled confirmation modal (replaces native confirm()) ?? */
+/* Styled confirmation modal (replaces native confirm()). */
       function showConfirmModal(title, message) {
         return new Promise((resolve) => {
           const backdrop = document.createElement('div');
@@ -848,14 +848,14 @@
 
       function formatDateTime(value) {
         if (!value) {
-          return '?';
+          return 'Not available';
         }
 
         let date;
         if (typeof value === 'string') {
           const trimmed = value.trim();
           if (!trimmed) {
-            return '?';
+            return 'Not available';
           }
 
           const sqliteMatch = trimmed.match(
@@ -1009,7 +1009,7 @@
           billingCycles.find((cycle) => cycle && cycle.tenure_type === 'REGULAR') ||
           billingCycles[0];
 
-        let priceLabel = '?';
+        let priceLabel = 'Unknown';
         if (
           regularCycle &&
           regularCycle.pricing_scheme &&
@@ -1024,13 +1024,13 @@
 
         const frequencyLabel = formatPlanFrequency(regularCycle && regularCycle.frequency);
         const cycleLabel =
-          priceLabel !== '?' && frequencyLabel
+          priceLabel !== 'Unknown' && frequencyLabel
             ? `${priceLabel} every ${frequencyLabel}`
-            : priceLabel !== '?'
+            : priceLabel !== 'Unknown'
               ? priceLabel
-              : frequencyLabel || '?';
+              : frequencyLabel || 'Unknown';
 
-        let productLabel = '?';
+        let productLabel = 'Unknown';
         if (product && (product.name || product.id)) {
           if (product.name && (plan.product_id || product.id)) {
             const idLabel = plan.product_id || product.id;
@@ -1377,7 +1377,7 @@
         if (supportRequestMeta) {
           const openedAt = formatDateTime(thread.request.createdAt);
           const updatedAt = formatDateTime(thread.request.updatedAt);
-          supportRequestMeta.textContent = `${donorName} ? Updated ${updatedAt} ? Created ${openedAt}`;
+          supportRequestMeta.textContent = `${donorName} · Updated ${updatedAt} · Created ${openedAt}`;
         }
         if (supportMessageThread) {
           supportMessageThread.innerHTML = '';
@@ -1480,7 +1480,7 @@
               thread.request.donorName ||
               thread.request.donorEmail ||
               'Donor';
-            metaEl.textContent = `${donorName} ? Updated ${formatDateTime(
+            metaEl.textContent = `${donorName} · Updated ${formatDateTime(
               thread.request.updatedAt
             )}`;
 
@@ -2579,7 +2579,7 @@
         if (state.paypalPlanLoading) {
           paypalPlanBody.classList.remove('empty');
           paypalPlanBody.innerHTML =
-            '<p class="plan-loading">Loading PayPal plan details?</p>';
+            '<p class="plan-loading">Loading PayPal plan details...</p>';
           return;
         }
 
@@ -2695,11 +2695,11 @@
           if (shareUrl) {
             prospectShareSummary.textContent =
               summaryParts.length > 0
-                ? `Link ready for ${summaryParts.join(' ? ')}`
+                ? `Link ready for ${summaryParts.join(' · ')}`
                 : 'Share this link with your prospective supporter.';
           } else if (summaryParts.length > 0) {
             prospectShareSummary.textContent = `Preparing link for ${summaryParts.join(
-              ' ? '
+              ' · '
             )}`;
           } else {
             prospectShareSummary.textContent = '';
@@ -2756,8 +2756,8 @@
         setFormStatus(
           prospectShareForm,
           regenerate
-            ? 'Creating a fresh setup link?'
-            : 'Creating setup link?',
+            ? 'Creating a fresh setup link...'
+            : 'Creating setup link...',
           'info'
         );
 
@@ -3088,7 +3088,7 @@
           const metaEl = clone.querySelector('.donor-card-meta');
 
           nameEl.textContent = donor.name || donor.email || 'Unknown';
-          emailEl.textContent = donor.email || '?';
+          emailEl.textContent = donor.email || 'No email';
 
           const status = (donor.status || 'pending').toLowerCase();
           // Set data-status on card for color-coded borders
@@ -3106,7 +3106,7 @@
           if (dateText) {
             paymentParts.push(`<i data-lucide="calendar" class="donor-card-icon"></i>${dateText}`);
           }
-          paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : '?';
+          paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : 'No payment';
 
           // Add Plex status indicator
           if (plexStatusEl) {
@@ -3119,6 +3119,8 @@
               plexIcon = '<i data-lucide="clock" class="donor-card-icon"></i>Pending';
             } else if (donor.needsPlexInvite) {
               plexIcon = '<i data-lucide="mail" class="donor-card-icon"></i>Invite';
+            } else {
+              plexIcon = '<span class="donor-card-empty">Not checked</span>';
             }
             plexStatusEl.innerHTML = plexIcon;
           }
@@ -3161,7 +3163,7 @@
               </div>
             `);
           }
-          if (donor.hadPreexistingAccess) {
+          if (false && donor.hadPreexistingAccess) {
             tooltipRows.push(`
               <div class="donor-card-tooltip-row">
                 <span class="donor-card-tooltip-label">Access:</span>
@@ -3169,8 +3171,8 @@
               </div>
             `);
           } else if (donor.plexShareState) {
-            const plexLabel = donor.plexShareState === 'shared' ? '? Shared' :
-                             donor.plexShareState === 'pending' ? '? Pending' : '?';
+            const plexLabel = donor.plexShareState === 'shared' ? 'Shared' :
+                             donor.plexShareState === 'pending' ? 'Pending' : 'Not checked';
             tooltipRows.push(`
               <div class="donor-card-tooltip-row">
                 <span class="donor-card-tooltip-label">Plex:</span>
@@ -3308,17 +3310,18 @@
             plexParts.push('<div class="donor-info-card-value" style="color: #ef4444;"><i data-lucide="mail-x" style="width: 20px; height: 20px; display: inline-block; vertical-align: middle;"></i> Not invited</div>');
             plexParts.push('<div class="donor-info-card-label">Send Plex invite</div>');
           } else {
-            plexParts.push('<div class="donor-info-card-value">?</div>');
+            plexParts.push('<div class="donor-info-card-value">Not checked</div>');
+            plexParts.push('<div class="donor-info-card-label">Refresh Plex status or configure Plex settings.</div>');
           }
           plexStatusEl.innerHTML = plexParts.join('');
         }
 
         // Contact card
         if (donorDetailEmail) {
-          donorDetailEmail.textContent = donor.email || '?';
+          donorDetailEmail.textContent = donor.email || 'No email on file';
         }
         if (donorDetailSubId) {
-          donorDetailSubId.textContent = donor.subscriptionId || '?';
+          donorDetailSubId.textContent = donor.subscriptionId || 'No subscription ID';
         }
 
         // Payment history visualization
@@ -3366,7 +3369,7 @@
             }
           }
 
-          donorDetailInvite.innerHTML = inviteParts.length > 0 ? inviteParts.join('<br />') : '?';
+          donorDetailInvite.innerHTML = inviteParts.length > 0 ? inviteParts.join('<br />') : 'No invite or setup link yet.';
         }
 
         // Error/status notes
@@ -3424,7 +3427,7 @@
 
           const labelEl = document.createElement('div');
           labelEl.className = 'payment-bar-label';
-          labelEl.textContent = date ? date.toLocaleDateString('en-US', { month: 'short' }) : '?';
+          labelEl.textContent = date ? date.toLocaleDateString('en-US', { month: 'short' }) : 'Unknown';
 
           const amountEl = document.createElement('div');
           amountEl.className = 'payment-bar-amount';
@@ -3439,7 +3442,7 @@
         if (paymentHistorySummary) {
           const totalPayments = payments.length;
           const totalAmount = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
-          paymentHistorySummary.textContent = `${totalPayments} payment${totalPayments !== 1 ? 's' : ''} ? $${totalAmount.toFixed(2)} total`;
+          paymentHistorySummary.textContent = `${totalPayments} payment${totalPayments !== 1 ? 's' : ''} · $${totalAmount.toFixed(2)} total`;
         }
       }
 
@@ -3460,7 +3463,7 @@
         // Send Plex invite button
         // Enabled whenever Plex is configured, donor has an email, no active
         // shared access exists, and the subscriber has an active subscription
-        // or active trial. A pending invite is informational only ? admin can
+        // or active trial. A pending invite is informational only; admin can
         // still click to get status feedback.
         const plexConfigured = Boolean(plexState && plexState.configured !== false);
         const statusAllowsInvite = status === 'active' || status === 'trial';
@@ -3480,7 +3483,7 @@
         } else if (!statusAllowsInvite) {
           inviteBtn.title = 'User must have an active subscription or trial to receive a Plex invite.';
         } else if (donor.plexPending) {
-          inviteBtn.title = 'A Plex invite is already pending ? click to check status or resend.';
+          inviteBtn.title = 'A Plex invite is already pending; click to check status or resend.';
         } else {
           inviteBtn.title = 'Send a Plex invite to this subscriber.';
         }
@@ -3692,7 +3695,7 @@
             actionMenuPanel.hidden = true;
           }
 
-          subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:var(--text-muted-soft);font-size:0.85rem;">${donor.email || '?'}<br/>Sub ID: ${donor.subscriptionId}</span>`;
+          subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:var(--text-muted-soft);font-size:0.85rem;">${donor.email || 'No email'}<br/>Sub ID: ${donor.subscriptionId || 'No subscription ID'}</span>`;
 
           const status = (donor.status || 'pending').toLowerCase();
           statusPill.dataset.status = status;
@@ -3729,7 +3732,7 @@
           } else if (paymentText) {
             lastPaymentCell.innerHTML = `<span class="badge">${paymentText}</span>`;
           } else {
-            lastPaymentCell.textContent = '?';
+            lastPaymentCell.textContent = 'No payment';
           }
 
           const invites = Array.isArray(donor.invites) ? donor.invites : [];
@@ -3869,7 +3872,7 @@
           if (inviteParts.length > 0) {
             inviteCell.innerHTML = inviteParts.join('<br />');
           } else {
-            inviteCell.textContent = '?';
+            inviteCell.textContent = 'No invite or setup link';
           }
 
           subscribersTable.appendChild(clone);
@@ -4372,13 +4375,13 @@
           ownerCell.innerHTML = `<strong>${escapeHtml(
             ownerName
           )}</strong><br /><span class="subtle-text">${ownerMeta.join(
-            ' ? '
+            ' · '
           )}</span>`;
 
           createdCell.textContent = formatDateTime(link.createdAt);
           lastUsedCell.textContent = link.lastUsedAt
             ? formatDateTime(link.lastUsedAt)
-            : '?';
+            : 'Never';
 
           shareLinksTable.appendChild(clone);
         });
@@ -4501,7 +4504,7 @@
             setLoginStatus('Password is required', 'error');
             return;
           }
-          setLoginStatus('Signing in?');
+          setLoginStatus('Signing in...');
           if (loginSubmitButton) {
             loginSubmitButton.disabled = true;
           }
@@ -4596,7 +4599,7 @@
             setSupportReplyStatusMessage('Enter a reply before sending.', 'error');
             return;
           }
-          setSupportReplyStatusMessage('Sending reply?', 'info');
+          setSupportReplyStatusMessage('Sending reply...', 'info');
           const previousDisabled = supportReplySubmit
             ? supportReplySubmit.disabled
             : false;
@@ -4928,7 +4931,7 @@
             }
           }
 
-          setFormStatus(adminCredentialsForm, 'Saving?', 'pending');
+          setFormStatus(adminCredentialsForm, 'Saving...', 'pending');
           const submitButton = adminCredentialsForm.querySelector("button[type='submit']");
           if (submitButton) {
             submitButton.disabled = true;
@@ -5147,7 +5150,7 @@
             if (submitButton) {
               submitButton.disabled = true;
             }
-            setFormStatus(form, 'Saving?');
+            setFormStatus(form, 'Saving...');
             const response = await api(`/api/admin/settings/${group}`, {
               method: 'PUT',
               body: payload,
@@ -5192,7 +5195,7 @@
             const previousDisabledState = button.disabled;
             try {
               button.disabled = true;
-              setFormStatus(form, 'Testing?');
+              setFormStatus(form, 'Testing...');
               const response = await api(`/api/admin/settings/${group}/test`, {
                 method: 'POST',
                 body: payload,
@@ -5247,7 +5250,7 @@
             const previousDisabledState = button.disabled;
             try {
               button.disabled = true;
-              setFormStatus(form, 'Sending UPS test email?');
+              setFormStatus(form, 'Sending UPS test email...');
               const response = await api('/api/admin/automation/ups/test', {
                 method: 'POST',
                 body: payload,
@@ -5275,7 +5278,7 @@
             const previousDisabledState = button.disabled;
             try {
               button.disabled = true;
-              setFormStatus(form, 'Sending UPS shutdown test email?');
+              setFormStatus(form, 'Sending UPS shutdown test email...');
               const response = await api('/api/admin/automation/ups/test', {
                 method: 'POST',
                 body: {
@@ -5331,7 +5334,7 @@
             const previousDisabledState = button.disabled;
             try {
               button.disabled = true;
-              setFormStatus(form, 'Sending announcement email?');
+              setFormStatus(form, 'Sending announcement email...');
               const response = await api('/api/admin/announcements/email', {
                 method: 'POST',
                 body: values,
@@ -5804,4 +5807,3 @@
       if (typeof lucide !== 'undefined') {
         lucide.createIcons();
       }
-
