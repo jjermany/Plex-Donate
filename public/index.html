@@ -4531,6 +4531,7 @@
       }
 
       const loadingGate = document.getElementById('loading-gate');
+      const loadingGateMessage = document.getElementById('loading-gate-message');
       const loginPageWrapper = document.getElementById('login-page-wrapper');
       const loginPanel = document.getElementById('login-panel');
       const loginTitle = loginPanel ? loginPanel.querySelector('.login-brand h2') : null;
@@ -5126,6 +5127,8 @@
       let state = {
         authenticated: false,
         twoFactorPending: false,
+        workspaceLoading: false,
+        workspaceLoadingMessage: '',
         donors: [],
         shareLinks: [],
         events: [],
@@ -5198,16 +5201,28 @@
         );
       }
 
-      function loadDashboardDataInBackground() {
-        loadDashboardData().catch((err) => {
-          console.error('Failed to load dashboard data after sign-in', err);
-        });
+      function setWorkspaceLoading(isLoading, message = '') {
+        state.workspaceLoading = Boolean(isLoading);
+        state.workspaceLoadingMessage = isLoading
+          ? message || 'Loading the admin workspace...'
+          : '';
       }
 
-      function enterAdminWorkspace() {
+      async function enterAdminWorkspace() {
+        setWorkspaceLoading(
+          true,
+          'Signing you in and loading the admin workspace...'
+        );
         render();
-        loadDashboardDataInBackground();
-        startDashboardAutoRefresh();
+        try {
+          await loadDashboardData();
+          if (state.authenticated) {
+            startDashboardAutoRefresh();
+          }
+        } finally {
+          setWorkspaceLoading(false);
+          render();
+        }
       }
 
       function storeThemePreference(theme) {
@@ -5569,6 +5584,7 @@
 
           // Clear all state
           state.authenticated = false;
+          setWorkspaceLoading(false);
           state.donors = [];
           state.shareLinks = [];
           state.events = [];
@@ -6081,6 +6097,12 @@
           }
           return;
         }
+        if (!settings || typeof settings !== 'object') {
+          if (badge) {
+            badge.remove();
+          }
+          return;
+        }
         const nextSettings = settings || {};
         const app = nextSettings.app || {};
         const paypal = nextSettings.paypal || {};
@@ -6216,8 +6238,27 @@
         renderAdminTwoFactorOnboardingBanner();
         renderProspectSharePanel();
         renderShareLinks();
+        const shouldShowLoadingGate =
+          initialSessionValidationPending || state.workspaceLoading;
         if (loadingGate) {
-          loadingGate.classList.toggle('hidden', !initialSessionValidationPending);
+          loadingGate.classList.toggle('hidden', !shouldShowLoadingGate);
+        }
+        if (loadingGateMessage) {
+          loadingGateMessage.textContent = initialSessionValidationPending
+            ? 'Validating configuration and loading the admin workspace...'
+            : state.workspaceLoadingMessage || 'Loading the admin workspace...';
+        }
+        if (state.workspaceLoading) {
+          if (loginPageWrapper) {
+            loginPageWrapper.classList.add('hidden');
+          }
+          loginPanel.classList.add('hidden');
+          dashboard.classList.add('hidden');
+          logoutButton.classList.add('hidden');
+          if (prospectShareModal) {
+            prospectShareModal.hidden = true;
+          }
+          return;
         }
         if (state.authenticated) {
           showLoginPasswordForm();
@@ -8767,7 +8808,7 @@
               }
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
-              enterAdminWorkspace();
+              await enterAdminWorkspace();
               setLoginStatus('');
             } catch (err) {
               setLoginStatus(
@@ -8843,7 +8884,7 @@
               state.twoFactorPending = false;
               isSessionExpiring = false;
               loginRateLimitedUntil = null;
-              enterAdminWorkspace();
+              await enterAdminWorkspace();
               setLoginStatus('');
             }
           } catch (err) {
@@ -9064,6 +9105,7 @@
           stopDashboardAutoRefresh();
           setSessionToken(null);
           state.authenticated = false;
+          setWorkspaceLoading(false);
           state.twoFactorPending = false;
           state.donors = [];
           state.shareLinks = [];
@@ -9168,7 +9210,7 @@
             applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
             loginRateLimitedUntil = null;
             isSessionExpiring = false;
-            enterAdminWorkspace();
+            await enterAdminWorkspace();
             setLoginStatus('');
           } catch (err) {
             setLoginStatus(err.message || 'Verification failed', 'error');
