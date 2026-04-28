@@ -3890,6 +3890,167 @@
         return 'No payment recorded';
       }
 
+      function parseEventPayload(payload) {
+        if (!payload) {
+          return {};
+        }
+        if (typeof payload === 'object') {
+          return payload;
+        }
+        try {
+          const parsed = JSON.parse(payload);
+          return parsed && typeof parsed === 'object' ? parsed : { value: parsed };
+        } catch (e) {
+          return { message: String(payload) };
+        }
+      }
+
+      function humanizeEventType(eventType) {
+        const knownEvents = {
+          'paypal.webhook.received': 'PayPal webhook received',
+          'paypal.subscription.activated': 'Subscription activated',
+          'paypal.subscription.cancelled': 'Subscription cancelled',
+          'paypal.subscription.canceled': 'Subscription cancelled',
+          'paypal.subscription.suspended': 'Subscription suspended',
+          'paypal.subscription.expired': 'Subscription expired',
+          'paypal.payment.completed': 'Payment completed',
+          'paypal.payment.failed': 'Payment failed',
+          'invite.auto.generated': 'Setup link created automatically',
+          'invite.auto.skipped': 'Automatic invite skipped',
+          'invite.auto.failed': 'Automatic invite failed',
+          'invite.trial.generated': 'Trial setup link created',
+          'plex.invite.admin_sent': 'Plex invite sent by admin',
+          'plex.invite.revoked': 'Plex invite revoked',
+          'plex.access.revoked': 'Plex access revoked',
+          'announcement.email.sent': 'Announcement email sent',
+          'automation.ups.event.accepted': 'UPS event received',
+          'automation.ups.test.email.sent': 'UPS test email sent',
+        };
+        if (knownEvents[eventType]) {
+          return knownEvents[eventType];
+        }
+        return String(eventType || 'Unknown event')
+          .replace(/[._-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .replace(/\b\w/g, (letter) => letter.toUpperCase());
+      }
+
+      function getEventTone(eventType, payload) {
+        const combined = `${eventType || ''} ${payload.status || ''} ${payload.reason || ''}`.toLowerCase();
+        if (/(failed|failure|error|revoked|cancelled|canceled|expired|suspended|shutdown)/.test(combined)) {
+          return 'danger';
+        }
+        if (/(skipped|pending|warning|test|received)/.test(combined)) {
+          return 'warning';
+        }
+        if (/(completed|activated|generated|sent|accepted|created|success)/.test(combined)) {
+          return 'success';
+        }
+        return 'info';
+      }
+
+      function getEventIcon(tone, eventType) {
+        const type = String(eventType || '').toLowerCase();
+        if (type.includes('paypal') || type.includes('payment') || type.includes('subscription')) {
+          return '$';
+        }
+        if (type.includes('plex') || type.includes('invite')) {
+          return 'P';
+        }
+        if (type.includes('announcement') || type.includes('email')) {
+          return '@';
+        }
+        if (type.includes('ups') || type.includes('automation')) {
+          return '!';
+        }
+        return tone === 'danger' ? '!' : tone === 'warning' ? 'i' : 'OK';
+      }
+
+      function getEventPrimaryTarget(payload) {
+        return (
+          payload.donorDisplayName ||
+          payload.donorName ||
+          payload.name ||
+          payload.donorEmail ||
+          payload.email ||
+          payload.recipient ||
+          payload.plexEmail ||
+          payload.subscriptionId ||
+          payload.paypalSubscriptionId ||
+          payload.eventType ||
+          ''
+        );
+      }
+
+      function describeEvent(eventType, payload) {
+        const target = getEventPrimaryTarget(payload);
+        const status = payload.status || payload.subscriptionStatus || payload.paymentStatus || '';
+        const reason = payload.reason || payload.error || payload.message || '';
+        const sentCount = payload.sentCount ?? payload.sent ?? payload.recipientCount;
+
+        if (eventType === 'paypal.webhook.received') {
+          return payload.eventType
+            ? `PayPal delivered ${payload.eventType}.`
+            : 'PayPal delivered a webhook event for processing.';
+        }
+        if (eventType === 'announcement.email.sent') {
+          return typeof sentCount !== 'undefined'
+            ? `Announcement delivered to ${sentCount} supporter${Number(sentCount) === 1 ? '' : 's'}.`
+            : 'Announcement email was sent to supporters.';
+        }
+        if (eventType && eventType.startsWith('invite.auto.')) {
+          if (eventType.endsWith('.skipped') && reason) {
+            return `No invite was sent because ${String(reason).replace(/_/g, ' ')}.`;
+          }
+          if (eventType.endsWith('.failed') && reason) {
+            return `Invite automation could not finish: ${reason}.`;
+          }
+          return target
+            ? `A setup link was prepared for ${target}.`
+            : 'A setup link was prepared automatically.';
+        }
+        if (eventType && eventType.includes('plex')) {
+          return target
+            ? `Plex access workflow updated for ${target}.`
+            : 'Plex access workflow was updated.';
+        }
+        if (eventType && eventType.includes('subscription')) {
+          return target
+            ? `Subscription status updated for ${target}${status ? ` to ${status}` : ''}.`
+            : `Subscription status changed${status ? ` to ${status}` : ''}.`;
+        }
+        if (eventType && eventType.includes('payment')) {
+          const amount = payload.amount ? `${payload.amount} ${payload.currency || ''}`.trim() : '';
+          return target
+            ? `Payment ${status || 'event'} recorded for ${target}${amount ? ` (${amount})` : ''}.`
+            : `Payment ${status || 'event'} recorded${amount ? ` (${amount})` : ''}.`;
+        }
+        if (reason) {
+          return String(reason).replace(/_/g, ' ');
+        }
+        return target
+          ? `Related record: ${target}.`
+          : 'Event captured by Plex Donate.';
+      }
+
+      function getEventChips(eventType, payload) {
+        const chips = [];
+        const addChip = (label, value) => {
+          if (value === null || typeof value === 'undefined' || value === '') {
+            return;
+          }
+          chips.push(`${label}: ${String(value).replace(/_/g, ' ')}`);
+        };
+
+        addChip('Source', eventType && eventType.split('.')[0]);
+        addChip('Status', payload.status || payload.subscriptionStatus || payload.paymentStatus);
+        addChip('Donor', payload.donorDisplayName || payload.donorName || payload.donorEmail || payload.email);
+        addChip('Subscription', payload.subscriptionId || payload.paypalSubscriptionId);
+        addChip('Reason', payload.reason);
+        return chips.slice(0, 4);
+      }
+
       function renderEvents() {
         eventsList.innerHTML = '';
         const eventsToShow = Array.isArray(state.events)
@@ -3908,17 +4069,33 @@
         }
         eventsToShow.forEach((event) => {
           const li = document.createElement('li');
-          const payload = (() => {
-            try {
-              return JSON.stringify(JSON.parse(event.payload), null, 2);
-            } catch (e) {
-              return event.payload;
-            }
-          })();
+          const parsedPayload = parseEventPayload(event.payload);
+          const payload = JSON.stringify(parsedPayload, null, 2);
           const timestamp = escapeHtml(formatDateTime(event.createdAt));
-          const eventType = event && event.eventType ? escapeHtml(event.eventType) : 'Unknown event';
+          const eventTypeRaw = event && event.eventType ? event.eventType : 'Unknown event';
+          const title = escapeHtml(humanizeEventType(eventTypeRaw));
+          const description = escapeHtml(describeEvent(eventTypeRaw, parsedPayload));
+          const tone = getEventTone(eventTypeRaw, parsedPayload);
+          const chips = getEventChips(eventTypeRaw, parsedPayload)
+            .map((chip) => `<span class="event-chip">${escapeHtml(chip)}</span>`)
+            .join('');
           const safePayload = escapeHtml(payload || '');
-          li.innerHTML = `<time>${timestamp}</time><strong>${eventType}</strong><pre class="event-payload">${safePayload}</pre>`;
+          li.dataset.tone = tone;
+          li.dataset.eventIcon = getEventIcon(tone, eventTypeRaw);
+          li.innerHTML = `
+            <div class="event-card-header">
+              <div>
+                <strong class="event-title">${title}</strong>
+                <p class="event-description">${description}</p>
+              </div>
+              <time>${timestamp}</time>
+            </div>
+            ${chips ? `<div class="event-meta-row">${chips}</div>` : ''}
+            <details class="event-payload-details">
+              <summary>Technical details</summary>
+              <pre class="event-payload">${safePayload}</pre>
+            </details>
+          `;
           eventsList.appendChild(li);
         });
     }
