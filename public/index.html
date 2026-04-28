@@ -4330,8 +4330,8 @@
         <td class="col-last-used"></td>
         <td>
           <div class="actions">
-            <button data-action="copy" class="secondary">Copy setup link</button>
-            <button data-action="remove" class="danger secondary">Remove</button>
+            <button type="button" data-action="copy" class="secondary">Copy setup link</button>
+            <button type="button" data-action="remove" class="danger secondary">Remove</button>
           </div>
         </td>
       </tr>
@@ -8674,13 +8674,14 @@
           const shareUrl = buildShareUrl(link);
           linkCell.innerHTML = '';
           if (shareUrl) {
-            const openButton = document.createElement('button');
-            openButton.type = 'button';
-            openButton.className = 'secondary link-open-button';
-            openButton.dataset.action = 'open';
-            openButton.textContent = 'Open setup page';
-            openButton.title = shareUrl;
-            linkCell.appendChild(openButton);
+            const openLink = document.createElement('a');
+            openLink.className = 'secondary link-open-button';
+            openLink.href = shareUrl;
+            openLink.target = '_blank';
+            openLink.rel = 'noopener';
+            openLink.textContent = 'Open setup page';
+            openLink.title = shareUrl;
+            linkCell.appendChild(openLink);
           } else {
             linkCell.textContent = 'Pending setup link configuration';
           }
@@ -9873,24 +9874,6 @@
           const link = links.find((item) => String(item.id) === String(linkId));
           if (!link) {
             showDashboardToast('Unable to locate this setup link.', 'error');
-            return;
-          }
-
-          if (action === 'open') {
-            const shareUrl = buildShareUrl(link);
-            if (!shareUrl) {
-              showDashboardToast(
-                'This setup link does not have a shareable URL yet.',
-                'error'
-              );
-              return;
-            }
-            const newWindow = window.open(shareUrl, '_blank', 'noopener');
-            if (newWindow) {
-              newWindow.opener = null;
-            } else {
-              window.location.href = shareUrl;
-            }
             return;
           }
 
