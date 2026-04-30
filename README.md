@@ -181,42 +181,76 @@ In `xnut-notify-hooks.sh`, update the `ONLINE()`, `ONBATT()`, and low-battery or
 PLEX_DONATE_WEBHOOK_URL="https://plex-donate.jalonshomelab.com/api/automation/ups"
 PLEX_DONATE_WEBHOOK_TOKEN="YOUR_UPS_WEBHOOK_TOKEN"
 UPS_NAME="CyberPower"
+UPS_UPSC_TARGET="CyberPower@127.0.0.1"
 
-ONLINE () {
-    echo "ONLINE commands are now executing in background..."
+get_ups_value () {
+    /usr/bin/upsc "$UPS_UPSC_TARGET" "$1" 2>/dev/null | /usr/bin/head -n 1
+}
+
+post_ups_event () {
+    local event="$1"
+    local battery_charge
+    local runtime_seconds
+    local occurred_at
+    local escaped_ups_name
+    local json
+
+    battery_charge="$(get_ups_value battery.charge)"
+    runtime_seconds="$(get_ups_value battery.runtime)"
+    occurred_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    escaped_ups_name="${UPS_NAME//\"/\\\"}"
+    json="{\"event\":\"$event\",\"upsName\":\"$escaped_ups_name\",\"occurredAt\":\"$occurred_at\""
+
+    if [[ "$battery_charge" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+      json="$json,\"batteryChargePercent\":$battery_charge"
+    fi
+
+    if [[ "$runtime_seconds" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+      json="$json,\"runtimeSeconds\":$runtime_seconds"
+    fi
+
+    json="$json}"
+
     /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
       -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
       -H "Content-Type: application/json" \
-      -d "{\"event\":\"power_restored\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+      -d "$json" >/dev/null 2>&1 &
+}
+
+ONLINE () {
+    echo "ONLINE commands are now executing in background..."
+    post_ups_event "power_restored"
 }
 
 ONBATT () {
     echo "ONBATT commands are now executing in background..."
-    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
-      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d "{\"event\":\"power_outage\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+    post_ups_event "power_outage"
 }
 
 LOWBATT () {
     echo "LOWBATT commands are now executing in background..."
-    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
-      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d "{\"event\":\"shutdown_imminent\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+    post_ups_event "shutdown_imminent"
 }
 
 ONBATT_SHUTDOWN () {
     echo "ONBATT_SHUTDOWN commands are now executing in background..."
-    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
-      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d "{\"event\":\"shutdown_imminent\",\"upsName\":\"$UPS_NAME\"}" >/dev/null 2>&1 &
+    post_ups_event "shutdown_imminent"
 }
 
 REPLBATT () {
     echo "REPLBATT commands are now executing in background..."
 }
+
+case "$NOTIFYTYPE" in
+  ONLINE) ONLINE ;;
+  ONBATT) ONBATT ;;
+  LOWBATT) LOWBATT ;;
+  ONBATT_SHUTDOWN) ONBATT_SHUTDOWN ;;
+  REPLBATT) REPLBATT ;;
+  *)
+    logger -t xnut-notify-hooks "Unhandled NOTIFYTYPE: $NOTIFYTYPE"
+    ;;
+esac
 ```
 
 After saving the NUT files, restart the NUT plugin/service. A manual webhook test is the fastest way to confirm Plex Donate is ready before testing a real UPS event.

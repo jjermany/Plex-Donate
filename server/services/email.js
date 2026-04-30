@@ -273,22 +273,22 @@ function buildEmailDetailPanelHtml(title, lines, palette) {
     <p style="margin:0 0 12px;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${palette.panelText};">${escapeHtml(
       title
     )}</p>
-    <ul style="list-style:none;margin:0;padding:0;color:#111827;">
+    <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;color:#111827;">
       ${normalizedLines
         .map((line) => {
           const separatorIndex = line.indexOf(':');
           if (separatorIndex === -1) {
-            return `<li style="margin:0 0 10px;color:#0f172a;">${escapeHtml(line)}</li>`;
+            return `<tr><td colspan="2" style="padding:0 0 10px;color:#0f172a;">${escapeHtml(line)}</td></tr>`;
           }
 
           const label = line.slice(0, separatorIndex);
           const value = line.slice(separatorIndex + 1).trim();
-          return `<li style="margin:0 0 10px;color:#0f172a;"><strong style="display:inline-block;min-width:170px;color:#111827;">${escapeHtml(
+          return `<tr><td style="padding:0 18px 10px 0;vertical-align:top;width:1%;white-space:nowrap;color:#111827;"><strong>${escapeHtml(
             label
-          )}:</strong><span style="color:#334155;">${escapeHtml(value)}</span></li>`;
+          )}:</strong></td><td style="padding:0 0 10px;vertical-align:top;color:#334155;">${escapeHtml(value)}</td></tr>`;
         })
         .join('')}
-    </ul>
+    </table>
   </div>
   `;
 }
