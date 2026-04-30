@@ -1083,7 +1083,7 @@ async function sendUpsStatusEmail(
   if (displayBatteryPercent) {
     detailLines.push(`Battery charge: ${displayBatteryPercent}`);
   }
-  if (displayRuntime) {
+  if (displayRuntime && normalizedEvent !== 'power_restored') {
     detailLines.push(`Estimated runtime remaining: ${displayRuntime}`);
   }
   if (displayOccurredAt) {

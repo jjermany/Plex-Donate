@@ -224,6 +224,9 @@ test('sendUpsStatusEmail renders restore copy', async (t) => {
       to: 'user@example.com',
       name: 'Restore User',
       event: 'power_restored',
+      upsName: 'apc-ups',
+      batteryChargePercent: 82,
+      runtimeSeconds: 1326,
       occurredAt: '2026-03-17T16:00:00Z',
     },
     SMTP_SETTINGS
@@ -234,6 +237,9 @@ test('sendUpsStatusEmail renders restore copy', async (t) => {
   assert.equal(message.subject, 'Plex server power has been restored');
   assert.match(message.text, /power has been restored/i);
   assert.match(message.text, /service should be available again/i);
+  assert.match(message.text, /Battery charge: 82%/);
+  assert.doesNotMatch(message.text, /Estimated runtime remaining/i);
+  assert.doesNotMatch(message.html, /22 minutes/i);
   assert.match(message.html, /Thank you for your patience\./);
 });
 
