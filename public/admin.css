@@ -1629,10 +1629,15 @@
 
         .donor-detail-actions {
           padding: 12px;
+          width: 100%;
+          box-sizing: border-box;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
         }
 
         .donor-detail-actions button {
-          min-width: 100%;
+          width: 100%;
+          min-width: 0;
           padding: 10px 14px;
           font-size: 0.86rem;
         }
