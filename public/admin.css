@@ -4066,11 +4066,40 @@
 
       @media (max-width: 1024px) {
         .donors-layout {
-          grid-template-columns: minmax(0, 1fr);
+          grid-template-columns: minmax(0, 1fr) !important;
         }
 
         .donors-layout > .donors-empty-state {
-          display: none;
+          display: none !important;
+        }
+
+        .donor-card {
+          padding-right: 34px;
+        }
+
+        .donor-card::after {
+          content: '';
+          position: absolute;
+          right: 14px;
+          top: 50%;
+          width: 8px;
+          height: 8px;
+          border-right: 2px solid currentColor;
+          border-bottom: 2px solid currentColor;
+          color: var(--text-muted-soft);
+          opacity: 0.55;
+          transform: translateY(-50%) rotate(-45deg);
+          pointer-events: none;
+        }
+      }
+
+      @media (hover: none) and (pointer: coarse) {
+        .donors-layout {
+          grid-template-columns: minmax(0, 1fr) !important;
+        }
+
+        .donors-layout > .donors-empty-state {
+          display: none !important;
         }
 
         .donor-card {

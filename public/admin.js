@@ -3232,6 +3232,14 @@
         }
       }
 
+      function isCompactDonorLayout() {
+        return (
+          window.innerWidth <= 1024 ||
+          (window.matchMedia &&
+            window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+        );
+      }
+
       function selectDonor(donorId) {
         selectedDonorId = donorId;
         const donors = Array.isArray(state.donors) ? state.donors : [];
@@ -3255,8 +3263,8 @@
 
         renderDonorDetail(donor);
 
-        // Handle mobile view
-        if (donorsLayout && window.innerWidth <= 1024) {
+        // Handle compact/touch view
+        if (donorsLayout && isCompactDonorLayout()) {
           donorsLayout.classList.add('detail-active');
         }
       }
@@ -5965,9 +5973,9 @@
           showDonorsEmptyState();
         });
 
-        // Show/hide back button based on screen size
+        // Show/hide back button based on compact/touch layout
         const updateBackButtonVisibility = () => {
-          if (window.innerWidth <= 1024) {
+          if (isCompactDonorLayout()) {
             backButton.style.display = 'block';
           } else {
             backButton.style.display = 'none';
