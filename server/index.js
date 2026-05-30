@@ -299,6 +299,26 @@ async function processAccessExpirations() {
           status: statusForEvent,
           source: 'scheduled-job',
         });
+
+        if (isTrial) {
+          try {
+            await emailService.sendTrialEndedEmail({
+              to: donorForRevocation.email,
+              name: donorForRevocation.name,
+              accessEndedAt: donor.accessExpiresAt,
+            });
+            logEvent('donor.trial.ended_email.sent', {
+              donorId: donor.id,
+              accessEndedAt: donor.accessExpiresAt,
+              source: 'scheduled-job',
+            });
+          } catch (emailErr) {
+            logger.warn('Failed to send trial ended email', {
+              donorId: donor.id,
+              message: emailErr && emailErr.message,
+            });
+          }
+        }
       } catch (err) {
         logger.warn('Failed to process donor access expiration', {
           donorId: donor.id,

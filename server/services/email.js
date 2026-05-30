@@ -1009,6 +1009,62 @@ async function sendTrialEndingReminderEmail(
     html,
   });
 }
+async function sendTrialEndedEmail(
+  { to, name, accessEndedAt },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+
+  const displayDate = formatAccessEndDate(accessEndedAt);
+  const subject = 'Your Plex trial has ended';
+
+  const dashboardUrl = resolveDashboardUrl();
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const accessText = displayDate
+    ? `Your Plex trial access ended around ${displayDate}.`
+    : 'Your Plex trial access has ended.';
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    `${accessText} Start a subscription from your dashboard to restore access.`,
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push('If you have questions or need help subscribing, just reply to this email.');
+  textLines.push('');
+  textLines.push('-- Plex Donate');
+
+  const text = textLines.join('\n');
+
+  const html = buildEmailFrameHtml({
+    tone: 'warning',
+    subject,
+    badge: 'Trial Ended',
+    recipientName: name,
+    intro: accessText,
+    bodyHtml:
+      '<p style="margin:0 0 16px;color:#0f172a;">Start a subscription from your dashboard to restore Plex access.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you need help subscribing, just reply to this email.</p>',
+    dashboardHtml,
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
 async function sendUpsStatusEmail(
   {
     to,
@@ -1430,6 +1486,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendCancellationEmail,
   sendTrialEndingReminderEmail,
+  sendTrialEndedEmail,
   sendUpsStatusEmail,
   sendAnnouncementEmail,
   getSmtpConfig,

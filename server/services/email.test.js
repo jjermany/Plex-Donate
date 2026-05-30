@@ -128,6 +128,42 @@ test('sendSubscriptionThankYouEmail includes payment and subscription details', 
   assert.match(message.html, /Payment received:/);
 });
 
+test('sendTrialEndedEmail tells the donor how to restore access', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({ publicBaseUrl: 'https://plex.example.com' });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  await emailService.sendTrialEndedEmail(
+    {
+      to: 'trial-user@example.com',
+      name: 'Trial User',
+      accessEndedAt: '2026-05-29T18:00:00Z',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Your Plex trial has ended');
+  assert.match(message.text, /Your Plex trial access ended around Fri, 29 May 2026 18:00:00 GMT/);
+  assert.match(message.text, /Start a subscription from your dashboard to restore access/);
+  assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
+  assert.match(message.html, /Trial Ended/);
+});
+
 test('sendSupportRequestNotification renders dashboard access details', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;

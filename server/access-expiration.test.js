@@ -13,6 +13,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const webhookRouter = require('./routes/webhook');
+const emailService = require('./services/email');
 const { processAccessExpirations } = require('./index');
 const { db, createDonor, getDonorById } = require('./db');
 
@@ -45,7 +46,9 @@ test('access expiration sweep transitions trials to expired and revokes access',
   });
 
   const revokeMock = t.mock.method(webhookRouter, 'revokeDonorAccess', async () => {});
+  const emailMock = t.mock.method(emailService, 'sendTrialEndedEmail', async () => {});
   t.after(() => revokeMock.mock.restore());
+  t.after(() => emailMock.mock.restore());
 
   await processAccessExpirations();
 
@@ -62,4 +65,11 @@ test('access expiration sweep transitions trials to expired and revokes access',
   const updated = getDonorById(donor.id);
   assert.equal(updated.status, 'trial_expired');
   assert.equal(updated.accessExpiresAt, null);
+
+  assert.equal(emailMock.mock.callCount(), 1);
+  assert.deepEqual(emailMock.mock.calls[0].arguments[0], {
+    to: 'sweep-trial@example.com',
+    name: 'Sweep Trial',
+    accessEndedAt: expirationTimestamp,
+  });
 });
