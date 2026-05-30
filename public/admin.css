@@ -4063,3 +4063,32 @@
         box-shadow: none;
         background: rgba(20, 184, 166, 0.1);
       }
+
+      @media (max-width: 1024px) {
+        .donors-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .donors-layout > .donors-empty-state {
+          display: none;
+        }
+
+        .donor-card {
+          padding-right: 34px;
+        }
+
+        .donor-card::after {
+          content: '';
+          position: absolute;
+          right: 14px;
+          top: 50%;
+          width: 8px;
+          height: 8px;
+          border-right: 2px solid currentColor;
+          border-bottom: 2px solid currentColor;
+          color: var(--text-muted-soft);
+          opacity: 0.55;
+          transform: translateY(-50%) rotate(-45deg);
+          pointer-events: none;
+        }
+      }
