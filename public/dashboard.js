@@ -127,6 +127,7 @@ const state = {
       const plexLinkPin = document.getElementById('plex-link-pin');
       const plexLinkPinCode = document.getElementById('plex-link-pin-code');
       const plexLinkPinExpiry = document.getElementById('plex-link-pin-expiry');
+      const dashboardSetupLink = document.getElementById('dashboard-setup-link');
       const changePasswordButton = document.getElementById('change-password-button');
       const onboardingPanel = document.getElementById('onboarding-panel');
       const stepSubscription = document.getElementById('step-subscription');
@@ -3043,6 +3044,23 @@ const state = {
         });
       }
 
+      if (dashboardSetupLink) {
+        dashboardSetupLink.addEventListener('click', () => {
+          setActiveDashboardTab('plex');
+          const setupPanel = document.getElementById('dashboard-tabpanel-plex');
+          if (setupPanel) {
+            setupPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            window.setTimeout(() => {
+              try {
+                setupPanel.focus();
+              } catch (err) {
+                // Ignore focus errors.
+              }
+            }, 200);
+          }
+        });
+      }
+
       if (passwordForm) {
         passwordForm.addEventListener('submit', async (event) => {
           event.preventDefault();
@@ -3789,4 +3807,3 @@ const state = {
       } else {
         fetchSession();
       }
-
