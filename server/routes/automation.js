@@ -22,7 +22,7 @@ const UPS_EVENT_TYPES = new Set([
 const UPS_POWER_STATES = {
   power_outage: 'outage',
   power_restored: 'normal',
-  shutdown_imminent: 'outage',
+  shutdown_imminent: 'shutdown',
 };
 
 function asyncHandler(handler) {
@@ -39,8 +39,9 @@ function getAutomationState() {
       : '';
 
   return {
-    currentPowerState:
-      currentPowerState === 'outage' ? 'outage' : 'normal',
+    currentPowerState: ['outage', 'shutdown'].includes(currentPowerState)
+      ? currentPowerState
+      : 'normal',
     lastAcceptedEventType:
       stored && typeof stored.lastAcceptedEventType === 'string'
         ? stored.lastAcceptedEventType.trim()
@@ -111,8 +112,12 @@ function normalizeOptionalNumber(value) {
 }
 
 function shouldDeduplicateUpsEvent(currentState, event) {
+  if (event === 'power_outage') {
+    return ['outage', 'shutdown'].includes(currentState.currentPowerState);
+  }
+
   if (event === 'shutdown_imminent') {
-    return currentState.lastAcceptedEventType === 'shutdown_imminent';
+    return currentState.currentPowerState === 'shutdown';
   }
 
   return currentState.currentPowerState === UPS_POWER_STATES[event];

@@ -288,7 +288,7 @@ test('power_restored emails active and trial donors', { concurrency: false }, as
   }
 });
 
-test('shutdown_imminent emails active and trial donors while keeping outage state', { concurrency: false }, async (t) => {
+test('shutdown_imminent emails active and trial donors and persists shutdown state', { concurrency: false }, async (t) => {
   resetDatabase();
   config.upsWebhookToken = 'test-ups-token';
   settingsStore.updateGroup('smtp', {
@@ -345,7 +345,7 @@ test('shutdown_imminent emails active and trial donors while keeping outage stat
     assert.ok(sentEmails.every((entry) => entry.event === 'shutdown_imminent'));
 
     const automationState = getSetting('automation_state');
-    assert.equal(automationState.currentPowerState, 'outage');
+    assert.equal(automationState.currentPowerState, 'shutdown');
     assert.equal(automationState.lastAcceptedEventType, 'shutdown_imminent');
   } finally {
     await server.close();
@@ -454,6 +454,119 @@ test('repeated power_outage is deduped when already in outage state', { concurre
   }
 });
 
+test('power_outage is deduped when shutdown is already the persisted state', { concurrency: false }, async (t) => {
+  resetDatabase();
+  config.upsWebhookToken = 'test-ups-token';
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+  });
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    .run(
+      'automation_state',
+      JSON.stringify({
+        currentPowerState: 'shutdown',
+        lastAcceptedEventType: 'shutdown_imminent',
+        lastAcceptedEventAt: '2026-03-17T15:30:00.000Z',
+      })
+    );
+
+  let sendCount = 0;
+  const originalSendUpsStatusEmail = emailService.sendUpsStatusEmail;
+  emailService.sendUpsStatusEmail = async () => {
+    sendCount += 1;
+  };
+  t.after(() => {
+    emailService.sendUpsStatusEmail = originalSendUpsStatusEmail;
+  });
+
+  const app = createApp();
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer test-ups-token',
+      },
+      body: JSON.stringify({ event: 'power_outage' }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.deduped, true);
+    assert.equal(body.sent, 0);
+    assert.equal(sendCount, 0);
+  } finally {
+    await server.close();
+    config.upsWebhookToken = '';
+  }
+});
+
+test('power_restored sends after shutdown state survives restart', { concurrency: false }, async (t) => {
+  resetDatabase();
+  config.upsWebhookToken = 'test-ups-token';
+  settingsStore.updateGroup('smtp', {
+    host: 'smtp.example.com',
+    port: 2525,
+    secure: false,
+    from: 'Plex Donate <notify@example.com>',
+    supportNotificationEmail: 'owner@example.com',
+  });
+
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    .run(
+      'automation_state',
+      JSON.stringify({
+        currentPowerState: 'shutdown',
+        lastAcceptedEventType: 'shutdown_imminent',
+        lastAcceptedEventAt: '2026-03-17T15:45:00.000Z',
+      })
+    );
+
+  const sentEmails = [];
+  const originalSendUpsStatusEmail = emailService.sendUpsStatusEmail;
+  emailService.sendUpsStatusEmail = async (payload) => {
+    sentEmails.push(payload);
+  };
+  t.after(() => {
+    emailService.sendUpsStatusEmail = originalSendUpsStatusEmail;
+  });
+
+  const app = createApp();
+  const server = await startServer(app);
+
+  try {
+    const response = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: 'Bearer test-ups-token',
+      },
+      body: JSON.stringify({
+        event: 'power_restored',
+        occurredAt: '2026-03-17T16:00:00Z',
+      }),
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.deduped, false);
+    assert.equal(body.sent, 1);
+    assert.equal(sentEmails.length, 1);
+    assert.equal(sentEmails[0].event, 'power_restored');
+
+    const automationState = getSetting('automation_state');
+    assert.equal(automationState.currentPowerState, 'normal');
+    assert.equal(automationState.lastAcceptedEventType, 'power_restored');
+  } finally {
+    await server.close();
+    config.upsWebhookToken = '';
+  }
+});
+
 test('repeated power_restored is deduped when already in normal state', { concurrency: false }, async (t) => {
   resetDatabase();
   config.upsWebhookToken = 'test-ups-token';
@@ -510,7 +623,7 @@ test('repeated shutdown_imminent is deduped when already the latest accepted eve
     .run(
       'automation_state',
       JSON.stringify({
-        currentPowerState: 'outage',
+        currentPowerState: 'shutdown',
         lastAcceptedEventType: 'shutdown_imminent',
         lastAcceptedEventAt: '2026-03-17T15:30:00.000Z',
       })

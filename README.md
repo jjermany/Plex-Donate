@@ -189,11 +189,14 @@ get_ups_value () {
 
 post_ups_event () {
     local event="$1"
+    local attempts="${2:-1}"
+    local delay_seconds="${3:-0}"
     local battery_charge
     local runtime_seconds
     local occurred_at
     local escaped_ups_name
     local json
+    local attempt
 
     battery_charge="$(get_ups_value battery.charge)"
     runtime_seconds="$(get_ups_value battery.runtime)"
@@ -211,15 +214,25 @@ post_ups_event () {
 
     json="$json}"
 
-    /usr/bin/curl -sS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
-      -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
-      -H "Content-Type: application/json" \
-      -d "$json" >/dev/null 2>&1 &
+    (
+      for (( attempt=1; attempt<=attempts; attempt++ )); do
+        if /usr/bin/curl -fsS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
+          -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "$json" >/dev/null 2>&1; then
+          exit 0
+        fi
+
+        if [[ "$attempt" -lt "$attempts" && "$delay_seconds" -gt 0 ]]; then
+          /usr/bin/sleep "$delay_seconds"
+        fi
+      done
+    ) &
 }
 
 ONLINE () {
     echo "ONLINE commands are now executing in background..."
-    post_ups_event "power_restored"
+    post_ups_event "power_restored" 3 120
 }
 
 ONBATT () {
