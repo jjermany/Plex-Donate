@@ -12,6 +12,7 @@ const {
   revokeInvite: revokeInviteRecord,
   markPlexRevoked,
   updateDonorPlexIdentity,
+  extendDonorTrial,
   createOrUpdateShareLink,
   getShareLinkByDonorId,
   getShareLinkById,
@@ -287,6 +288,94 @@ async function buildDonorListWithPlex() {
   const plexContext = await loadPlexContext({ logContext: 'admin dashboard' });
   const annotatedDonors = donors.map((donor) => annotateDonorWithPlex(donor, plexContext));
   return { donors: annotatedDonors, plexContext };
+}
+
+async function createTrialExtensionInvite(donor) {
+  if (!donor) {
+    return { status: 'skipped', reason: 'missing_donor' };
+  }
+
+  const inviteEmail = (donor.plexEmail || donor.email || '').trim();
+  if (!inviteEmail) {
+    return { status: 'skipped', reason: 'missing_email' };
+  }
+
+  if (!plexService.isConfigured()) {
+    return { status: 'skipped', reason: 'plex_not_configured' };
+  }
+
+  const plexContext = await loadPlexContext({ logContext: 'trial extension invite' });
+  const donorInvites = listInvitesForDonor(donor.id);
+  const annotated = annotateDonorWithPlex({ ...donor, invites: donorInvites }, plexContext);
+  if (annotated.plexShared) {
+    return { status: 'skipped', reason: 'already_shared' };
+  }
+  if (annotated.plexPending) {
+    return { status: 'skipped', reason: 'already_pending' };
+  }
+
+  const inviteEmailDiagnostics = getInviteEmailDiagnostics(donor.email, donor.plexEmail);
+  const note = 'Trial extended by admin';
+
+  try {
+    const plexInvite = await plexService.createInvite({
+      email: inviteEmail,
+      friendlyName: donor.name || donor.email || inviteEmail,
+      invitedId: donor.plexAccountId || undefined,
+    });
+    const inviteRecord = createInviteRecord({
+      donorId: donor.id,
+      inviteId: plexInvite && plexInvite.inviteId,
+      inviteUrl: plexInvite && plexInvite.inviteUrl,
+      inviteStatus: plexInvite && plexInvite.status,
+      invitedAt: plexInvite && plexInvite.invitedAt,
+      sharedLibraries: plexInvite && plexInvite.sharedLibraries,
+      note,
+      recipientEmail: inviteEmail,
+      plexEmail: inviteEmail,
+      plexAccountId: donor.plexAccountId,
+    });
+
+    logEvent('plex.invite.trial_extension_sent', {
+      donorId: donor.id,
+      inviteId: inviteRecord.id,
+      plexInviteId: inviteRecord.plexInviteId,
+      note,
+      ...inviteEmailDiagnostics,
+    });
+
+    logger.info('Created Plex invite for extended trial', {
+      donorId: donor.id,
+      inviteId: inviteRecord.id,
+      plexInviteId: inviteRecord.plexInviteId,
+    });
+
+    return { status: 'created', invite: inviteRecord };
+  } catch (err) {
+    if (err && err.plexAlreadyInvited) {
+      logger.info('Plex indicated extended trial user already has a pending invite', {
+        donorId: donor.id,
+      });
+      return { status: 'skipped', reason: 'already_pending' };
+    }
+
+    logEvent('plex.invite.trial_extension_failed', {
+      donorId: donor.id,
+      reason: 'plex_invite_failed',
+      error: err && err.message,
+      ...inviteEmailDiagnostics,
+    });
+    logger.warn('Failed to create Plex invite for extended trial', {
+      donorId: donor.id,
+      error: err && err.message,
+    });
+
+    return {
+      status: 'failed',
+      reason: 'plex_invite_failed',
+      error: err && err.message ? err.message : 'Failed to create Plex invite',
+    };
+  }
 }
 
 function buildPlexSyncContextFromShares(shares) {
@@ -1220,6 +1309,161 @@ router.post(
     res.json({
       donor: donorPayload,
       error: normalizedError,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/subscribers/:id/extend-trial',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    if (!Number.isFinite(donorId) || donorId <= 0) {
+      return res.status(400).json({
+        error: 'Invalid subscriber ID',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const days = Number(req.body && req.body.days);
+    if (!Number.isInteger(days) || days < 1 || days > 30) {
+      return res.status(400).json({
+        error: 'Trial extension must be between 1 and 30 days.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({
+        error: 'Subscriber not found',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const status = normalizeValue(donor.status);
+    if (status !== 'trial' && status !== 'trial_expired') {
+      return res.status(409).json({
+        error: 'Only trial subscribers can have their trial extended.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const previousAccessExpiresAt = donor.accessExpiresAt || null;
+    const updated = extendDonorTrial(donor.id, { days });
+    const reactivated = status === 'trial_expired';
+
+    let inviteResult = null;
+    if (reactivated) {
+      inviteResult = await createTrialExtensionInvite(updated);
+    }
+
+    let emailResult = { sent: false, skipped: false, error: null };
+    if (updated && updated.email) {
+      try {
+        await emailService.sendTrialExtendedEmail({
+          to: updated.email,
+          name: updated.name,
+          accessExpiresAt: updated.accessExpiresAt,
+          extensionDays: days,
+          inviteUrl:
+            inviteResult &&
+            inviteResult.invite &&
+            inviteResult.invite.inviteUrl
+              ? inviteResult.invite.inviteUrl
+              : null,
+        });
+        emailResult = { sent: true, skipped: false, error: null };
+        logEvent('donor.trial.extended_email.sent', {
+          donorId: donor.id,
+          accessExpiresAt: updated && updated.accessExpiresAt,
+          days,
+        });
+      } catch (err) {
+        emailResult = {
+          sent: false,
+          skipped: false,
+          error: err && err.message ? err.message : 'Failed to send trial extension email',
+        };
+        logEvent('donor.trial.extended_email.failed', {
+          donorId: donor.id,
+          reason: 'email_failed',
+          error: emailResult.error,
+          days,
+        });
+        logger.warn('Failed to send trial extension email', {
+          donorId: donor.id,
+          error: emailResult.error,
+        });
+      }
+    } else {
+      emailResult = {
+        sent: false,
+        skipped: true,
+        error: 'Subscriber is missing email',
+      };
+    }
+
+    logEvent('donor.trial.extended', {
+      donorId: donor.id,
+      days,
+      previousAccessExpiresAt,
+      accessExpiresAt: updated && updated.accessExpiresAt,
+      reactivated,
+      inviteStatus: inviteResult && inviteResult.status,
+      emailSent: emailResult.sent,
+    });
+
+    logger.info('Admin extended subscriber trial', {
+      donorId: donor.id,
+      days,
+      previousAccessExpiresAt,
+      accessExpiresAt: updated && updated.accessExpiresAt,
+      reactivated,
+      inviteStatus: inviteResult && inviteResult.status,
+      emailSent: emailResult.sent,
+    });
+
+    const { donors, plexContext } = await buildDonorListWithPlex();
+    const detailedDonor = donors.find((item) => item.id === donor.id) || updated;
+
+    const messageParts = [
+      `Trial extended by ${days} day${days === 1 ? '' : 's'}.`,
+    ];
+    if (reactivated) {
+      if (inviteResult && inviteResult.status === 'created') {
+        messageParts.push('Plex invite resent.');
+      } else if (inviteResult && inviteResult.status === 'skipped') {
+        if (inviteResult.reason === 'already_shared') {
+          messageParts.push('Plex access is already active.');
+        } else if (inviteResult.reason === 'already_pending') {
+          messageParts.push('A Plex invite is already pending.');
+        } else if (inviteResult.reason === 'plex_not_configured') {
+          messageParts.push('Plex invite was not sent because Plex is not configured.');
+        } else if (inviteResult.reason === 'missing_email') {
+          messageParts.push('Plex invite was not sent because no invite email is available.');
+        }
+      } else if (inviteResult && inviteResult.status === 'failed') {
+        messageParts.push('Plex invite could not be resent.');
+      }
+    }
+    if (emailResult.sent) {
+      messageParts.push('Email sent.');
+    } else if (emailResult.error) {
+      messageParts.push('Email could not be sent.');
+    }
+
+    res.json({
+      success: true,
+      message: messageParts.join(' '),
+      donor: detailedDonor,
+      invite: inviteResult,
+      email: emailResult,
+      plex: {
+        configured: plexContext.configured,
+        error: plexContext.error,
+      },
       csrfToken: res.locals.csrfToken,
     });
   })

@@ -750,6 +750,14 @@ const statements = {
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
+  updateDonorTrialAccessById: db.prepare(
+    `UPDATE donors
+     SET status = 'trial',
+         access_expires_at = @accessExpiresAt,
+         trial_reminder_sent_at = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
   updateTrialReminderSentAt: db.prepare(
     `UPDATE donors
      SET trial_reminder_sent_at = @sentAt,
@@ -2073,6 +2081,38 @@ function startDonorTrial(donorId, { durationMs } = {}) {
   return startDonorTrialTransaction(donorId, expiresAt);
 }
 
+function extendDonorTrial(donorId, { days, now = Date.now() } = {}) {
+  if (!donorId) {
+    throw new Error('donorId is required to extend a trial');
+  }
+
+  const extensionDays = Number(days);
+  if (!Number.isInteger(extensionDays) || extensionDays < 1 || extensionDays > 30) {
+    throw new Error('Trial extension days must be an integer from 1 to 30');
+  }
+
+  const donor = mapDonor(statements.getDonorById.get(donorId));
+  if (!donor) {
+    return null;
+  }
+
+  const currentExpirationMs = Date.parse(donor.accessExpiresAt || '');
+  const baseMs =
+    Number.isFinite(currentExpirationMs) && currentExpirationMs > now
+      ? currentExpirationMs
+      : now;
+  const expiresAt = normalizeAccessExpiresAt(
+    baseMs + extensionDays * 24 * 60 * 60 * 1000
+  );
+
+  statements.updateDonorTrialAccessById.run({
+    id: donorId,
+    accessExpiresAt: expiresAt,
+  });
+
+  return mapDonor(statements.getDonorById.get(donorId));
+}
+
 function listDonorsWithExpiredAccess() {
   return statements.listDonorsWithExpiredAccess.all().map(mapDonor);
 }
@@ -2628,6 +2668,7 @@ module.exports = {
   clearDonorPlexIdentity,
   setDonorAccessExpirationBySubscription,
   setDonorAccessExpirationById,
+  extendDonorTrial,
   setDonorPreexistingAccess,
   listTrialDonorsNeedingReminder,
   markTrialReminderSent,

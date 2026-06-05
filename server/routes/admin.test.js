@@ -111,6 +111,7 @@ const {
 } = require('../db');
 const settingsStore = require('../state/settings');
 const plexService = require('../services/plex');
+const emailService = require('../services/email');
 const logger = require('../utils/logger');
 
 function resetDatabase() {
@@ -859,6 +860,192 @@ test('GET /api/admin/subscribers keeps Plex invite disabled for pending donors',
   assert.equal(donor.plexShared, false);
   assert.equal(donor.plexPending, false);
   assert.equal(donor.needsPlexInvite, false);
+});
+
+test('POST /api/admin/subscribers/:id/extend-trial extends active trial from current expiration', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  const originalExpirationMs = Date.now() + 3 * 24 * 60 * 60 * 1000;
+  const originalExpiration = new Date(originalExpirationMs).toISOString();
+  const donor = createDonor({
+    email: 'extend-active-trial@example.com',
+    name: 'Extend Active Trial',
+    status: 'trial',
+    accessExpiresAt: originalExpiration,
+  });
+
+  const response = await agent.post(
+    `/api/admin/subscribers/${donor.id}/extend-trial`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { days: 5 },
+    }
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(body.donor.status, 'trial');
+
+  const updated = getDonorById(donor.id);
+  const expectedExpirationMs = Date.parse(originalExpiration) + 5 * 24 * 60 * 60 * 1000;
+  assert.equal(updated.status, 'trial');
+  assert.equal(Date.parse(updated.accessExpiresAt), expectedExpirationMs);
+  assert.equal(body.donor.accessExpiresAt, updated.accessExpiresAt);
+
+  const events = getRecentEvents(1);
+  assert.equal(events[0].eventType, 'donor.trial.extended');
+  const payload = JSON.parse(events[0].payload);
+  assert.equal(payload.days, 5);
+  assert.equal(payload.previousAccessExpiresAt, originalExpiration);
+  assert.equal(payload.reactivated, false);
+});
+
+test('POST /api/admin/subscribers/:id/extend-trial reactivates expired trials', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-extend',
+    serverIdentifier: 'server-extend',
+    librarySectionIds: '1,2',
+  });
+
+  const sentMessages = [];
+  const originalSendTrialExtendedEmail = emailService.sendTrialExtendedEmail;
+  emailService.sendTrialExtendedEmail = async (payload) => {
+    sentMessages.push(payload);
+  };
+  const originalCreateInvite = plexService.createInvite;
+  const originalListUsers = plexService.listUsers;
+  const originalListSharedMembers = plexService.listSharedServerMembers;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  let createInvitePayload = null;
+  plexService.createInvite = async (payload) => {
+    createInvitePayload = payload;
+    return {
+      inviteId: 'plex-extended-trial',
+      inviteUrl: 'https://plex.local/invite/extended-trial',
+      status: 'pending',
+      invitedAt: new Date().toISOString(),
+      sharedLibraries: [{ id: '1', title: 'Movies' }],
+    };
+  };
+  plexService.listUsers = async () => [];
+  plexService.listSharedServerMembers = async () => [];
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [],
+  });
+  t.after(() => {
+    emailService.sendTrialExtendedEmail = originalSendTrialExtendedEmail;
+    plexService.createInvite = originalCreateInvite;
+    plexService.listUsers = originalListUsers;
+    plexService.listSharedServerMembers = originalListSharedMembers;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const beforeRequest = Date.now();
+  const donor = createDonor({
+    email: 'extend-expired-trial@example.com',
+    name: 'Extend Expired Trial',
+    status: 'trial_expired',
+    accessExpiresAt: null,
+    plexEmail: 'extend-expired-plex@example.com',
+    plexAccountId: 'plex-account-extended',
+  });
+
+  const response = await agent.post(
+    `/api/admin/subscribers/${donor.id}/extend-trial`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { days: 2 },
+    }
+  );
+  const afterRequest = Date.now();
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.donor.status, 'trial');
+  assert.equal(body.invite.status, 'created');
+  assert.equal(body.email.sent, true);
+
+  const updated = getDonorById(donor.id);
+  const updatedExpirationMs = Date.parse(updated.accessExpiresAt);
+  assert.equal(updated.status, 'trial');
+  assert.ok(updatedExpirationMs >= beforeRequest + 2 * 24 * 60 * 60 * 1000);
+  assert.ok(updatedExpirationMs <= afterRequest + 2 * 24 * 60 * 60 * 1000);
+  assert.deepEqual(createInvitePayload, {
+    email: 'extend-expired-plex@example.com',
+    friendlyName: 'Extend Expired Trial',
+    invitedId: 'plex-account-extended',
+  });
+
+  const refreshed = listDonorsWithDetails().find((item) => item.id === donor.id);
+  assert.ok(refreshed.invites.some((invite) => invite.plexInviteId === 'plex-extended-trial'));
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].to, 'extend-expired-trial@example.com');
+  assert.equal(sentMessages[0].extensionDays, 2);
+  assert.equal(sentMessages[0].inviteUrl, 'https://plex.local/invite/extended-trial');
+  assert.equal(sentMessages[0].accessExpiresAt, updated.accessExpiresAt);
+
+  const events = getRecentEvents(5);
+  assert.ok(events.some((event) => event.eventType === 'plex.invite.trial_extension_sent'));
+  assert.ok(events.some((event) => event.eventType === 'donor.trial.extended_email.sent'));
+  const extensionEvent = events.find((event) => event.eventType === 'donor.trial.extended');
+  const payload = JSON.parse(extensionEvent.payload);
+  assert.equal(payload.reactivated, true);
+  assert.equal(payload.inviteStatus, 'created');
+  assert.equal(payload.emailSent, true);
+});
+
+test('POST /api/admin/subscribers/:id/extend-trial validates day range and status', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  const trialDonor = createDonor({
+    email: 'range-trial@example.com',
+    status: 'trial',
+    accessExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  });
+  const activeDonor = createDonor({
+    email: 'active-not-trial@example.com',
+    status: 'active',
+  });
+
+  const tooLongResponse = await agent.post(
+    `/api/admin/subscribers/${trialDonor.id}/extend-trial`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { days: 31 },
+    }
+  );
+  assert.equal(tooLongResponse.status, 400);
+  const tooLongBody = await tooLongResponse.json();
+  assert.match(tooLongBody.error, /between 1 and 30/i);
+
+  const decimalResponse = await agent.post(
+    `/api/admin/subscribers/${trialDonor.id}/extend-trial`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { days: 1.5 },
+    }
+  );
+  assert.equal(decimalResponse.status, 400);
+
+  const activeResponse = await agent.post(
+    `/api/admin/subscribers/${activeDonor.id}/extend-trial`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+      body: { days: 3 },
+    }
+  );
+  assert.equal(activeResponse.status, 409);
+  const activeBody = await activeResponse.json();
+  assert.match(activeBody.error, /only trial subscribers/i);
 });
 
 test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) => {

@@ -111,6 +111,21 @@
         });
       }
 
+      function promptTrialExtensionDays() {
+        const input = window.prompt('Extend trial by how many days? Enter 1-30:');
+        if (input === null) {
+          return null;
+        }
+
+        const days = Number(String(input).trim());
+        if (!Number.isInteger(days) || days < 1 || days > 30) {
+          showDashboardToast('Enter a whole number of days from 1 to 30.', 'error');
+          return null;
+        }
+
+        return days;
+      }
+
       const loadingGate = document.getElementById('loading-gate');
       const loadingGateMessage = document.getElementById('loading-gate-message');
       const loginPageWrapper = document.getElementById('login-page-wrapper');
@@ -3458,6 +3473,28 @@
         return ['trial_expired', 'cancelled', 'expired', 'suspended'].includes(status);
       }
 
+      function canExtendTrialStatus(status) {
+        return status === 'trial' || status === 'trial_expired';
+      }
+
+      function mergeDonorIntoState(updatedDonor) {
+        if (!updatedDonor) {
+          return false;
+        }
+
+        const donors = Array.isArray(state.donors) ? [...state.donors] : [];
+        const index = donors.findIndex(
+          (item) => String(item.id) === String(updatedDonor.id)
+        );
+        if (index === -1) {
+          donors.push(updatedDonor);
+        } else {
+          donors[index] = { ...donors[index], ...updatedDonor };
+        }
+        state.donors = donors;
+        return true;
+      }
+
       function renderDonorActions(donor) {
         if (!donorDetailActions) return;
 
@@ -3515,6 +3552,17 @@
         refreshBtn.dataset.donorId = donor.id;
         refreshBtn.title = 'Refresh this subscriber from PayPal';
         donorDetailActions.appendChild(refreshBtn);
+
+        const extendTrialBtn = document.createElement('button');
+        extendTrialBtn.className = 'secondary';
+        extendTrialBtn.textContent = 'Extend trial';
+        extendTrialBtn.disabled = !canExtendTrialStatus(status);
+        extendTrialBtn.dataset.action = 'extend-trial';
+        extendTrialBtn.dataset.donorId = donor.id;
+        extendTrialBtn.title = canExtendTrialStatus(status)
+          ? 'Extend this trial by 1-30 days'
+          : 'Only trial subscribers can have their trial extended';
+        donorDetailActions.appendChild(extendTrialBtn);
 
         // Generate new invite link
         const shareGenBtn = document.createElement('button');
@@ -3799,6 +3847,9 @@
           const shareGenerateButton = clone.querySelector(
             'button[data-action="share-generate"]'
           );
+          const extendTrialButton = clone.querySelector(
+            'button[data-action="extend-trial"]'
+          );
           const resendButton = clone.querySelector('button[data-action="resend"]');
           const revokeButton = clone.querySelector('button[data-action="revoke"]');
           const revokePlexButton = clone.querySelector(
@@ -3840,6 +3891,14 @@
 
           if (shareGenerateButton) {
             shareGenerateButton.title = 'Create a new setup link for account setup or recovery';
+          }
+
+          if (extendTrialButton) {
+            const canExtend = canExtendTrialStatus(status);
+            extendTrialButton.disabled = !canExtend;
+            extendTrialButton.title = canExtend
+              ? 'Extend this trial by 1-30 days'
+              : 'Only trial subscribers can have their trial extended';
           }
 
           if (resendButton) {
@@ -5643,6 +5702,29 @@
                 };
               }
               state.donors = donors;
+            } else if (action === 'extend-trial') {
+              const days = promptTrialExtensionDays();
+              if (days === null) {
+                return;
+              }
+              requiresReload = false;
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/extend-trial`,
+                {
+                  method: 'POST',
+                  body: { days },
+                }
+              );
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (!mergeDonorIntoState(response && response.donor)) {
+                requiresReload = true;
+              }
+              showDashboardToast(
+                (response && response.message) || 'Trial extended successfully.',
+                'success'
+              );
             } else if (action === 'resend') {
               await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
             } else if (action === 'revoke') {
@@ -5871,6 +5953,29 @@
                 requiresReload = true;
               }
               const successMessage = (response && response.message) || 'PayPal subscription refreshed.';
+              showDashboardToast(successMessage, 'success');
+            } else if (action === 'extend-trial') {
+              const days = promptTrialExtensionDays();
+              if (days === null) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/extend-trial`,
+                {
+                  method: 'POST',
+                  body: { days },
+                }
+              );
+              if (response && response.plex) {
+                state.plex = response.plex;
+              }
+              if (!mergeDonorIntoState(response && response.donor)) {
+                requiresReload = true;
+              }
+              const successMessage =
+                (response && response.message) || 'Trial extended successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'resend') {
               const response = await api(`/api/admin/subscribers/${donorId}/resend`, {

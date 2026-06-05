@@ -164,6 +164,46 @@ test('sendTrialEndedEmail tells the donor how to restore access', async (t) => {
   assert.match(message.html, /Trial Ended/);
 });
 
+test('sendTrialExtendedEmail includes new expiration and invite link', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({ publicBaseUrl: 'https://plex.example.com' });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  await emailService.sendTrialExtendedEmail(
+    {
+      to: 'trial-user@example.com',
+      name: 'Trial User',
+      accessExpiresAt: '2026-06-12T18:00:00Z',
+      extensionDays: 7,
+      inviteUrl: 'https://plex.example.com/invite/extended',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Your Plex trial was extended');
+  assert.match(message.text, /Your Plex trial has been extended by 7 days/);
+  assert.match(message.text, /Fri, 12 Jun 2026 18:00:00 GMT/);
+  assert.match(message.text, /Use this Plex invite link to restore access: https:\/\/plex\.example\.com\/invite\/extended/);
+  assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
+  assert.match(message.html, /Trial Extended/);
+  assert.match(message.html, /Accept Plex Invite/);
+});
+
 test('sendSupportRequestNotification renders dashboard access details', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;

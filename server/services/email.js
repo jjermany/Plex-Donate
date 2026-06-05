@@ -1009,6 +1009,85 @@ async function sendTrialEndingReminderEmail(
     html,
   });
 }
+
+async function sendTrialExtendedEmail(
+  { to, name, accessExpiresAt, extensionDays, inviteUrl },
+  overrideSettings
+) {
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+
+  const displayDate = formatAccessEndDate(accessExpiresAt);
+  const subject = 'Your Plex trial was extended';
+
+  const dashboardUrl = resolveDashboardUrl({
+    fallbackUrls: inviteUrl ? [inviteUrl] : [],
+  });
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+  const dayText =
+    Number(extensionDays) === 1 ? '1 day' : `${Number(extensionDays) || ''} days`;
+
+  const accessText = displayDate
+    ? `Your Plex trial has been extended by ${dayText} and now runs through ${displayDate}.`
+    : `Your Plex trial has been extended by ${dayText}.`;
+
+  const textLines = [
+    `Hi ${name || 'there'},`,
+    '',
+    accessText,
+  ];
+
+  if (inviteUrl) {
+    textLines.push('');
+    textLines.push(`Use this Plex invite link to restore access: ${inviteUrl}`);
+  }
+
+  if (dashboardTextLine) {
+    textLines.push('');
+    textLines.push(dashboardTextLine);
+  }
+
+  textLines.push('');
+  textLines.push('If you have questions or need help, just reply to this email.');
+  textLines.push('');
+  textLines.push('-- Plex Donate');
+
+  const text = textLines.join('\n');
+
+  const detailLines = [];
+  if (displayDate) {
+    detailLines.push(`Trial ends: ${displayDate}`);
+  }
+  if (Number(extensionDays)) {
+    detailLines.push(`Extension: ${dayText}`);
+  }
+
+  const palette = getEmailTonePalette('brand');
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: 'Trial Extended',
+    recipientName: name,
+    intro: accessText,
+    bodyHtml:
+      (inviteUrl
+        ? buildEmailActionButtonHtml('Accept Plex Invite', inviteUrl, palette)
+        : '') +
+      buildEmailDetailPanelHtml('Trial details', detailLines, palette) +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you need help, just reply to this email.</p>',
+    dashboardHtml,
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function sendTrialEndedEmail(
   { to, name, accessEndedAt },
   overrideSettings
@@ -1486,6 +1565,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendCancellationEmail,
   sendTrialEndingReminderEmail,
+  sendTrialExtendedEmail,
   sendTrialEndedEmail,
   sendUpsStatusEmail,
   sendAnnouncementEmail,
