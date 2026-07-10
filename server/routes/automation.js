@@ -24,10 +24,10 @@ const UPS_POWER_STATES = {
   power_restored: 'normal',
   shutdown_imminent: 'shutdown',
 };
-const OUTAGE_CONFIRMATION_DELAY_MS = 10000;
 let pendingOutage = null;
+let pendingRestore = null;
 
-function waitForOutageConfirmation() {
+function waitForOutageConfirmation(delayMs) {
   if (pendingOutage) {
     return null;
   }
@@ -36,7 +36,7 @@ function waitForOutageConfirmation() {
   const confirmation = new Promise((resolve) => {
     resolveDelay = resolve;
   });
-  const timer = setTimeout(() => resolveDelay(true), OUTAGE_CONFIRMATION_DELAY_MS);
+  const timer = setTimeout(() => resolveDelay(true), delayMs);
   pendingOutage = {
     confirmation,
     cancel() {
@@ -45,6 +45,26 @@ function waitForOutageConfirmation() {
     },
   };
   return pendingOutage;
+}
+
+function waitForRestoreConfirmation(delayMs) {
+  if (pendingRestore) {
+    return null;
+  }
+
+  let resolveDelay;
+  const confirmation = new Promise((resolve) => {
+    resolveDelay = resolve;
+  });
+  const timer = setTimeout(() => resolveDelay(true), delayMs);
+  pendingRestore = {
+    confirmation,
+    cancel() {
+      clearTimeout(timer);
+      resolveDelay(false);
+    },
+  };
+  return pendingRestore;
 }
 
 function asyncHandler(handler) {
@@ -275,9 +295,40 @@ router.post(
         : '';
     const batteryChargePercent = normalizeOptionalNumber(payload.batteryChargePercent);
     const runtimeSeconds = normalizeOptionalNumber(payload.runtimeSeconds);
+    const notificationSettings = settingsStore.getNotificationSettings();
+    const delaySeconds =
+      event === 'power_outage'
+        ? notificationSettings.powerOutageDelaySeconds
+        : event === 'power_restored'
+        ? notificationSettings.powerRestoreDelaySeconds
+        : 0;
+    const notificationEnabled =
+      event === 'power_outage'
+        ? notificationSettings.onPowerOutage
+        : event === 'power_restored'
+        ? notificationSettings.onPowerRestored
+        : true;
 
     const currentState = getAutomationState();
     const nextPowerState = UPS_POWER_STATES[event];
+
+    if (event === 'power_outage' && pendingRestore) {
+      pendingRestore.cancel();
+      pendingRestore = null;
+      logEvent('automation.ups.restore.cancelled', {
+        event,
+        currentPowerState: currentState.currentPowerState,
+        occurredAt,
+        upsName: upsName || null,
+      });
+      return res.json({
+        success: true,
+        event,
+        deduped: true,
+        sent: 0,
+        skipped: 0,
+      });
+    }
 
     if (event === 'power_restored' && pendingOutage) {
       pendingOutage.cancel();
@@ -314,7 +365,7 @@ router.post(
     }
 
     if (event === 'power_outage') {
-      const outage = waitForOutageConfirmation();
+      const outage = waitForOutageConfirmation(delaySeconds * 1000);
       if (!outage) {
         return res.json({
           success: true,
@@ -340,40 +391,70 @@ router.post(
       }
     }
 
-    let smtpConfig;
-    try {
-      smtpConfig = emailService.getSmtpConfig();
-    } catch (err) {
-      return res.status(400).json({
-        error: err && err.message ? err.message : 'SMTP configuration is missing',
-      });
+    if (event === 'power_restored') {
+      const restore = waitForRestoreConfirmation(delaySeconds * 1000);
+      if (!restore) {
+        return res.json({
+          success: true,
+          event,
+          deduped: true,
+          sent: 0,
+          skipped: 0,
+        });
+      }
+
+      const confirmed = await restore.confirmation;
+      if (pendingRestore === restore) {
+        pendingRestore = null;
+      }
+      if (!confirmed) {
+        return res.json({
+          success: true,
+          event,
+          deduped: true,
+          sent: 0,
+          skipped: 0,
+        });
+      }
     }
 
-    const recipients = buildUpsRecipients(smtpConfig);
+    let smtpConfig = null;
+    let recipients = [];
     let sentCount = 0;
 
-    try {
-      for (const recipient of recipients) {
-        // eslint-disable-next-line no-await-in-loop
-        await emailService.sendUpsStatusEmail(
-          {
-            to: recipient.email,
-            name: recipient.name,
-            event,
-            upsName,
-            batteryChargePercent,
-            runtimeSeconds,
-            occurredAt,
-          },
-          smtpConfig
-        );
-        sentCount += 1;
+    if (notificationEnabled) {
+      try {
+        smtpConfig = emailService.getSmtpConfig();
+      } catch (err) {
+        return res.status(400).json({
+          error: err && err.message ? err.message : 'SMTP configuration is missing',
+        });
       }
-    } catch (err) {
-      logger.error('Failed to send UPS notification email batch', err);
-      return res.status(500).json({
-        error: err && err.message ? err.message : 'Failed to send UPS notification email.',
-      });
+
+      recipients = buildUpsRecipients(smtpConfig);
+      try {
+        for (const recipient of recipients) {
+          // eslint-disable-next-line no-await-in-loop
+          await emailService.sendUpsStatusEmail(
+            {
+              to: recipient.email,
+              name: recipient.name,
+              event,
+              upsName,
+              batteryChargePercent,
+              runtimeSeconds,
+              occurredAt,
+            },
+            smtpConfig
+          );
+          sentCount += 1;
+        }
+      } catch (err) {
+        logger.error('Failed to send UPS notification email batch', err);
+        return res.status(500).json({
+          error: err && err.message ? err.message : 'Failed to send UPS notification email.',
+        });
+      }
     }
 
     saveAutomationState({

@@ -457,6 +457,24 @@
                     <input name="onPlexRevoked" type="checkbox" />
                     Plex access revoked
                   </label>
+                  <label class="checkbox-row">
+                    <input name="onPowerOutage" type="checkbox" />
+                    Server power outage
+                  </label>
+                  <label class="checkbox-row">
+                    <input name="onPowerRestored" type="checkbox" />
+                    Server power restored
+                  </label>
+                </div>
+                <div class="field-grid">
+                  <label>
+                    Outage delay (seconds)
+                    <input name="powerOutageDelaySeconds" type="number" min="0" max="300" step="1" />
+                  </label>
+                  <label>
+                    Restoration delay (seconds)
+                    <input name="powerRestoreDelaySeconds" type="number" min="0" max="300" step="1" />
+                  </label>
                 </div>
                 <p class="muted-text subtle-text" style="margin:8px 0 0;">
                   Notifications use the Plex Donate email theme and include helpful context about the event.

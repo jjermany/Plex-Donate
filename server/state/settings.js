@@ -11,6 +11,10 @@ const DEFAULT_SETTINGS = {
     onTrialStarted: true,
     onSubscriptionStarted: true,
     onPlexRevoked: true,
+    onPowerOutage: true,
+    onPowerRestored: true,
+    powerOutageDelaySeconds: 10,
+    powerRestoreDelaySeconds: 10,
   },
   announcements: {
     bannerEnabled: false,
@@ -141,6 +145,17 @@ function normalizeGroup(name, values = {}, baseValues) {
     normalized.allowSync = false;
     normalized.allowCameraUpload = false;
     normalized.allowChannels = false;
+  }
+
+  if (name === 'notifications') {
+    normalized.powerOutageDelaySeconds = Math.min(
+      300,
+      Math.max(0, Math.round(normalized.powerOutageDelaySeconds))
+    );
+    normalized.powerRestoreDelaySeconds = Math.min(
+      300,
+      Math.max(0, Math.round(normalized.powerRestoreDelaySeconds))
+    );
   }
 
   return normalized;
