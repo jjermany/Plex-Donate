@@ -24,6 +24,28 @@ const UPS_POWER_STATES = {
   power_restored: 'normal',
   shutdown_imminent: 'shutdown',
 };
+const OUTAGE_CONFIRMATION_DELAY_MS = 10000;
+let pendingOutage = null;
+
+function waitForOutageConfirmation() {
+  if (pendingOutage) {
+    return null;
+  }
+
+  let resolveDelay;
+  const confirmation = new Promise((resolve) => {
+    resolveDelay = resolve;
+  });
+  const timer = setTimeout(() => resolveDelay(true), OUTAGE_CONFIRMATION_DELAY_MS);
+  pendingOutage = {
+    confirmation,
+    cancel() {
+      clearTimeout(timer);
+      resolveDelay(false);
+    },
+  };
+  return pendingOutage;
+}
 
 function asyncHandler(handler) {
   return (req, res, next) => {
@@ -256,6 +278,25 @@ router.post(
 
     const currentState = getAutomationState();
     const nextPowerState = UPS_POWER_STATES[event];
+
+    if (event === 'power_restored' && pendingOutage) {
+      pendingOutage.cancel();
+      pendingOutage = null;
+      logEvent('automation.ups.outage.cancelled', {
+        event,
+        currentPowerState: currentState.currentPowerState,
+        occurredAt,
+        upsName: upsName || null,
+      });
+      return res.json({
+        success: true,
+        event,
+        deduped: true,
+        sent: 0,
+        skipped: 0,
+      });
+    }
+
     if (shouldDeduplicateUpsEvent(currentState, event)) {
       logEvent('automation.ups.event.deduped', {
         event,
@@ -270,6 +311,33 @@ router.post(
         sent: 0,
         skipped: 0,
       });
+    }
+
+    if (event === 'power_outage') {
+      const outage = waitForOutageConfirmation();
+      if (!outage) {
+        return res.json({
+          success: true,
+          event,
+          deduped: true,
+          sent: 0,
+          skipped: 0,
+        });
+      }
+
+      const confirmed = await outage.confirmation;
+      if (pendingOutage === outage) {
+        pendingOutage = null;
+      }
+      if (!confirmed) {
+        return res.json({
+          success: true,
+          event,
+          deduped: true,
+          sent: 0,
+          skipped: 0,
+        });
+      }
     }
 
     let smtpConfig;

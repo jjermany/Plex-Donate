@@ -218,6 +218,55 @@ test('power_outage emails active and trial donors and persists outage state', { 
   }
 });
 
+test('power restore during outage confirmation delay suppresses notifications', { concurrency: false }, async (t) => {
+  resetDatabase();
+  config.upsWebhookToken = 'test-ups-token';
+
+  const sentEmails = [];
+  const originalSendUpsStatusEmail = emailService.sendUpsStatusEmail;
+  emailService.sendUpsStatusEmail = async (payload) => sentEmails.push(payload);
+  t.after(() => {
+    emailService.sendUpsStatusEmail = originalSendUpsStatusEmail;
+  });
+
+  const app = createApp();
+  const server = await startServer(app);
+  const headers = {
+    'content-type': 'application/json',
+    authorization: 'Bearer test-ups-token',
+  };
+
+  try {
+    const outageResponsePromise = fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'power_outage' }),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const restoreResponse = await fetch(`${server.origin}/`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ event: 'power_restored' }),
+    });
+    const outageResponse = await outageResponsePromise;
+
+    assert.equal(restoreResponse.status, 200);
+    assert.equal(outageResponse.status, 200);
+    assert.equal((await restoreResponse.json()).deduped, true);
+    assert.equal((await outageResponse.json()).deduped, true);
+    assert.equal(sentEmails.length, 0);
+    assert.equal(getSetting('automation_state'), undefined);
+    assert.ok(
+      getRecentEvents(5).some(
+        (item) => item.eventType === 'automation.ups.outage.cancelled'
+      )
+    );
+  } finally {
+    await server.close();
+    config.upsWebhookToken = '';
+  }
+});
+
 test('power_restored emails active and trial donors', { concurrency: false }, async (t) => {
   resetDatabase();
   config.upsWebhookToken = 'test-ups-token';
