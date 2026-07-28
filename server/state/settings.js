@@ -55,6 +55,20 @@ const DEFAULT_SETTINGS = {
     allowCameraUpload: false,
     allowChannels: false,
   },
+  health: {
+    appStatus: 'untested',
+    appTestedAt: '',
+    appMessage: '',
+    paypalStatus: 'untested',
+    paypalTestedAt: '',
+    paypalMessage: '',
+    smtpStatus: 'untested',
+    smtpTestedAt: '',
+    smtpMessage: '',
+    plexStatus: 'untested',
+    plexTestedAt: '',
+    plexMessage: '',
+  },
 };
 
 function coerceValue(value, defaultValue, fallbackValue) {

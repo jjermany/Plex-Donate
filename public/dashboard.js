@@ -130,13 +130,17 @@ const state = {
       const dashboardSetupLink = document.getElementById('dashboard-setup-link');
       const changePasswordButton = document.getElementById('change-password-button');
       const onboardingPanel = document.getElementById('onboarding-panel');
+      const stepAccount = document.getElementById('step-account');
+      const stepEmail = document.getElementById('step-email');
       const stepSubscription = document.getElementById('step-subscription');
       const stepPlex = document.getElementById('step-plex');
-      const stepInvite = document.getElementById('step-invite');
+      const stepComplete = document.getElementById('step-complete');
+      const stepAccountNote = document.getElementById('step-account-note');
+      const stepEmailNote = document.getElementById('step-email-note');
       const stepSubscriptionNote = document.getElementById('step-subscription-note');
       const stepPlexNote = document.getElementById('step-plex-note');
       const plexRelayWarning = document.getElementById('plex-relay-warning');
-      const stepInviteNote = document.getElementById('step-invite-note');
+      const stepCompleteNote = document.getElementById('step-complete-note');
       const overseerrSection = document.getElementById('overseerr-section');
       const overseerrLink = document.getElementById('overseerr-link');
       const supportToggle = document.getElementById('support-toggle');
@@ -557,7 +561,7 @@ const state = {
             ? 'Verify your email before enabling two-factor authentication.'
             : enabled
             ? 'Authenticator app 2FA is enabled. Keep your recovery codes somewhere safe.'
-            : 'Add an authenticator app and recovery codes to better protect your donor dashboard.';
+            : 'Add an authenticator app and recovery codes to better protect your supporter dashboard.';
         }
 
         if (customerTwoFactorBadge) {
@@ -715,8 +719,23 @@ const state = {
           inviteModalMessage.textContent = message;
         }
         setElementVisibility(inviteModal, true);
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.activateDialog(inviteModal, inviteModalOk);
+        } else if (inviteModalOk) {
+          window.requestAnimationFrame(() => inviteModalOk.focus());
+        }
         if (inviteId) {
           setLastInviteId(inviteId);
+        }
+      }
+
+      function closeInviteModal() {
+        if (!inviteModal) {
+          return;
+        }
+        setElementVisibility(inviteModal, false);
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.deactivateDialog(inviteModal);
         }
       }
 
@@ -1890,7 +1909,7 @@ const state = {
           } else {
             inviteDescription.textContent = limitHit
               ? 'This month’s referral invite has already been used. Contact the server admin if you lost access and need the link restored.'
-              : 'Active subscribers can send one referral invite each month. Use the form below when you are ready to share it—and only regenerate your own link if you have lost access.';
+              : 'Active supporters can send one referral invite each month. Use the form below when you are ready to share it—and only regenerate your own link if you have lost access.';
           }
           if (inviteSubmit) {
             if (cooldownActive) {
@@ -2040,49 +2059,22 @@ const state = {
 
       function updateOnboarding(
         data,
-        {
-          showSubscriptionCta,
-          inviteCooldownActive = false,
-          nextInviteMessage = '',
-          emailVerified = true,
-        } = {}
+        { emailVerified = true } = {}
       ) {
         if (!onboardingPanel) {
           return;
         }
 
         const donor = data && data.donor ? data.donor : null;
-        if (donor && !emailVerified) {
-          setElementVisibility(onboardingPanel, true);
-          if (stepPlex) {
-            setStepState(stepPlex, 'upcoming');
-          }
-          if (stepSubscription) {
-            setStepState(stepSubscription, 'upcoming');
-          }
-          if (stepInvite) {
-            setStepState(stepInvite, 'upcoming');
-          }
-          const verificationNote =
-            'Verify your email from the link we sent to unlock the rest of your setup steps.';
-          if (stepPlexNote) {
-            stepPlexNote.textContent = verificationNote;
-          }
-          if (stepSubscriptionNote) {
-            stepSubscriptionNote.textContent = verificationNote;
-          }
-          if (stepInviteNote) {
-            stepInviteNote.textContent = verificationNote;
-          }
-          return;
-        }
-
         const normalizedStatus = donor && donor.status
           ? donor.status.toLowerCase()
           : 'pending';
+        const accountComplete = Boolean(donor && donor.hasPassword);
+        const emailComplete = Boolean(donor && emailVerified);
         const isTrial = normalizedStatus === 'trial';
         const isTrialExpired = normalizedStatus === 'trial_expired';
         const subscriptionComplete = normalizedStatus === 'active';
+        const accessActive = subscriptionComplete || isTrial;
         const subscriptionStarted = Boolean(donor && donor.subscriptionId) || isTrial;
         const plexLinked = Boolean(donor && donor.plexLinked);
         const plexLinkPending = Boolean(
@@ -2094,11 +2086,8 @@ const state = {
         const accessExpiresAt = donor ? donor.accessExpiresAt : null;
         const trialCountdown = getTrialCountdownLabel(accessExpiresAt);
         const trialExpiresOn = formatDateTime(accessExpiresAt);
-          const inviteReadyState = Boolean(
-            data && data.invite && data.invite.inviteUrl
-          );
-        const inviteLimitReached = Boolean(data && data.inviteLimitReached);
-        const allComplete = plexLinked && subscriptionComplete && inviteReadyState;
+        const allComplete =
+          accountComplete && emailComplete && plexLinked && accessActive;
 
         if (allComplete) {
           setElementVisibility(onboardingPanel, false);
@@ -2108,9 +2097,11 @@ const state = {
         setElementVisibility(onboardingPanel, true);
 
         const steps = [
+          { el: stepAccount, complete: accountComplete },
+          { el: stepEmail, complete: emailComplete },
           { el: stepPlex, complete: plexLinked },
-          { el: stepSubscription, complete: subscriptionComplete },
-          { el: stepInvite, complete: inviteReadyState },
+          { el: stepSubscription, complete: accessActive },
+          { el: stepComplete, complete: allComplete },
         ];
 
         let currentAssigned = false;
@@ -2128,15 +2119,25 @@ const state = {
           }
         }
 
+        if (stepAccountNote) {
+          stepAccountNote.textContent = accountComplete
+            ? 'Your Plex Donate login is saved.'
+            : 'Finish creating your supporter account from the setup link.';
+        }
+
+        if (stepEmailNote) {
+          stepEmailNote.textContent = emailComplete
+            ? 'Your email address is verified.'
+            : 'Open the verification email we sent before continuing.';
+        }
+
         if (stepPlexNote) {
-          if (plexLinked) {
-            if (subscriptionComplete) {
-              stepPlexNote.textContent =
-                'Plex account verified—time to send your referral invite!';
-            } else {
-              stepPlexNote.textContent =
-                'Plex account verified—head to the next step to start your membership.';
-            }
+          if (!emailComplete) {
+            stepPlexNote.textContent =
+              'Verify your email first. Plex connection unlocks immediately afterward.';
+          } else if (plexLinked) {
+            stepPlexNote.textContent =
+              'Plex account connected. Continue to activate your access.';
           } else if (plexLinkPending) {
             const countdownLabel =
               data && data.plexLink
@@ -2144,7 +2145,7 @@ const state = {
                 : '';
             if (countdownLabel) {
               stepPlexNote.textContent =
-                `Plex authentication in progress—finish the prompt before it expires in ${countdownLabel}. We'll refresh this card automatically.`;
+                `Plex authentication is in progress. Finish the prompt before it expires in ${countdownLabel}; this step refreshes automatically.`;
             } else {
               stepPlexNote.textContent =
                 'Follow the Plex prompt you opened to finish authentication. This card updates automatically.';
@@ -2156,9 +2157,12 @@ const state = {
         }
 
         if (stepSubscriptionNote) {
-          if (!plexLinked) {
+          if (!emailComplete) {
             stepSubscriptionNote.textContent =
-              'Finish Plex authentication first. Billing actions unlock here right after.';
+              'Verify your email, then connect Plex to unlock access activation.';
+          } else if (!plexLinked) {
+            stepSubscriptionNote.textContent =
+              'Connect Plex first. Trial and subscription actions unlock immediately afterward.';
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
@@ -2181,32 +2185,13 @@ const state = {
               'We are waiting to confirm your first payment. Check Account if you need to update profile details.';
           } else {
             stepSubscriptionNote.textContent =
-              'Subscription active! You are ready for the next step.';
+              'Subscription active. Your access setup is complete.';
           }
         }
 
-        if (stepInviteNote) {
-          if (!plexLinked) {
-            stepInviteNote.textContent =
-              'Finish Plex authentication and we’ll enable referral invites.';
-          } else if (!subscriptionComplete) {
-            stepInviteNote.textContent =
-              'Referral invites unlock after your subscription is active.';
-          } else if (!inviteReadyState) {
-            stepInviteNote.textContent =
-              'Use the form below to send a referral invite as soon as you are verified. Only regenerate your own link if you have lost access.';
-          } else if (inviteLimitReached) {
-            if (inviteCooldownActive && nextInviteMessage) {
-              stepInviteNote.textContent =
-                `${nextInviteMessage} We'll refresh this dashboard automatically when you can send the next referral invite.`;
-            } else {
-              stepInviteNote.textContent =
-                'Your referral invite is ready below. Reach out to the server admin if you lost access and need it refreshed.';
-            }
-          } else {
-            stepInviteNote.textContent =
-              'Referral invite ready! Share it with your recipient—only use it yourself if you’re restoring access.';
-          }
+        if (stepCompleteNote) {
+          stepCompleteNote.textContent =
+            'Once access is active, use the dashboard for Plex status, billing, referrals, and recovery.';
         }
       }
 
@@ -2296,12 +2281,14 @@ const state = {
           unauthenticatedHero.classList.add('hidden');
         }
         if (!previouslyAuthenticated) {
-          // If the user has verified their email but hasn't linked Plex yet,
-          // surface the Plex setup tab so they can complete linking there.
+          // Keep an incomplete supporter in the guided setup until Plex is
+          // connected and trial or subscription access is active.
           const _donorForTab = (data && data.donor) ? data.donor : {};
           const _emailVerified = Boolean(_donorForTab.emailVerified);
           const _plexLinked = Boolean(_donorForTab.plexLinked);
-          if (_emailVerified && !_plexLinked) {
+          const _status = String(_donorForTab.status || 'pending').toLowerCase();
+          const _accessActive = _status === 'active' || _status === 'trial';
+          if (_emailVerified && (!_plexLinked || !_accessActive)) {
             setActiveDashboardTab('plex', { force: true });
           } else {
             setActiveDashboardTab('account', { force: true });
@@ -3382,7 +3369,26 @@ const state = {
 
       if (inviteModalOk) {
         inviteModalOk.addEventListener('click', () => {
-          setElementVisibility(inviteModal, false);
+          closeInviteModal();
+        });
+      }
+
+      if (inviteModal) {
+        inviteModal.addEventListener('keydown', (event) => {
+          if (window.PlexDonateA11y) {
+            window.PlexDonateA11y.handleDialogKeydown(
+              event,
+              inviteModal,
+              closeInviteModal
+            );
+          } else if (event.key === 'Escape') {
+            closeInviteModal();
+          }
+        });
+        inviteModal.addEventListener('click', (event) => {
+          if (event.target === inviteModal) {
+            closeInviteModal();
+          }
         });
       }
 

@@ -963,6 +963,27 @@ test('dashboard page includes relay advisory and FAQ guidance', () => {
   assert.match(html, /Why did my Plex invite go to a different email\?/);
 });
 
+test('dashboard continues the five-step supporter onboarding journey', () => {
+  const dashboardHtmlPath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'public',
+    'dashboard.html'
+  );
+  const html = fs.readFileSync(dashboardHtmlPath, 'utf8');
+
+  assert.match(html, /id="step-account"/);
+  assert.match(html, /id="step-email"/);
+  assert.match(html, /id="step-plex"/);
+  assert.match(html, /id="step-subscription"/);
+  assert.match(html, /id="step-complete"/);
+  assert.doesNotMatch(
+    html,
+    /id="onboarding-panel"[\s\S]*?<h3 class="step-title">Share a referral invite<\/h3>/
+  );
+});
+
 test('customer session payload includes non-blocking relay warning', async () => {
   resetDatabase();
   const donor = createDonor({

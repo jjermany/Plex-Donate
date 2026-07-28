@@ -328,6 +328,9 @@ function createShareUiHarness() {
       }
       return null;
     },
+    querySelectorAll() {
+      return [];
+    },
     activeElement: null,
     title: '',
   };
@@ -386,6 +389,9 @@ function loadShareRendererForTest() {
   return {
     render(data) {
       renderFn.call(vmContext.window, data);
+    },
+    resolveJourneyStep(input) {
+      return vmContext.resolveJourneyStep(input);
     },
     elements: {
       actionStatus: elements.get('action-status'),
@@ -465,6 +471,56 @@ test('share signup page hides Apple relay advisory until needed', () => {
   );
 });
 
+test('share signup page presents one five-step onboarding journey', () => {
+  const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
+  const html = fs.readFileSync(shareHtmlPath, 'utf8');
+  const steps = Array.from(
+    html.matchAll(/data-journey-step="(account|verify|plex|activate|complete)"/g),
+    (match) => match[1]
+  );
+
+  assert.deepEqual(steps, [
+    'account',
+    'verify',
+    'plex',
+    'activate',
+    'complete',
+  ]);
+  assert.match(
+    html,
+    /<section class="surface hidden" id="invite-panel" hidden aria-hidden="true">/
+  );
+});
+
+test('share onboarding resolves the next required supporter step', () => {
+  const renderer = loadShareRendererForTest();
+  const base = {
+    donor: { id: 1 },
+    accountReady: true,
+    emailVerified: true,
+    plexLinked: true,
+    normalizedStatus: 'active',
+  };
+
+  assert.equal(
+    renderer.resolveJourneyStep({ ...base, donor: null }),
+    'account'
+  );
+  assert.equal(
+    renderer.resolveJourneyStep({ ...base, emailVerified: false }),
+    'verify'
+  );
+  assert.equal(
+    renderer.resolveJourneyStep({ ...base, plexLinked: false }),
+    'plex'
+  );
+  assert.equal(
+    renderer.resolveJourneyStep({ ...base, normalizedStatus: 'pending' }),
+    'activate'
+  );
+  assert.equal(renderer.resolveJourneyStep(base), 'complete');
+});
+
 test('share routes handle donor and prospect flows', { concurrency: false }, async (t) => {
   await t.test('existing donor can update account details', async (t) => {
     resetDatabase();
@@ -492,6 +548,10 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       const viewResponse = await requestJson(server, 'GET', `/share/${shareLink.token}`);
       assert.equal(viewResponse.status, 200);
       assert.ok(viewResponse.body.donor);
+      assert.equal(
+        typeof viewResponse.body.donor.emailVerified,
+        'boolean'
+      );
       assert.equal(viewResponse.body.prospect, null);
 
       const accountResponse = await requestJson(

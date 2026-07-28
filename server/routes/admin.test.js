@@ -1459,6 +1459,82 @@ test('announcements settings round-trip through admin API', async (t) => {
   );
 });
 
+test('system health records saved integration tests and resets after changes', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  let response = await agent.get('/api/admin/settings');
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.equal(body.settings.health.appStatus, 'untested');
+  assert.equal(body.settings.health.appTestedAt, '');
+
+  const savedApp = {
+    publicBaseUrl: 'https://support.example.com',
+    overseerrBaseUrl: '',
+  };
+  response = await agent.request('/api/admin/settings/app', {
+    method: 'PUT',
+    headers: { 'x-csrf-token': csrfToken },
+    body: savedApp,
+  });
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.health.appStatus, 'untested');
+
+  response = await agent.post('/api/admin/settings/app/test', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: { publicBaseUrl: 'https://preview.example.com' },
+  });
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.healthRecorded, false);
+  assert.equal(body.health.appStatus, 'untested');
+
+  response = await agent.post('/api/admin/settings/app/test', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: savedApp,
+  });
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.healthRecorded, true);
+  assert.equal(body.health.appStatus, 'verified');
+  assert.match(body.health.appMessage, /Public app URL verified/);
+  assert.ok(Number.isFinite(Date.parse(body.health.appTestedAt)));
+
+  response = await agent.get('/api/admin/settings');
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.settings.health.appStatus, 'verified');
+  assert.ok(Number.isFinite(Date.parse(body.settings.health.appTestedAt)));
+
+  const invalidApp = {
+    publicBaseUrl: 'not-a-valid-url',
+    overseerrBaseUrl: '',
+  };
+  response = await agent.request('/api/admin/settings/app', {
+    method: 'PUT',
+    headers: { 'x-csrf-token': csrfToken },
+    body: invalidApp,
+  });
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.health.appStatus, 'untested');
+  assert.equal(body.health.appTestedAt, '');
+
+  response = await agent.post('/api/admin/settings/app/test', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: invalidApp,
+  });
+  assert.equal(response.status, 400);
+  body = await response.json();
+  assert.equal(body.healthRecorded, true);
+  assert.equal(body.health.appStatus, 'failed');
+  assert.match(body.health.appMessage, /not a valid URL/);
+  assert.ok(Number.isFinite(Date.parse(body.health.appTestedAt)));
+});
+
 test('POST /api/admin/announcements/email sends announcement email to donors', async (t) => {
   resetDatabase();
   const agent = await startServer(t);

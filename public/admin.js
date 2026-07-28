@@ -150,9 +150,6 @@
       const logoutButton = document.getElementById('logout-button');
       const statusMessage = document.getElementById('status-message');
       const dashboardToast = document.getElementById('dashboard-toast');
-      const adminTwoFactorOnboardingBanner = document.getElementById('admin-two-factor-onboarding-banner');
-      const adminTwoFactorOnboardingStartButton = document.getElementById('admin-two-factor-onboarding-start');
-      const adminTwoFactorOnboardingSkipButton = document.getElementById('admin-two-factor-onboarding-skip');
       const adminAccountPanel = document.getElementById('admin-account-panel');
       const adminCredentialsForm = document.getElementById('admin-credentials-form');
       const adminTwoFactorForm = document.getElementById('admin-two-factor-form');
@@ -330,11 +327,25 @@
       const supportError = document.getElementById('support-error');
       const integrationTab = document.getElementById('dashboard-tab-integration');
       const adminSetupChecklist = document.getElementById('admin-setup-checklist');
-      const adminSetupOpenIntegrations = document.getElementById('admin-setup-open-integrations');
       const setupCheckAppState = document.getElementById('setup-check-app-state');
       const setupCheckEmailState = document.getElementById('setup-check-email-state');
       const setupCheckPaypalState = document.getElementById('setup-check-paypal-state');
       const setupCheckPlexState = document.getElementById('setup-check-plex-state');
+      const setupCheckTwoFactorState = document.getElementById(
+        'setup-check-two-factor-state'
+      );
+      const systemHealthOverallState = document.getElementById(
+        'system-health-overall-state'
+      );
+      const systemHealthReadyCount = document.getElementById(
+        'system-health-ready-count'
+      );
+      const systemHealthProgress = document.querySelector(
+        '.system-health-progress'
+      );
+      const systemHealthProgressFill = document.getElementById(
+        'system-health-progress-fill'
+      );
       const serviceSummaryAppState = document.getElementById('service-summary-app-state');
       const serviceSummaryAppCopy = document.getElementById('service-summary-app-copy');
       const serviceSummaryPaypalState = document.getElementById('service-summary-paypal-state');
@@ -358,7 +369,6 @@
         'account',
       ];
       const DASHBOARD_VIEW_SET = new Set(DASHBOARD_VIEW_ORDER);
-      const hasDashboardPreference = Boolean(parseDashboardViewFromHash());
 
       if (prospectShareCopy) {
         prospectShareCopy.disabled = true;
@@ -376,7 +386,6 @@
       let lastProspectShareTrigger = null;
 
       let activeDashboardView = DASHBOARD_VIEW_DEFAULT;
-      let dashboardViewPreferenceLocked = hasDashboardPreference;
 
       function hasNonEmptyValue(value) {
         return value !== undefined && value !== null && String(value).trim() !== '';
@@ -508,7 +517,6 @@
 
         dashboardLegendButtons.forEach((button) => {
           button.addEventListener('click', () => {
-            dashboardViewPreferenceLocked = true;
             const target = button.getAttribute('data-dashboard-target');
             setActiveDashboardView(target);
           });
@@ -551,10 +559,51 @@
         }
       }
 
-      if (adminSetupOpenIntegrations) {
-        adminSetupOpenIntegrations.addEventListener('click', () => {
-          dashboardViewPreferenceLocked = true;
+      if (adminSetupChecklist) {
+        adminSetupChecklist.addEventListener('click', (event) => {
+          const openButton = event.target.closest('[data-health-open]');
+          const testButton = event.target.closest('[data-health-test]');
+          const group = openButton
+            ? openButton.dataset.healthOpen
+            : testButton
+            ? testButton.dataset.healthTest
+            : '';
+          if (!group) {
+            return;
+          }
+
+          if (group === 'two-factor') {
+            setActiveDashboardView('account');
+            const securityPanel = document.getElementById(
+              'admin-two-factor-form'
+            );
+            if (securityPanel) {
+              window.requestAnimationFrame(() =>
+                securityPanel.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                })
+              );
+            }
+            return;
+          }
+
           setActiveDashboardView('integration');
+          const form = document.getElementById(`integration-${group}`);
+          if (!form) {
+            return;
+          }
+          window.requestAnimationFrame(() => {
+            form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (testButton) {
+              const formTestButton = form.querySelector(
+                "button[data-action='test']"
+              );
+              if (formTestButton && !formTestButton.disabled) {
+                formTestButton.click();
+              }
+            }
+          });
         });
       }
 
@@ -1250,6 +1299,7 @@
           const errorMessage = data.error || 'Request failed';
           const error = new Error(errorMessage);
           error.status = response.status;
+          error.payload = data;
           throw error;
         }
 
@@ -1378,7 +1428,7 @@
           thread.request.donorDisplayName ||
           thread.request.donorName ||
           thread.request.donorEmail ||
-          'Donor';
+          'Subscriber';
         if (supportRequestSubject) {
           supportRequestSubject.textContent =
             thread.request.subject || `Request #${thread.request.id}`;
@@ -1494,7 +1544,7 @@
               thread.request.donorDisplayName ||
               thread.request.donorName ||
               thread.request.donorEmail ||
-              'Donor';
+              'Subscriber';
             metaEl.textContent = `${donorName} · Updated ${formatDateTime(
               thread.request.updatedAt
             )}`;
@@ -1628,7 +1678,7 @@
         }
         if (loginHelp) {
           loginHelp.innerHTML = requiresSetup
-            ? 'Create the first admin account for this Plex Donate install. Your existing donor and application data will remain untouched.'
+            ? 'Create the first admin account for this Plex Donate install. Your existing subscriber and application data will remain untouched.'
             : 'Use your Plex Donate admin username and password to sign in.';
         }
         if (loginPasswordInput) {
@@ -1654,14 +1704,6 @@
         copyEl.textContent = configured ? configuredText : missingText;
       }
 
-      function setSetupChecklistState(stateEl, configured) {
-        if (!stateEl) {
-          return;
-        }
-        stateEl.dataset.status = configured ? 'active' : 'pending';
-        stateEl.textContent = configured ? 'Ready' : 'Needs review';
-      }
-
       function getSetupConfiguration(settings) {
         const nextSettings = settings || {};
         const app = nextSettings.app || {};
@@ -1681,6 +1723,103 @@
           ),
           plexConfigured: [plex.baseUrl, plex.token].every(hasNonEmptyValue),
         };
+      }
+
+      function formatSystemHealthTime(value) {
+        if (!value) {
+          return '';
+        }
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+          return '';
+        }
+        return `Last tested ${formatDateTime(parsed)}`;
+      }
+
+      function getSystemHealthState(group, configured) {
+        if (!configured) {
+          return {
+            key: 'missing',
+            label: 'Not configured',
+            status: 'pending',
+            message: 'Add the required settings to continue.',
+            testedAt: '',
+            ready: false,
+          };
+        }
+
+        const health =
+          state.settings && state.settings.health
+            ? state.settings.health
+            : {};
+        const persistedStatus = health[`${group}Status`] || 'untested';
+        const persistedMessage = health[`${group}Message`] || '';
+        const testedAt = health[`${group}TestedAt`] || '';
+
+        if (persistedStatus === 'verified') {
+          return {
+            key: 'verified',
+            label: 'Verified',
+            status: 'active',
+            message: persistedMessage || 'Connection test passed.',
+            testedAt,
+            ready: true,
+          };
+        }
+        if (persistedStatus === 'failed') {
+          return {
+            key: 'failed',
+            label: 'Test failed',
+            status: 'failed',
+            message: persistedMessage || 'The latest connection test failed.',
+            testedAt,
+            ready: false,
+          };
+        }
+        return {
+          key: 'saved',
+          label: 'Saved · untested',
+          status: 'pending',
+          message: 'Settings are saved. Run the test to verify them.',
+          testedAt: '',
+          ready: false,
+        };
+      }
+
+      function renderSystemHealthCard(group, stateEl, configured) {
+        const healthState = getSystemHealthState(group, configured);
+        const card = adminSetupChecklist
+          ? adminSetupChecklist.querySelector(`[data-health-card='${group}']`)
+          : null;
+        const copy = document.getElementById(
+          `setup-check-${group === 'smtp' ? 'email' : group}-copy`
+        );
+        const meta = document.getElementById(
+          `setup-check-${group === 'smtp' ? 'email' : group}-meta`
+        );
+        const testButton = adminSetupChecklist
+          ? adminSetupChecklist.querySelector(`[data-health-test='${group}']`)
+          : null;
+
+        if (stateEl) {
+          stateEl.dataset.status = healthState.status;
+          stateEl.textContent = healthState.label;
+        }
+        if (card) {
+          card.dataset.healthState = healthState.key;
+        }
+        if (copy) {
+          copy.textContent = healthState.message;
+        }
+        if (meta) {
+          meta.textContent =
+            formatSystemHealthTime(healthState.testedAt) ||
+            (configured ? 'Not tested yet' : 'Required settings are missing');
+        }
+        if (testButton) {
+          testButton.disabled = !configured;
+        }
+        return healthState;
       }
 
       function updateIntegrationBadge(settings) {
@@ -1737,7 +1876,7 @@
           serviceSummaryAppCopy,
           [app.publicBaseUrl, app.overseerrBaseUrl].some(hasNonEmptyValue),
           'Public links and request URLs are configured.',
-          'Add the public base URL and optional request URL used by donors.'
+          'Add the public base URL and optional request URL used by subscribers.'
         );
         setServiceSummaryCard(
           serviceSummaryPaypalState,
@@ -1768,17 +1907,103 @@
           return;
         }
         const setup = getSetupConfiguration(state.settings || {});
-        const allReady =
-          setup.appConfigured &&
-          setup.paypalConfigured &&
-          setup.smtpConfigured &&
-          setup.plexConfigured;
+        adminSetupChecklist.classList.remove('hidden');
+        adminSetupChecklist.hidden = false;
 
-        adminSetupChecklist.classList.toggle('hidden', allReady);
-        setSetupChecklistState(setupCheckAppState, setup.appConfigured);
-        setSetupChecklistState(setupCheckEmailState, setup.smtpConfigured);
-        setSetupChecklistState(setupCheckPaypalState, setup.paypalConfigured);
-        setSetupChecklistState(setupCheckPlexState, setup.plexConfigured);
+        const healthStates = [
+          renderSystemHealthCard(
+            'app',
+            setupCheckAppState,
+            setup.appConfigured
+          ),
+          renderSystemHealthCard(
+            'smtp',
+            setupCheckEmailState,
+            setup.smtpConfigured
+          ),
+          renderSystemHealthCard(
+            'paypal',
+            setupCheckPaypalState,
+            setup.paypalConfigured
+          ),
+          renderSystemHealthCard(
+            'plex',
+            setupCheckPlexState,
+            setup.plexConfigured
+          ),
+        ];
+
+        const twoFactorReady = Boolean(
+          state.adminTwoFactor && state.adminTwoFactor.enabled
+        );
+        const twoFactorCard = adminSetupChecklist.querySelector(
+          "[data-health-card='two-factor']"
+        );
+        const twoFactorCopy = document.getElementById(
+          'setup-check-two-factor-copy'
+        );
+        const twoFactorMeta = document.getElementById(
+          'setup-check-two-factor-meta'
+        );
+        if (setupCheckTwoFactorState) {
+          setupCheckTwoFactorState.dataset.status = twoFactorReady
+            ? 'active'
+            : 'pending';
+          setupCheckTwoFactorState.textContent = twoFactorReady
+            ? 'Protected'
+            : 'Recommended';
+        }
+        if (twoFactorCard) {
+          twoFactorCard.dataset.healthState = twoFactorReady
+            ? 'verified'
+            : 'saved';
+        }
+        if (twoFactorCopy) {
+          twoFactorCopy.textContent = twoFactorReady
+            ? 'Authenticator app 2FA is enabled for admin sign-in.'
+            : 'Protect the workspace with an authenticator app and recovery codes.';
+        }
+        if (twoFactorMeta) {
+          twoFactorMeta.textContent = twoFactorReady
+            ? state.adminTwoFactor.setupCompletedAt
+              ? `Enabled ${formatDateTime(state.adminTwoFactor.setupCompletedAt)}`
+              : '2FA is enabled'
+            : '2FA is not enabled';
+        }
+
+        const readyCount =
+          healthStates.filter((health) => health && health.ready).length +
+          (twoFactorReady ? 1 : 0);
+        const totalChecks = 5;
+        const allReady = readyCount === totalChecks;
+        const hasFailedCheck = healthStates.some(
+          (health) => health && health.key === 'failed'
+        );
+        if (systemHealthReadyCount) {
+          systemHealthReadyCount.textContent = `${readyCount} of ${totalChecks} ready`;
+        }
+        if (systemHealthOverallState) {
+          systemHealthOverallState.dataset.status = allReady
+            ? 'active'
+            : hasFailedCheck
+            ? 'failed'
+            : 'pending';
+          systemHealthOverallState.textContent = allReady
+            ? 'All systems ready'
+            : hasFailedCheck
+            ? 'Action required'
+            : readyCount > 0
+            ? 'Setup in progress'
+            : 'Setup required';
+        }
+        if (systemHealthProgress) {
+          systemHealthProgress.setAttribute('aria-valuenow', String(readyCount));
+        }
+        if (systemHealthProgressFill) {
+          systemHealthProgressFill.style.width = `${
+            (readyCount / totalChecks) * 100
+          }%`;
+        }
       }
 
       async function loadSupportRequests(options = {}) {
@@ -1832,7 +2057,6 @@
 
       function render() {
         renderAdminAccountPanel();
-        renderAdminTwoFactorOnboardingBanner();
         renderProspectSharePanel();
         renderShareLinks();
         const shouldShowLoadingGate =
@@ -2517,7 +2741,7 @@
         }
         if (announcementPreviewBody) {
           announcementPreviewBody.textContent =
-            preview.body || 'Write a short message to show donors on the dashboard.';
+            preview.body || 'Write a short message to show subscribers on the dashboard.';
         }
         if (announcementPreviewDismiss) {
           announcementPreviewDismiss.hidden = !preview.dismissible;
@@ -2636,7 +2860,12 @@
           prospectShareForm &&
           (prospectShareForm.querySelector('[name="email"]') ||
             prospectShareForm.querySelector('button[type="submit"]'));
-        if (preferredFocusTarget) {
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.activateDialog(
+            prospectShareModal,
+            preferredFocusTarget
+          );
+        } else if (preferredFocusTarget) {
           window.requestAnimationFrame(() => preferredFocusTarget.focus());
         }
       }
@@ -2647,7 +2876,9 @@
         }
         prospectShareModal.hidden = true;
         document.body.style.overflow = '';
-        if (lastProspectShareTrigger && typeof lastProspectShareTrigger.focus === 'function') {
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.deactivateDialog(prospectShareModal);
+        } else if (lastProspectShareTrigger && typeof lastProspectShareTrigger.focus === 'function') {
           lastProspectShareTrigger.focus();
         }
       }
@@ -3084,7 +3315,9 @@
         if (filteredDonors.length === 0) {
           const emptyMessage = document.createElement('div');
           emptyMessage.className = 'donors-empty-state';
-          emptyMessage.textContent = searchQuery ? 'No donors match your search' : 'No donors found';
+          emptyMessage.textContent = searchQuery
+            ? 'No subscribers match your search'
+            : 'No subscribers found';
           donorsList.appendChild(emptyMessage);
           return;
         }
@@ -3182,7 +3415,7 @@
             tooltipRows.push(`
               <div class="donor-card-tooltip-row">
                 <span class="donor-card-tooltip-label">Access:</span>
-                <span class="donor-card-tooltip-value">ðŸ›¡ï¸ Pre-existing</span>
+                <span class="donor-card-tooltip-value">Pre-existing</span>
               </div>
             `);
           } else if (donor.plexShareState) {
@@ -4063,8 +4296,8 @@
         }
         if (eventType === 'announcement.email.sent') {
           return typeof sentCount !== 'undefined'
-            ? `Announcement delivered to ${sentCount} supporter${Number(sentCount) === 1 ? '' : 's'}.`
-            : 'Announcement email was sent to supporters.';
+            ? `Announcement delivered to ${sentCount} subscriber${Number(sentCount) === 1 ? '' : 's'}.`
+            : 'Announcement email was sent to subscribers.';
         }
         if (eventType && eventType.startsWith('invite.auto.')) {
           if (eventType.endsWith('.skipped') && reason) {
@@ -4112,7 +4345,13 @@
 
         addChip('Source', eventType && eventType.split('.')[0]);
         addChip('Status', payload.status || payload.subscriptionStatus || payload.paymentStatus);
-        addChip('Donor', payload.donorDisplayName || payload.donorName || payload.donorEmail || payload.email);
+        addChip(
+          'Subscriber',
+          payload.donorDisplayName ||
+            payload.donorName ||
+            payload.donorEmail ||
+            payload.email
+        );
         addChip('Subscription', payload.subscriptionId || payload.paypalSubscriptionId);
         addChip('Reason', payload.reason);
         return chips.slice(0, 4);
@@ -4257,20 +4496,6 @@
       if (adminTwoFactorVerifyButton) {
         adminTwoFactorVerifyButton.disabled = !state.pendingTwoFactorSetup;
       }
-    }
-
-    function renderAdminTwoFactorOnboardingBanner() {
-      if (!adminTwoFactorOnboardingBanner) {
-        return;
-      }
-      const shouldShow = Boolean(
-        state.authenticated &&
-        state.adminOnboarding &&
-        state.adminOnboarding.twoFactorPromptPending &&
-        !(state.adminTwoFactor && state.adminTwoFactor.enabled)
-      );
-      adminTwoFactorOnboardingBanner.classList.toggle('hidden', !shouldShow);
-      adminTwoFactorOnboardingBanner.hidden = !shouldShow;
     }
 
     async function loadAdminAccount() {
@@ -4425,7 +4650,7 @@
           }
           if (Number.isFinite(syncResponse.accessEligibleDonorsChecked)) {
             detailLines.push(
-              `${syncResponse.accessEligibleDonorsChecked} active/trial linked donor(s) checked against current Plex shares.`
+              `${syncResponse.accessEligibleDonorsChecked} active or trial subscribers checked against current Plex shares.`
             );
           }
           if (
@@ -4433,7 +4658,7 @@
             syncResponse.ignoredLinkedCount > 0
           ) {
             detailLines.push(
-              `${syncResponse.ignoredLinkedCount} inactive donor(s) still have Plex identity data on file and were not counted as current access issues.`
+              `${syncResponse.ignoredLinkedCount} inactive subscribers still have Plex identity data on file and were not counted as current access issues.`
             );
           }
           if (
@@ -4442,14 +4667,17 @@
           ) {
             const donorLabels = syncResponse.mismatchedDonors
               .slice(0, 5)
-              .map((donor) => donor.name || donor.email || `Donor #${donor.id}`);
+              .map(
+                (donor) =>
+                  donor.name || donor.email || `Subscriber #${donor.id}`
+              );
             detailLines.push(`Needs attention: ${donorLabels.join(', ')}.`);
           }
         } else if (plexSyncFailed) {
           detailLines.push('Plex sync did not complete, but the dashboard data was still reloaded.');
         }
 
-        await showNoticeModal('Subscriber List Refreshed', 'The donor list has been updated.', {
+        await showNoticeModal('Subscriber List Refreshed', 'The subscriber list has been updated.', {
           stateAttr:
             syncResponse && syncResponse.mismatchCount > 0
               ? 'error'
@@ -5033,28 +5261,6 @@
 
       refreshButton.addEventListener('click', handleManualRefresh);
 
-      if (adminTwoFactorOnboardingStartButton) {
-        adminTwoFactorOnboardingStartButton.addEventListener('click', async () => {
-          setActiveDashboardView('account');
-          await beginTwoFactorSetup();
-        });
-      }
-
-      if (adminTwoFactorOnboardingSkipButton) {
-        adminTwoFactorOnboardingSkipButton.addEventListener('click', async () => {
-          try {
-            const response = await api('/api/admin/2fa/prompt/dismiss', { method: 'POST' });
-            applyAdminOnboardingState(response && response.onboarding ? response.onboarding : null);
-            render();
-          } catch (err) {
-            showDashboardToast(
-              err && err.message ? err.message : 'Failed to dismiss 2FA reminder.',
-              'error'
-            );
-          }
-        });
-      }
-
       if (prospectShareOpen) {
         prospectShareOpen.addEventListener('click', (event) => {
           openProspectShareModal(event.currentTarget);
@@ -5074,7 +5280,13 @@
           }
         });
         prospectShareModal.addEventListener('keydown', (event) => {
-          if (event.key === 'Escape') {
+          if (window.PlexDonateA11y) {
+            window.PlexDonateA11y.handleDialogKeydown(
+              event,
+              prospectShareModal,
+              closeProspectShareModal
+            );
+          } else if (event.key === 'Escape') {
             closeProspectShareModal();
           }
         });
@@ -5335,6 +5547,7 @@
             applyAdminOnboardingState(response && response.onboarding ? response.onboarding : state.adminOnboarding);
             resetPendingTwoFactorSetup();
             renderAdminAccountPanel();
+            renderSetupChecklist();
             setFormStatus(adminTwoFactorForm, 'Two-factor authentication turned off.', 'success');
             scheduleStatusClear(adminTwoFactorForm, 4000);
           } catch (err) {
@@ -5403,12 +5616,19 @@
               state.settings = {};
             }
             state.settings[group] = response.settings || {};
+            if (response.health) {
+              state.settings.health = response.health;
+            }
             delete form.dataset.dirty;
             if (group === 'paypal') {
               await loadPaypalPlan();
             }
             renderSettings();
-            setFormStatus(form, 'Saved!', 'success');
+            setFormStatus(
+              form,
+              'Saved. Run the connection test to mark this service verified.',
+              'success'
+            );
             scheduleStatusClear(form);
           } catch (err) {
             setFormStatus(form, err.message || 'Failed to save settings', 'error');
@@ -5439,11 +5659,29 @@
             const previousDisabledState = button.disabled;
             try {
               button.disabled = true;
-              setFormStatus(form, 'Testing...');
+              setFormStatus(form, 'Saving and testing...');
+              const saveResponse = await api(
+                `/api/admin/settings/${group}`,
+                {
+                  method: 'PUT',
+                  body: payload,
+                }
+              );
+              if (!state.settings) {
+                state.settings = {};
+              }
+              state.settings[group] = saveResponse.settings || {};
+              if (saveResponse.health) {
+                state.settings.health = saveResponse.health;
+              }
+              delete form.dataset.dirty;
               const response = await api(`/api/admin/settings/${group}/test`, {
                 method: 'POST',
-                body: payload,
+                body: saveResponse.settings || payload,
               });
+              if (response.health) {
+                state.settings.health = response.health;
+              }
               const result = response.result || {};
               const message =
                 result.message ||
@@ -5476,8 +5714,18 @@
                   preferredSelection,
                 });
               }
+              renderServiceSummary();
+              renderSetupChecklist();
               scheduleStatusClear(form);
             } catch (err) {
+              if (err && err.payload && err.payload.health) {
+                if (!state.settings) {
+                  state.settings = {};
+                }
+                state.settings.health = err.payload.health;
+              }
+              renderServiceSummary();
+              renderSetupChecklist();
               setFormStatus(
                 form,
                 err.message || 'Failed to verify settings',
@@ -5855,9 +6103,40 @@
       });
 
       document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && openSubscriberActionMenu) {
-          closeSubscriberActionMenu(null, { focusToggle: true });
+        if (!openSubscriberActionMenu) {
+          return;
         }
+        if (event.key === 'Escape') {
+          closeSubscriberActionMenu(null, { focusToggle: true });
+          return;
+        }
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+          return;
+        }
+        const menuItems = Array.from(
+          openSubscriberActionMenu.querySelectorAll(
+            '.action-menu-panel [role="menuitem"]:not(:disabled)'
+          )
+        );
+        if (menuItems.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        const currentIndex = menuItems.indexOf(document.activeElement);
+        let nextIndex = currentIndex;
+        if (event.key === 'Home') {
+          nextIndex = 0;
+        } else if (event.key === 'End') {
+          nextIndex = menuItems.length - 1;
+        } else if (event.key === 'ArrowDown') {
+          nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % menuItems.length;
+        } else if (event.key === 'ArrowUp') {
+          nextIndex =
+            currentIndex < 0
+              ? menuItems.length - 1
+              : (currentIndex - 1 + menuItems.length) % menuItems.length;
+        }
+        menuItems[nextIndex].focus();
       });
 
       // Master-detail donors view event listeners

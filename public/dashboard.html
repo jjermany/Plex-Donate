@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-theme-light-color="#f8fafc" data-theme-dark-color="#050818">
+<html lang="en" data-theme="dark" data-ui-shell="supporter" data-theme-light-color="#f8fafc" data-theme-dark-color="#050818">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -23,21 +23,21 @@
 
     <title>Plex Donate Dashboard</title>
     <script src="/theme.js"></script>
-    <link rel="stylesheet" href="/shared.css" />
-    <link rel="stylesheet" href="/dashboard.css" />
+    <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
+    <link rel="stylesheet" href="/dashboard.css?v=ui-components-20260728" />
   </head>
   <body>
     <a href="#app" class="skip-link">Skip to dashboard</a>
     <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Toggle theme">
       Theme
     </button>
-    <div id="loading" class="panel">
+    <div id="loading" class="panel supporter-panel" role="status" aria-live="polite">
       <div class="loading-spinner">
         <div class="loading-spinner-ring"></div>
         <span>Loading your dashboard</span>
       </div>
     </div>
-    <div id="error-panel" class="panel error hidden"></div>
+    <div id="error-panel" class="panel supporter-panel error hidden" role="alert" aria-live="assertive"></div>
     <div id="app" class="hidden">
       <main class="canvas">
         <section
@@ -516,7 +516,7 @@
                     <div>
                       <h3 class="section-title">Authenticator app 2FA</h3>
                       <p id="customer-two-factor-description" class="muted small">
-                        Add an authenticator app and recovery codes to better protect your donor dashboard.
+                        Add an authenticator app and recovery codes to better protect your supporter dashboard.
                       </p>
                     </div>
                     <span id="customer-two-factor-badge" class="two-factor-status-badge">
@@ -529,7 +529,7 @@
                       <div class="two-factor-qr-panel">
                         <img
                           id="customer-two-factor-qr"
-                          alt="Donor authenticator setup QR code"
+                          alt="Supporter authenticator setup QR code"
                         />
                         <p class="muted small">
                           Scan this code in Google Authenticator, 1Password, Authy, or another TOTP app.
@@ -602,7 +602,7 @@
               <article class="surface">
                 <h2 class="section-title">Restore access or send a referral</h2>
                 <p class="muted" id="invite-description">
-                  Choose whether you are restoring your own Plex access or inviting someone new. Active subscribers can send one invite each month.
+                  Choose whether you are restoring your own Plex access or inviting someone new. Active supporters can send one invite each month.
                 </p>
                 <div class="invite-intent-grid" role="group" aria-label="Invite goal">
                   <button
@@ -673,22 +673,37 @@
               <article id="onboarding-panel" class="surface onboarding hidden">
                 <h2 class="section-title">Complete your access setup</h2>
                 <p class="muted">
-                  Follow the next steps in order so Plex, billing, and invite access stay aligned.
-                </p>
-                <p class="status-text info">
-                  <strong>
-                    Before continuing, create or recover your Plex account at
-                    <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
-                      >plex.tv</a
-                    > so you can link it here?checkout stays disabled until Plex is ready.
-                  </strong>
+                  Continue where your setup link left off. We’ll keep the next
+                  required action highlighted.
                 </p>
                 <div class="steps">
-                  <div id="step-plex" class="step" data-state="current">
+                  <div id="step-account" class="step" data-state="complete">
                     <div class="step-header">
                       <span class="step-number" data-step-number="1">1</span>
                       <div>
-                        <h3 class="step-title">Authenticate with Plex</h3>
+                        <h3 class="step-title">Create supporter account</h3>
+                        <p id="step-account-note" class="muted small">
+                          Your Plex Donate login is saved.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="step-email" class="step" data-state="complete">
+                    <div class="step-header">
+                      <span class="step-number" data-step-number="2">2</span>
+                      <div>
+                        <h3 class="step-title">Verify email</h3>
+                        <p id="step-email-note" class="muted small">
+                          Your email address is verified.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="step-plex" class="step" data-state="current">
+                    <div class="step-header">
+                      <span class="step-number" data-step-number="3">3</span>
+                      <div>
+                        <h3 class="step-title">Connect Plex</h3>
                         <p id="step-plex-note" class="muted small">
                           Use the button below to launch the Plex prompt and link
                           the account you use for streaming.
@@ -696,8 +711,10 @@
                       </div>
                     </div>
                     <p class="step-footnote muted small">
-                      We rely on Plex to deliver the library?linking your account
-                      keeps access seamless.
+                      Need a Plex account first?
+                      <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
+                        >Create or recover one at plex.tv</a
+                      >.
                     </p>
                     <p id="plex-relay-warning" class="status-text small relay-warning hidden">
                       If you use Apple ‘Hide My Email’, Plex invites may not map to your expected address. Use your real Plex account email when possible.
@@ -727,24 +744,23 @@
                   </div>
                   <div id="step-subscription" class="step" data-state="upcoming">
                     <div class="step-header">
-                      <span class="step-number" data-step-number="2">2</span>
+                      <span class="step-number" data-step-number="4">4</span>
                       <div>
-                        <h3 class="step-title">Start a risk-free trial</h3>
+                        <h3 class="step-title">Activate access</h3>
                         <p id="step-subscription-note" class="muted small">
                           Once Plex is linked, start 7 days of access with no payment info required. Subscribe later if you want to keep streaming.
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div id="step-invite" class="step" data-state="upcoming">
+                  <div id="step-complete" class="step" data-state="upcoming">
                     <div class="step-header">
-                      <span class="step-number" data-step-number="3">3</span>
+                      <span class="step-number" data-step-number="5">5</span>
                       <div>
-                        <h3 class="step-title">Share a referral invite</h3>
-                        <p id="step-invite-note" class="muted small">
-                          Send a referral invite each month to welcome someone new.
-                          Lost your own library access? Regenerate your link here
-                          when you?re eligible.
+                        <h3 class="step-title">Setup complete</h3>
+                        <p id="step-complete-note" class="muted small">
+                          Your dashboard becomes the home for access, billing,
+                          referrals, and recovery.
                         </p>
                       </div>
                     </div>
@@ -807,7 +823,7 @@
                 <h2 class="section-title">Need help?</h2>
                 <p class="muted">
                   Reach out to the Plex Donate team for account help or streaming
-                  questions. We?ll send updates to the email on your account.
+                  questions. We’ll send updates to the email on your account.
                 </p>
                 <div id="support-container" class="support-container">
                   <div class="support-wrapper">
@@ -906,8 +922,8 @@
                   </li>
                   <li class="muted small">
                     Need another referral? Active supporters can send a new invite
-                    once the monthly cooldown resets?or regenerate their own link if
-                    they?ve lost access.
+                    once the monthly cooldown resets—or regenerate their own link if
+                    they’ve lost access.
                   </li>
                 </ul>
               </article>
@@ -936,6 +952,7 @@
         </div>
       </div>
     </div>
-    <script src="/dashboard.js"></script>
+    <script src="/accessibility.js?v=accessibility-20260728"></script>
+    <script src="/dashboard.js?v=accessibility-20260728"></script>
   </body>
 </html>

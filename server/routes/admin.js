@@ -72,6 +72,60 @@ const {
 } = require('../utils/totp');
 const SESSION_COOKIE_NAME = 'plex-donate.sid';
 const PENDING_ADMIN_LOGIN_TTL_MS = 10 * 60 * 1000;
+const TESTABLE_SETTINGS_GROUPS = new Set(['app', 'paypal', 'smtp', 'plex']);
+
+function normalizeHealthMessage(value) {
+  const message = value == null ? '' : String(value).trim();
+  return message.slice(0, 500);
+}
+
+function recordSettingsHealth(group, status, message) {
+  if (!TESTABLE_SETTINGS_GROUPS.has(group)) {
+    return settingsStore.getGroup('health');
+  }
+  const normalizedStatus = status === 'verified' ? 'verified' : 'failed';
+  return settingsStore.updateGroup('health', {
+    [`${group}Status`]: normalizedStatus,
+    [`${group}TestedAt`]: new Date().toISOString(),
+    [`${group}Message`]: normalizeHealthMessage(message),
+  });
+}
+
+function clearSettingsHealth(group) {
+  if (!TESTABLE_SETTINGS_GROUPS.has(group)) {
+    return settingsStore.getGroup('health');
+  }
+  return settingsStore.updateGroup('health', {
+    [`${group}Status`]: 'untested',
+    [`${group}TestedAt`]: '',
+    [`${group}Message`]: '',
+  });
+}
+
+function settingsGroupsEqual(left, right) {
+  return JSON.stringify(left || {}) === JSON.stringify(right || {});
+}
+
+function verifyAppSettings(config) {
+  const rawUrl =
+    config && config.publicBaseUrl ? String(config.publicBaseUrl).trim() : '';
+  if (!rawUrl) {
+    throw new Error('Add the public base URL before testing application settings.');
+  }
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch (err) {
+    throw new Error('The public base URL is not a valid URL.');
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('The public base URL must use HTTP or HTTPS.');
+  }
+  return {
+    message: `Public app URL verified as ${parsed.origin}.`,
+    origin: parsed.origin,
+  };
+}
 
 function normalizeEmailAddress(value) {
   if (!value) {
@@ -1503,11 +1557,23 @@ router.put(
     const group = req.params.group;
     const updates = req.body || {};
     try {
+      const previous = settingsStore.getGroup(group);
       const normalized = settingsStore.updateGroup(group, updates);
+      let health = null;
+      if (
+        TESTABLE_SETTINGS_GROUPS.has(group) &&
+        !settingsGroupsEqual(previous, normalized)
+      ) {
+        health = clearSettingsHealth(group);
+      }
       const updatedKeys = Object.keys(updates || {});
       logEvent('settings.updated', { group, keys: updatedKeys });
       logger.info(`Updated settings group: ${group}`);
-      res.json({ settings: normalized, csrfToken: res.locals.csrfToken });
+      res.json({
+        settings: normalized,
+        health,
+        csrfToken: res.locals.csrfToken,
+      });
     } catch (err) {
       logger.warn(`Failed to update settings for ${group}`, err.message);
       res.status(400).json({
@@ -1524,8 +1590,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const group = req.params.group;
     const overrides = req.body || {};
+    let testedConfig = null;
 
-    if (!['paypal', 'smtp', 'plex'].includes(group)) {
+    if (!TESTABLE_SETTINGS_GROUPS.has(group)) {
       return res.status(404).json({
         error: 'Unknown settings group',
         csrfToken: res.locals.csrfToken,
@@ -1534,34 +1601,67 @@ router.post(
 
     try {
       let result;
-      if (group === 'paypal') {
-        const config = settingsStore.previewGroup('paypal', overrides);
-        const verification = await paypalService.verifyConnection(config);
+      if (group === 'app') {
+        testedConfig = settingsStore.previewGroup('app', overrides);
+        result = verifyAppSettings(testedConfig);
+      } else if (group === 'paypal') {
+        testedConfig = settingsStore.previewGroup('paypal', overrides);
+        const verification = await paypalService.verifyConnection(testedConfig);
         const environment =
-          (config.apiBase || '').includes('sandbox') ? 'sandbox' : 'live';
+          (testedConfig.apiBase || '').includes('sandbox') ? 'sandbox' : 'live';
         result = {
           ...verification,
           environment,
           message: `PayPal credentials verified against the ${environment} environment.`,
         };
       } else if (group === 'smtp') {
-        const config = settingsStore.previewGroup('smtp', overrides);
-        result = await emailService.verifyConnection(config);
+        testedConfig = settingsStore.previewGroup('smtp', overrides);
+        result = await emailService.verifyConnection(testedConfig);
       } else if (group === 'plex') {
-        const config = settingsStore.previewGroup('plex', overrides);
-        result = await plexService.verifyConnection(config);
+        testedConfig = settingsStore.previewGroup('plex', overrides);
+        result = await plexService.verifyConnection(testedConfig);
       }
 
       logger.info(`Verified ${group} settings`);
-      res.json({ success: true, result, csrfToken: res.locals.csrfToken });
+      const message =
+        result && result.message
+          ? result.message
+          : `${group} settings verified successfully.`;
+      const testedSavedSettings = settingsGroupsEqual(
+        settingsStore.getGroup(group),
+        testedConfig
+      );
+      const health = testedSavedSettings
+        ? recordSettingsHealth(group, 'verified', message)
+        : settingsStore.getGroup('health');
+      res.json({
+        success: true,
+        result,
+        health,
+        healthRecorded: testedSavedSettings,
+        csrfToken: res.locals.csrfToken,
+      });
     } catch (err) {
       logger.warn(`Failed to verify ${group} settings`, err.message);
+      const testedSavedSettings = Boolean(
+        testedConfig &&
+          settingsGroupsEqual(settingsStore.getGroup(group), testedConfig)
+      );
+      const health = testedSavedSettings
+        ? recordSettingsHealth(
+            group,
+            'failed',
+            err.message || 'Settings verification failed.'
+          )
+        : settingsStore.getGroup('health');
       res.status(400).json({
         success: false,
         error: err.message,
+        health,
+        healthRecorded: testedSavedSettings,
         csrfToken: res.locals.csrfToken,
       });
-      }
+    }
   })
 );
 

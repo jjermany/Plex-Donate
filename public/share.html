@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-ui-shell="supporter">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,8 +20,10 @@
     <link rel="apple-touch-icon" sizes="152x152" href="/icons/plex-donate-ios-152.png" />
     <link rel="apple-touch-icon" sizes="167x167" href="/icons/plex-donate-ios-167.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
+    <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
 
     <title>Plex Donate Invite</title>
+    <script src="/accessibility.js?v=accessibility-20260728"></script>
     <script>
       (() => {
         try {
@@ -46,138 +48,16 @@
       })();
     </script>
     <style>
-      :root {
-        color-scheme: dark;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
-          sans-serif;
-        --page-text: #e2e8f0;
-        --page-muted: rgba(203, 213, 225, 0.82);
-        --page-background: radial-gradient(
-            120% 120% at 50% -10%,
-            rgba(99, 102, 241, 0.35) 0%,
-            rgba(15, 23, 42, 0.92) 45%,
-            #050818 100%
-          ),
-          radial-gradient(80% 80% at 80% 20%, rgba(14, 165, 233, 0.18), transparent);
-        --page-overlay: radial-gradient(
-          60% 60% at 20% 20%,
-          rgba(76, 29, 149, 0.18),
-          transparent 70%
-        );
-        --panel-background: rgba(15, 23, 42, 0.82);
-        --panel-border: rgba(148, 163, 184, 0.3);
-        --surface-background: rgba(15, 23, 42, 0.76);
-        --surface-border: rgba(148, 163, 184, 0.22);
-        --surface-shadow: 0 30px 60px -28px rgba(37, 99, 235, 0.55);
-        --theme-toggle-background: rgba(15, 23, 42, 0.78);
-        --theme-toggle-border: rgba(148, 163, 184, 0.35);
-      }
-
-      :root[data-theme='light'] {
-        color-scheme: light;
-        --page-text: #0f172a;
-        --page-muted: rgba(51, 65, 85, 0.82);
-        --page-background: linear-gradient(180deg, #eef2ff 0%, #f8fafc 100%);
-        --page-overlay: radial-gradient(
-          60% 60% at 20% 20%,
-          rgba(96, 165, 250, 0.16),
-          transparent 70%
-        );
-        --panel-background: rgba(255, 255, 255, 0.88);
-        --panel-border: rgba(148, 163, 184, 0.26);
-        --surface-background: rgba(255, 255, 255, 0.9);
-        --surface-border: rgba(148, 163, 184, 0.24);
-        --surface-shadow: 0 24px 50px -28px rgba(37, 99, 235, 0.24);
-        --theme-toggle-background: rgba(255, 255, 255, 0.92);
-        --theme-toggle-border: rgba(148, 163, 184, 0.28);
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: var(--page-background);
-        color: var(--page-text);
-        display: flex;
-        justify-content: center;
-        padding: 32px 16px 64px;
-        position: relative;
-        transition: background 0.25s ease, color 0.25s ease;
-      }
-      body::after {
-        content: '';
-        position: fixed;
-        inset: 0;
-        background: var(--page-overlay);
-        pointer-events: none;
-        z-index: 0;
-      }
-      a {
-        color: inherit;
-      }
-      h1,
-      h2,
-      h3 {
-        margin: 0;
-      }
-      h1 {
-        font-size: clamp(2.2rem, 4vw, 3rem);
-        line-height: 1.1;
-        background: linear-gradient(135deg, #c7d2fe 0%, #a855f7 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      :root[data-theme='light'] h1 {
-        background: linear-gradient(135deg, #1d4ed8 0%, #7c3aed 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-      }
-      h2 {
-        font-size: clamp(1.4rem, 2vw, 1.8rem);
-        line-height: 1.3;
-      }
-      p {
-        margin: 0;
-        line-height: 1.6;
-      }
-      .hidden {
-        display: none !important;
-      }
-      .panel {
-        width: min(760px, 100%);
-        background: var(--panel-background);
-        border: 1px solid var(--panel-border);
-        border-radius: 20px;
-        padding: 28px;
-        text-align: center;
-        box-shadow: var(--surface-shadow);
-        position: relative;
-        z-index: 1;
-      }
-      .panel.error {
-        background: rgba(76, 29, 149, 0.18);
-        border-color: rgba(248, 113, 113, 0.4);
-        color: #fecdd3;
-      }
       #content {
         width: 100%;
         position: relative;
         z-index: 1;
       }
       .canvas {
-        width: min(960px, 100%);
+        width: min(var(--content-width), 100%);
         margin: 0 auto;
         display: grid;
-        gap: 28px;
-      }
-      .surface {
-        background: var(--surface-background);
-        border: 1px solid var(--surface-border);
-        border-radius: 24px;
-        padding: clamp(24px, 4vw, 36px);
-        box-shadow: var(--surface-shadow);
-        backdrop-filter: blur(18px);
+        gap: var(--space-7);
       }
       .hero {
         position: relative;
@@ -205,18 +85,172 @@
       .eyebrow {
         letter-spacing: 0.2em;
         text-transform: uppercase;
-        font-size: 0.75rem;
-        color: rgba(165, 180, 252, 0.9);
+        font-size: var(--font-size-xs);
+        color: var(--color-accent);
       }
       :root[data-theme='light'] .eyebrow {
-        color: #4f46e5;
+        color: var(--color-accent-strong);
       }
       .lead {
-        color: #cbd5f5;
+        color: var(--color-text-muted);
         max-width: 52ch;
       }
       :root[data-theme='light'] .lead {
+        color: var(--color-text-muted);
+      }
+      .journey-progress {
+        list-style: none;
+        margin: var(--space-2) 0 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: var(--space-2);
+      }
+      .journey-progress li {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        color: var(--page-muted);
+        text-align: center;
+      }
+      .journey-progress li:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        top: 17px;
+        left: calc(50% + 22px);
+        width: calc(100% - 36px);
+        height: 2px;
+        border-radius: var(--radius-pill);
+        background: rgba(148, 163, 184, 0.28);
+      }
+      .journey-progress li[data-state='complete']:not(:last-child)::after {
+        background: var(--color-success);
+      }
+      .journey-progress-marker {
+        position: relative;
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: var(--radius-pill);
+        border: 1px solid var(--color-border-strong);
+        background: var(--color-surface-raised);
+        color: var(--color-text-muted);
+        font-weight: var(--font-weight-bold);
+      }
+      :root[data-theme='light'] .journey-progress-marker {
+        background: var(--color-surface-raised);
+        color: var(--color-text-muted);
+      }
+      .journey-progress li[data-state='current'] {
+        color: var(--page-text);
+      }
+      .journey-progress li[data-state='current'] .journey-progress-marker {
+        border-color: transparent;
+        background: var(--gradient-action);
+        color: #ffffff;
+        box-shadow: 0 12px 30px -14px rgba(56, 189, 248, 0.9);
+      }
+      .journey-progress li[data-state='complete'] .journey-progress-marker {
+        border-color: rgba(34, 197, 94, 0.5);
+        background: rgba(22, 101, 52, 0.92);
+        color: #dcfce7;
+      }
+      :root[data-theme='light']
+        .journey-progress
+        li[data-state='complete']
+        .journey-progress-marker {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .journey-progress-label {
+        overflow: hidden;
+        width: 100%;
+        font-size: 0.76rem;
+        font-weight: var(--font-weight-bold);
+        line-height: 1.25;
+        text-overflow: ellipsis;
+      }
+      .journey-stage {
+        display: grid;
+        gap: var(--space-5);
+        max-width: var(--content-width-reading);
+        width: 100%;
+        margin-inline: auto;
+      }
+      .journey-stage > h2,
+      .journey-stage > p {
+        max-width: 62ch;
+      }
+      .stage-kicker {
+        width: fit-content;
+        color: var(--color-accent);
+        font-size: var(--font-size-xs);
+        font-weight: var(--font-weight-bold);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      :root[data-theme='light'] .stage-kicker {
+        color: var(--color-accent-strong);
+      }
+      .journey-callout {
+        display: grid;
+        gap: 6px;
+        padding: 18px 20px;
+        border: 1px solid rgba(96, 165, 250, 0.25);
+        border-radius: 16px;
+        background: rgba(59, 130, 246, 0.08);
+        color: var(--page-muted);
+      }
+      .journey-callout strong {
+        color: var(--page-text);
+      }
+      :root[data-theme='light'] .journey-callout {
+        background: #eff6ff;
+        border-color: rgba(37, 99, 235, 0.2);
+      }
+      .stage-actions {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .stage-actions .cta-button {
+        margin-top: 0;
+      }
+      .secondary-action {
+        border: 1px solid rgba(148, 163, 184, 0.36);
+        background: rgba(148, 163, 184, 0.12);
+        color: var(--page-text);
+        box-shadow: none;
+      }
+      :root[data-theme='light'] .secondary-action {
+        background: #f1f5f9;
         color: #334155;
+      }
+      .stage-secondary-action {
+        padding-top: 4px;
+        border-top: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .completion-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        background: rgba(34, 197, 94, 0.18);
+        color: #86efac;
+        font-size: 1.75rem;
+        font-weight: 900;
+      }
+      :root[data-theme='light'] .completion-mark {
+        background: #dcfce7;
+        color: #166534;
       }
       .hero-badges {
         display: flex;
@@ -353,28 +387,6 @@
         max-width: 720px;
         width: 100%;
       }
-      .muted {
-        color: var(--page-muted);
-      }
-      .theme-toggle {
-        position: fixed;
-        top: 18px;
-        right: 18px;
-        z-index: 101;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        border-radius: 999px;
-        padding: 10px 14px;
-        border: 1px solid var(--theme-toggle-border);
-        background: var(--theme-toggle-background);
-        color: var(--page-text);
-        box-shadow: var(--surface-shadow);
-        backdrop-filter: blur(14px);
-      }
-      .small {
-        font-size: 0.85rem;
-      }
       .support-list {
         list-style: none;
         padding: 0;
@@ -403,7 +415,7 @@
         margin-top: 12px;
         border-radius: 12px;
         border: none;
-        background: linear-gradient(135deg, #38bdf8, #6366f1);
+        background: var(--gradient-action);
         color: #0f172a;
         font-weight: 700;
         font-family: inherit;
@@ -475,7 +487,7 @@
         padding: 12px 22px;
         font-size: 1rem;
         font-weight: 700;
-        background: linear-gradient(135deg, #6366f1, #4338ca);
+        background: var(--gradient-action);
         color: #f8fafc;
         cursor: pointer;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -510,41 +522,6 @@
       }
       :root[data-theme='light'] .status-text {
         color: #4338ca;
-      }
-      .status-text.small {
-        font-size: 0.85rem;
-      }
-      .status-text.error {
-        color: #fca5a5;
-      }
-      :root[data-theme='light'] .status-text.error {
-        color: #b91c1c;
-      }
-      .status-text.success {
-        color: #86efac;
-      }
-      :root[data-theme='light'] .status-text.success {
-        color: #166534;
-      }
-      .status-text.info {
-        color: #bae6fd;
-      }
-      :root[data-theme='light'] .status-text.info {
-        color: #075985;
-      }
-      .status-text.relay-warning {
-        margin-top: 10px;
-        padding: 10px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(248, 113, 113, 0.55);
-        background: rgba(127, 29, 29, 0.32);
-        color: #fecaca;
-        font-weight: 600;
-      }
-      :root[data-theme='light'] .status-text.relay-warning {
-        background: #fef2f2;
-        border-color: rgba(220, 38, 38, 0.34);
-        color: #991b1b;
       }
       .helper-text {
         color: rgba(203, 213, 225, 0.85);
@@ -640,6 +617,25 @@
         text-decoration: underline;
       }
       @media (max-width: 640px) {
+        .journey-progress {
+          grid-template-columns: 1fr;
+          gap: 10px;
+        }
+        .journey-progress li {
+          grid-template-columns: 36px minmax(0, 1fr);
+          align-items: center;
+          justify-items: start;
+          text-align: left;
+        }
+        .journey-progress li:not(:last-child)::after {
+          top: 38px;
+          left: 17px;
+          width: 2px;
+          height: 12px;
+        }
+        .journey-progress-label {
+          font-size: 0.86rem;
+        }
         .surface {
           padding: 24px;
         }
@@ -652,6 +648,9 @@
         button,
         .cta-button {
           width: 100%;
+        }
+        .stage-actions {
+          align-items: stretch;
         }
       }
 
@@ -799,104 +798,57 @@
     <button id="theme-toggle" type="button" class="theme-toggle" aria-label="Toggle theme">
       Theme
     </button>
-    <div id="loading" class="panel">
+    <div id="loading" class="panel supporter-panel" role="status" aria-live="polite">
       <div class="loading-spinner">
         <div class="loading-spinner-ring"></div>
         <span>Setting the stage for your invite</span>
       </div>
     </div>
-    <div id="error-panel" class="panel error hidden"></div>
+    <div id="error-panel" class="panel supporter-panel error hidden" role="alert" aria-live="assertive"></div>
     <div id="content" class="hidden">
       <main class="canvas">
         <header class="surface hero">
           <span class="eyebrow">Guided Setup</span>
-          <h1>Use this page to set up your access in the right order.</h1>
-          <p class="lead">
-            Create your Plex Donate login, verify your email, then connect the
-            Plex account you actually want to use. Then start a 7-day risk-free
-            trial with no payment info required, or subscribe when you are ready.
+          <h1 id="journey-title">Create your supporter account.</h1>
+          <p class="lead" id="journey-lead">
+            Start here, then we’ll guide you through email verification, Plex,
+            and access activation one step at a time.
           </p>
-          <div class="hero-badges">
-            <span class="chip">1. Create account</span>
-            <span class="chip">2. Link Plex</span>
-            <span class="chip">3. Activate access</span>
-          </div>
-          <div class="requirements-strip">
-            <p class="muted">
-              <strong>Have these ready:</strong> your real Plex account and access to your email inbox. Billing can wait until after the trial.
-            </p>
-            <div class="requirements-list">
-              <div class="requirements-item">
-                <span>Plex</span>
-                <span>Create or recover your Plex account first.</span>
-              </div>
-              <div class="requirements-item">
-                <span>Email</span>
-                <span>Open the verification message before moving on.</span>
-              </div>
-              <div class="requirements-item">
-                <span>Billing</span>
-                <span>No payment info is needed for the 7-day trial.</span>
-              </div>
-            </div>
-          </div>
+          <ol class="journey-progress" aria-label="Access setup progress">
+            <li data-journey-step="account" data-state="current" aria-current="step">
+              <span class="journey-progress-marker" data-step-number="1">1</span>
+              <span class="journey-progress-label">Account</span>
+            </li>
+            <li data-journey-step="verify" data-state="upcoming">
+              <span class="journey-progress-marker" data-step-number="2">2</span>
+              <span class="journey-progress-label">Verify email</span>
+            </li>
+            <li data-journey-step="plex" data-state="upcoming">
+              <span class="journey-progress-marker" data-step-number="3">3</span>
+              <span class="journey-progress-label">Connect Plex</span>
+            </li>
+            <li data-journey-step="activate" data-state="upcoming">
+              <span class="journey-progress-marker" data-step-number="4">4</span>
+              <span class="journey-progress-label">Activate</span>
+            </li>
+            <li data-journey-step="complete" data-state="upcoming">
+              <span class="journey-progress-marker" data-step-number="5">5</span>
+              <span class="journey-progress-label">Complete</span>
+            </li>
+          </ol>
         </header>
 
-        <section class="surface" id="support-card">
-            <h2>What to do next</h2>
-            <p class="muted">
-              Follow these steps in order. Checkout and referral tools stay locked until Plex is linked correctly.
-            </p>
-            <div class="journey-grid">
-              <article class="journey-card">
-                <span class="journey-step">1</span>
-                <h3>Save your Plex Donate login</h3>
-                <p>
-                  Use the same supporter email you want associated with this invite. After saving,
-                  confirm the verification email before you continue.
-                </p>
-              </article>
-              <article class="journey-card">
-                <span class="journey-step">2</span>
-                <h3>Connect the correct Plex identity</h3>
-                <p>
-                  Link the Plex account that should receive library access. If you use an Apple relay
-                  email, switch to your real Plex email when possible.
-                </p>
-              </article>
-              <article class="journey-card">
-                <span class="journey-step">3</span>
-                <h3>Start risk-free, subscribe later</h3>
-                <p>
-                  Start a 7-day trial without billing details. If you decide to stay, subscribe
-                  before the trial ends to keep access uninterrupted.
-                </p>
-              </article>
-            </div>
-            <div id="trial-cta" class="cta hidden">
-              <h3>7-day risk-free trial</h3>
-              <p class="muted small" id="trial-message">
-                Link Plex and start watching for 7 days. No payment info is required.
-              </p>
-              <button id="trial-button" class="cta-button">Start risk-free trial</button>
-              <p id="trial-status" class="status-text small"></p>
-            </div>
-            <div class="cta">
-              <h3>Already have an account?</h3>
-              <p class="muted">
-                Sign in to your customer dashboard to manage billing, track your invites,
-                and confirm Plex status any time.
-              </p>
-              <a class="cta-button" href="/dashboard">Login to dashboard</a>
-            </div>
-        </section>
-
-        <section class="surface" id="account-panel">
-          <h2>Step 1 · Save your Plex Donate login</h2>
+        <section
+          class="surface journey-stage"
+          id="account-panel"
+          data-journey-panel="account"
+          tabindex="-1"
+        >
+          <span class="stage-kicker">Step 1 of 5</span>
+          <h2>Create your supporter account</h2>
           <p id="account-description" class="muted">
-            Make sure you've created or recovered your Plex account, then save your Plex Donate
-            login with the same email so we can guide you through linking. We'll send a verification
-            email—open it and sign in from that link so we can confirm access.
+            Save the email and password you’ll use for Plex Donate. We’ll send
+            one verification message before you connect Plex.
           </p>
           <form id="account-form" class="grid">
             <label>
@@ -955,6 +907,7 @@
                 type="password"
                 placeholder="Repeat your password"
                 autocomplete="new-password"
+                required
               />
             </label>
             <div class="form-actions">
@@ -962,13 +915,94 @@
               <p id="account-status" class="status-text"></p>
             </div>
           </form>
+          <p class="stage-secondary-action muted small">
+            Already finished this step?
+            <a href="/dashboard">Sign in to your supporter dashboard</a>.
+          </p>
         </section>
 
-        <section class="surface" id="payment-panel">
-          <h2>Step 2 · Start risk-free or subscribe</h2>
-          <p id="payment-description" class="muted">
-            Start the 7-day trial without entering billing information. Subscription checkout is here for later, when you decide to keep access.
+        <section
+          class="surface journey-stage hidden"
+          id="verification-panel"
+          data-journey-panel="verify"
+          tabindex="-1"
+          hidden
+        >
+          <span class="stage-kicker">Step 2 of 5</span>
+          <h2>Verify your email</h2>
+          <p class="muted">
+            We sent a verification link to
+            <strong id="verification-email">your email address</strong>. Open it
+            to confirm your account and continue in the supporter dashboard.
           </p>
+          <div class="journey-callout">
+            <strong>The email link handles the handoff.</strong>
+            <span>
+              It signs you in and takes you directly to the Plex connection
+              step—there is no code to copy.
+            </span>
+          </div>
+          <div class="stage-actions">
+            <a class="cta-button" href="/dashboard">Already verified? Continue</a>
+            <button id="edit-account-button" type="button" class="secondary-action">
+              Change details or resend
+            </button>
+          </div>
+          <p id="verification-status" class="status-text success" aria-live="polite"></p>
+        </section>
+
+        <section
+          class="surface journey-stage hidden"
+          id="plex-handoff-panel"
+          data-journey-panel="plex"
+          tabindex="-1"
+          hidden
+        >
+          <span class="stage-kicker">Step 3 of 5</span>
+          <h2>Connect the Plex account you stream with</h2>
+          <p class="muted">
+            Plex authentication happens securely from your supporter dashboard.
+            Use the same Plex identity that should receive library access.
+          </p>
+          <div class="journey-callout">
+            <strong>Have a Plex account ready?</strong>
+            <span>
+              Create or recover it at
+              <a href="https://www.plex.tv/sign-up/" target="_blank" rel="noopener"
+                >plex.tv</a
+              >
+              before continuing.
+            </span>
+          </div>
+          <div class="stage-actions">
+            <a class="cta-button" href="/dashboard">Continue to connect Plex</a>
+          </div>
+          <p class="muted small">
+            After sign-in, Plex Donate automatically opens the correct setup section.
+          </p>
+        </section>
+
+        <section
+          class="surface journey-stage hidden"
+          id="payment-panel"
+          data-journey-panel="activate"
+          tabindex="-1"
+          hidden
+        >
+          <span class="stage-kicker">Step 4 of 5</span>
+          <h2>Activate your access</h2>
+          <p id="payment-description" class="muted">
+            Start with seven days of access and no payment information, or
+            subscribe now if you’re ready.
+          </p>
+          <div id="trial-cta" class="cta hidden">
+            <h3>7-day risk-free trial</h3>
+            <p class="muted small" id="trial-message">
+              Link Plex and start watching for 7 days. No payment info is required.
+            </p>
+            <button id="trial-button" class="cta-button">Start risk-free trial</button>
+            <p id="trial-status" class="status-text small" aria-live="polite"></p>
+          </div>
           <div id="payment-options" style="margin-top: 24px;">
             <div style="display: flex; flex-direction: column; gap: 12px;">
               <button id="paypal-checkout-button" class="cta-button" disabled>
@@ -977,17 +1011,30 @@
               <p id="paypal-status" class="status-text small"></p>
             </div>
           </div>
-          <div id="account-management" class="cta hidden">
-            <h3>Manage your subscription</h3>
-            <p class="muted">
-              Access your customer dashboard to manage your subscription. PayPal subscribers can manage their subscription through their PayPal account.
-            </p>
-            <a class="cta-button" href="/dashboard">Go to dashboard</a>
+        </section>
+
+        <section
+          class="surface journey-stage hidden"
+          id="completion-panel"
+          data-journey-panel="complete"
+          tabindex="-1"
+          hidden
+        >
+          <span class="stage-kicker">Step 5 of 5</span>
+          <div class="completion-mark" aria-hidden="true">✓</div>
+          <h2 id="completion-title">Your access setup is complete</h2>
+          <p id="completion-description" class="muted">
+            Continue to your supporter dashboard to view Plex status, manage
+            access, and use referral or recovery tools.
+          </p>
+          <p id="completion-status" class="status-text success"></p>
+          <div class="stage-actions">
+            <a class="cta-button" href="/dashboard">Open supporter dashboard</a>
           </div>
         </section>
 
-        <section class="surface" id="invite-panel">
-          <h2>Step 3 · Restore access or send a referral</h2>
+        <section class="surface hidden" id="invite-panel" hidden aria-hidden="true">
+          <h2>Post-setup referral and recovery tools</h2>
           <p class="muted" id="invite-description">
             After Plex is linked and your donation is confirmed, choose whether this invite is for your own recovery or for someone new.
           </p>
@@ -1086,6 +1133,7 @@
         needsPlexInvite: false,
         hasSevereIssue: false,
         trialRequestPending: false,
+        currentJourneyStep: '',
       };
       let inviteIntent = 'referral';
       const DEFAULT_TRIAL_MESSAGE =
@@ -1096,6 +1144,16 @@
       const loadingPanel = document.getElementById('loading');
       const errorPanel = document.getElementById('error-panel');
       const content = document.getElementById('content');
+      const journeyTitle = document.getElementById('journey-title');
+      const journeyLead = document.getElementById('journey-lead');
+      const journeyProgressItems = Array.from(
+        document.querySelectorAll('[data-journey-step]')
+      );
+      const journeyPanels = new Map(
+        Array.from(document.querySelectorAll('[data-journey-panel]')).map(
+          (panel) => [panel.dataset.journeyPanel, panel]
+        )
+      );
       const accountDescription = document.getElementById('account-description');
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
@@ -1115,6 +1173,14 @@
       );
       const accountSubmit = document.getElementById('account-submit');
       const accountStatus = document.getElementById('account-status');
+      const verificationEmail = document.getElementById('verification-email');
+      const verificationStatus = document.getElementById('verification-status');
+      const editAccountButton = document.getElementById('edit-account-button');
+      const completionTitle = document.getElementById('completion-title');
+      const completionDescription = document.getElementById(
+        'completion-description'
+      );
+      const completionStatus = document.getElementById('completion-status');
       const inviteDescription = document.getElementById('invite-description');
       const inviteForm = document.getElementById('invite-form');
       const emailInput = document.getElementById('recipient-email');
@@ -1397,7 +1463,7 @@
         let statusTone = 'info';
 
         if (!plexLinked) {
-          message = 'Link your Plex account above to unlock the 7-day risk-free trial.';
+          message = 'Connect Plex from your supporter dashboard to unlock the 7-day risk-free trial.';
           disableButton = true;
         }
 
@@ -1693,6 +1759,170 @@
         }
       }
 
+      const JOURNEY_STEPS = ['account', 'verify', 'plex', 'activate', 'complete'];
+      const JOURNEY_COPY = {
+        account: {
+          title: 'Create your supporter account.',
+          lead:
+            'Save your Plex Donate login first. We’ll send one verification email before moving on.',
+        },
+        verify: {
+          title: 'Check your inbox.',
+          lead:
+            'Verify your email to secure the account and continue directly to Plex connection.',
+        },
+        plex: {
+          title: 'Connect the right Plex account.',
+          lead:
+            'Continue in your supporter dashboard and authenticate the Plex identity you use for streaming.',
+        },
+        activate: {
+          title: 'Activate your access.',
+          lead:
+            'Start a seven-day trial without payment information, or subscribe now if you’re ready.',
+        },
+        complete: {
+          title: 'You’re ready to stream.',
+          lead:
+            'Setup is complete. Your supporter dashboard is now the home for access, billing, referrals, and recovery.',
+        },
+      };
+
+      function showJourneyStep(nextStep, { focus = false } = {}) {
+        const normalized = JOURNEY_STEPS.includes(nextStep)
+          ? nextStep
+          : 'account';
+        const previousStep = state.currentJourneyStep;
+        state.currentJourneyStep = normalized;
+
+        journeyPanels.forEach((panel, step) => {
+          const active = step === normalized;
+          panel.hidden = !active;
+          panel.classList.toggle('hidden', !active);
+          panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+        });
+
+        const activeIndex = JOURNEY_STEPS.indexOf(normalized);
+        journeyProgressItems.forEach((item) => {
+          const step = item.dataset.journeyStep;
+          const itemIndex = JOURNEY_STEPS.indexOf(step);
+          const marker = item.querySelector('.journey-progress-marker');
+          const stepNumber = marker && marker.dataset
+            ? marker.dataset.stepNumber
+            : String(itemIndex + 1);
+          const itemState =
+            itemIndex < activeIndex
+              ? 'complete'
+              : itemIndex === activeIndex
+                ? 'current'
+                : 'upcoming';
+          item.dataset.state = itemState;
+          if (itemState === 'current') {
+            item.setAttribute('aria-current', 'step');
+          } else {
+            item.removeAttribute('aria-current');
+          }
+          if (marker) {
+            marker.textContent = itemState === 'complete' ? '✓' : stepNumber;
+          }
+        });
+
+        const copy = JOURNEY_COPY[normalized] || JOURNEY_COPY.account;
+        if (journeyTitle) {
+          journeyTitle.textContent = copy.title;
+        }
+        if (journeyLead) {
+          journeyLead.textContent = copy.lead;
+        }
+
+        if (
+          focus &&
+          previousStep &&
+          previousStep !== normalized &&
+          journeyPanels.get(normalized) &&
+          typeof journeyPanels.get(normalized).focus === 'function'
+        ) {
+          const activePanel = journeyPanels.get(normalized);
+          if (typeof window.requestAnimationFrame === 'function') {
+            window.requestAnimationFrame(() => activePanel.focus());
+          } else {
+            activePanel.focus();
+          }
+        }
+      }
+
+      function resolveJourneyStep({
+        donor,
+        accountReady,
+        emailVerified,
+        plexLinked,
+        normalizedStatus,
+      }) {
+        if (!donor || !accountReady) {
+          return 'account';
+        }
+        if (!emailVerified) {
+          return 'verify';
+        }
+        if (!plexLinked) {
+          return 'plex';
+        }
+        if (!['active', 'trial'].includes(normalizedStatus)) {
+          return 'activate';
+        }
+        return 'complete';
+      }
+
+      function renderJourney({
+        donor,
+        accountReady,
+        emailVerified,
+        plexLinked,
+        normalizedStatus,
+        trialCountdownLabel,
+        trialExpiresLabel,
+      }) {
+        const nextStep = resolveJourneyStep({
+          donor,
+          accountReady,
+          emailVerified,
+          plexLinked,
+          normalizedStatus,
+        });
+        showJourneyStep(nextStep, {
+          focus: Boolean(
+            state.currentJourneyStep && state.currentJourneyStep !== nextStep
+          ),
+        });
+
+        if (verificationEmail) {
+          verificationEmail.textContent =
+            donor && donor.email ? donor.email : 'your email address';
+        }
+        if (verificationStatus && nextStep === 'verify') {
+          verificationStatus.textContent =
+            'Verification email sent. Open the message to continue.';
+        }
+
+        if (completionTitle && completionDescription && completionStatus) {
+          if (normalizedStatus === 'trial') {
+            completionTitle.textContent = 'Your 7-day trial is active';
+            completionDescription.textContent =
+              'Your setup is complete. Open the supporter dashboard to check Plex access and subscribe whenever you’re ready.';
+            completionStatus.textContent = trialCountdownLabel
+              ? `Trial access expires in ${trialCountdownLabel}.`
+              : trialExpiresLabel
+                ? `Trial access expires on ${trialExpiresLabel}.`
+                : 'Trial access is active.';
+          } else {
+            completionTitle.textContent = 'Your access setup is complete';
+            completionDescription.textContent =
+              'Open the supporter dashboard to view Plex status, manage billing, and use referral or recovery tools.';
+            completionStatus.textContent = 'Your subscription is active.';
+          }
+        }
+      }
+
       function render(data) {
         state.trialRequestPending = false;
         state.data = data;
@@ -1725,6 +1955,7 @@
         const trialCountdownLabel = getTrialCountdownLabel(accessExpiresAt);
         const trialExpiresLabel = formatDateTime(accessExpiresAt);
         const accountReady = Boolean(donor && donor.hasPassword);
+        const emailVerified = Boolean(donor && donor.emailVerified);
         const shareState = data.shareState || {};
         const plexLinked = Boolean(donor && donor.plexLinked);
         const plexShared = Boolean(
@@ -1750,27 +1981,24 @@
         state.inviteLimitReached = limitReached;
         const nextInviteAvailableAt = data.nextInviteAvailableAt || null;
         state.nextInviteAvailableAt = nextInviteAvailableAt;
-        const nextInviteDate = parseDate(nextInviteAvailableAt);
-        const cooldownActive =
-          limitReached && nextInviteDate && nextInviteDate.getTime() > Date.now();
-        scheduleInviteCooldownRefresh(cooldownActive ? nextInviteAvailableAt : null);
+        clearInviteCooldownTimer();
 
         if (accountDescription) {
           if (!accountReady) {
             accountDescription.textContent =
-              'Step one: create or recover your Plex account, then save your Plex Donate login so you can link Plex before subscribing. We’ll email a verification link—open it and sign in from that message to keep going.';
+              'Save the email and password you’ll use for Plex Donate. We’ll send one verification message before you connect Plex.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
-          } else if (!plexLinked) {
+          } else if (!emailVerified) {
             accountDescription.textContent =
-              'Stay signed in and complete the Plex authentication prompt—this confirms which Plex identity we invite.';
+              'Update your details below if the verification email was sent to the wrong address. Saving again sends a fresh verification message.';
             if (accountSubmit) {
-              accountSubmit.textContent = 'Save changes';
+              accountSubmit.textContent = 'Save and resend verification';
             }
           } else {
             accountDescription.textContent =
-              'Keep your contact details current while we confirm your subscription and unlock referral invites.';
+              'Your account is ready. Continue through the guided setup to connect Plex and activate access.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Save changes';
             }
@@ -1814,7 +2042,7 @@
               actionStatus.className = 'status-text success';
             } else {
               actionStatus.textContent =
-                'Authenticate with Plex to continue—watch for the sign-in prompt above so referral invites go to the right account.';
+                'Connect Plex from your supporter dashboard before using referral or recovery tools.';
               actionStatus.className = 'status-text info';
             }
           } else if (hasSevereIssue) {
@@ -1945,7 +2173,13 @@
         }
 
         // Update payment button states
-        const canCheckout = !isProspect && accountReady && plexLinked && !isActive && !hasSevereIssue;
+        const canCheckout =
+          !isProspect &&
+          accountReady &&
+          emailVerified &&
+          plexLinked &&
+          !isActive &&
+          !hasSevereIssue;
 
         if (paypalCheckoutButton) {
           paypalCheckoutButton.disabled = !canCheckout;
@@ -1954,6 +2188,9 @@
             paypalStatus.className = 'status-text small info';
           } else if (!accountReady) {
             paypalStatus.textContent = 'Set your password to enable checkout.';
+            paypalStatus.className = 'status-text small info';
+          } else if (!emailVerified) {
+            paypalStatus.textContent = 'Verify your email to enable checkout.';
             paypalStatus.className = 'status-text small info';
           } else if (!plexLinked) {
             paypalStatus.textContent = 'Link Plex to enable checkout.';
@@ -1978,6 +2215,16 @@
             accountManagement.classList.add('hidden');
           }
         }
+
+        renderJourney({
+          donor,
+          accountReady,
+          emailVerified,
+          plexLinked,
+          normalizedStatus,
+          trialCountdownLabel,
+          trialExpiresLabel,
+        });
       }
 
       async function loadShareData(options = {}) {
@@ -2001,6 +2248,19 @@
       if (accountEmailInput) {
         accountEmailInput.addEventListener('input', () => {
           updateRelayWarning(accountEmailInput.value || '');
+        });
+      }
+
+      if (editAccountButton) {
+        editAccountButton.addEventListener('click', () => {
+          showJourneyStep('account', { focus: true });
+          if (accountDescription) {
+            accountDescription.textContent =
+              'Update your account details below. Saving sends a fresh verification message to the email you enter.';
+          }
+          if (accountSubmit) {
+            accountSubmit.textContent = 'Save and resend verification';
+          }
         });
       }
 
@@ -2079,14 +2339,13 @@
           throw new Error(payload.error || 'Failed to save account');
         }
         render(payload);
-        if (wasProspect && payload && payload.donor) {
-          accountStatus.textContent =
-            'Account saved! Open the verification email we just sent and sign in from that link to continue.';
-        } else {
-          accountStatus.textContent =
-            'Account saved! Finish by signing in through the verification email we just sent.';
+        if (verificationStatus) {
+          verificationStatus.textContent =
+            wasProspect && payload && payload.donor
+              ? 'Account created. Open the verification email we just sent to continue.'
+              : 'Account saved. Open the new verification email to continue.';
+          verificationStatus.className = 'status-text success';
         }
-        accountStatus.className = 'status-text success';
           } catch (err) {
             accountStatus.textContent = err.message;
             accountStatus.className = 'status-text error';

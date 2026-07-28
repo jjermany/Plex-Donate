@@ -1,19 +1,19 @@
 :root {
         color-scheme: light;
-        font-family: 'Aptos', 'Segoe UI Variable', 'Trebuchet MS', system-ui, sans-serif;
+        font-family: var(--font-sans);
         background: var(--page-background);
         color: var(--text-primary);
-        --page-background: #f4f7fb;
+        --page-background: var(--color-page);
         --background-gradient:
           radial-gradient(circle at 12% 8%, rgba(14, 165, 233, 0.16), transparent 34rem),
           radial-gradient(circle at 82% 0%, rgba(245, 158, 11, 0.14), transparent 30rem),
           linear-gradient(180deg, #eef6ff 0%, #f8fafc 48%, #f3f4f6 100%);
-        --text-primary: #0f172a;
-        --text-muted: #475569;
-        --text-muted-soft: #64748b;
-        --panel-background: rgba(255, 255, 255, 0.9);
-        --panel-border-color: rgba(148, 163, 184, 0.18);
-        --panel-shadow: 0 24px 70px -36px rgba(15, 23, 42, 0.34);
+        --text-primary: var(--color-text);
+        --text-muted: var(--color-text-muted);
+        --text-muted-soft: var(--color-text-soft);
+        --panel-background: var(--color-surface);
+        --panel-border-color: var(--color-border);
+        --panel-shadow: var(--shadow-lg);
         --input-border: #c7d2fe;
         --input-background: rgba(255, 255, 255, 0.7);
         --table-border: rgba(148, 163, 184, 0.3);
@@ -21,25 +21,25 @@
         --settings-divider: rgba(148, 163, 184, 0.25);
         --events-time-color: #64748b;
         --event-payload-bg: #f1f5f9;
-        --badge-bg: rgba(79, 70, 229, 0.12);
-        --badge-color: #4f46e5;
-        --badge-note-bg: rgba(99, 102, 241, 0.16);
-        --badge-note-color: #4338ca;
-        --badge-revoked-bg: rgba(248, 113, 113, 0.15);
-        --badge-revoked-color: #b91c1c;
-        --badge-visited-bg: rgba(34, 197, 94, 0.12);
-        --badge-visited-color: #15803d;
-        --status-active-bg: rgba(34, 197, 94, 0.15);
-        --status-active-color: #15803d;
-        --status-pending-bg: rgba(59, 130, 246, 0.15);
-        --status-pending-color: #1d4ed8;
-        --status-danger-bg: rgba(248, 113, 113, 0.18);
-        --status-danger-color: #b91c1c;
-        --status-message-color: #b91c1c;
-        --form-status: #64748b;
-        --form-status-error: #b91c1c;
-        --form-status-success: #15803d;
-        --button-primary-bg: #0f766e;
+        --badge-bg: var(--color-accent-soft);
+        --badge-color: var(--color-accent-strong);
+        --badge-note-bg: var(--color-accent-soft);
+        --badge-note-color: var(--color-accent-strong);
+        --badge-revoked-bg: var(--color-danger-soft);
+        --badge-revoked-color: var(--color-danger);
+        --badge-visited-bg: var(--color-success-soft);
+        --badge-visited-color: var(--color-success);
+        --status-active-bg: var(--color-success-soft);
+        --status-active-color: var(--color-success);
+        --status-pending-bg: var(--color-info-soft);
+        --status-pending-color: var(--color-info);
+        --status-danger-bg: var(--color-danger-soft);
+        --status-danger-color: var(--color-danger);
+        --status-message-color: var(--color-danger);
+        --form-status: var(--color-text-soft);
+        --form-status-error: var(--color-danger);
+        --form-status-success: var(--color-success);
+        --button-primary-bg: var(--color-brand-strong);
         --button-primary-color: #ffffff;
         --button-primary-shadow: 0 16px 34px -22px rgba(15, 118, 110, 0.75);
         --button-secondary-bg: #e2e8f0;
@@ -52,17 +52,17 @@
 
       :root[data-theme='dark'] {
         color-scheme: dark;
-        --page-background: #0f172a;
+        --page-background: var(--color-page);
         --background-gradient:
           radial-gradient(circle at 18% 6%, rgba(20, 184, 166, 0.16), transparent 32rem),
           radial-gradient(circle at 86% 12%, rgba(245, 158, 11, 0.12), transparent 30rem),
           linear-gradient(180deg, #08111f 0%, #0f172a 52%, #111827 100%);
-        --text-primary: #e2e8f0;
-        --text-muted: #cbd5f5;
-        --text-muted-soft: #94a3b8;
-        --panel-background: rgba(15, 23, 42, 0.9);
-        --panel-border-color: rgba(71, 85, 105, 0.55);
-        --panel-shadow: 0 25px 50px -16px rgba(15, 23, 42, 0.6);
+        --text-primary: var(--color-text);
+        --text-muted: var(--color-text-muted);
+        --text-muted-soft: var(--color-text-soft);
+        --panel-background: var(--color-surface);
+        --panel-border-color: var(--color-border);
+        --panel-shadow: var(--shadow-lg);
         --input-border: rgba(129, 140, 248, 0.4);
         --input-background: rgba(15, 23, 42, 0.75);
         --table-border: rgba(71, 85, 105, 0.6);
@@ -70,25 +70,25 @@
         --settings-divider: rgba(71, 85, 105, 0.6);
         --events-time-color: #94a3b8;
         --event-payload-bg: rgba(30, 41, 59, 0.75);
-        --badge-bg: rgba(165, 180, 252, 0.18);
-        --badge-color: #c7d2fe;
-        --badge-note-bg: rgba(99, 102, 241, 0.28);
-        --badge-note-color: #c7d2fe;
-        --badge-revoked-bg: rgba(248, 113, 113, 0.28);
-        --badge-revoked-color: #fecdd3;
-        --badge-visited-bg: rgba(34, 197, 94, 0.28);
-        --badge-visited-color: #bbf7d0;
-        --status-active-bg: rgba(34, 197, 94, 0.32);
-        --status-active-color: #bbf7d0;
-        --status-pending-bg: rgba(59, 130, 246, 0.28);
-        --status-pending-color: #bfdbfe;
-        --status-danger-bg: rgba(248, 113, 113, 0.32);
-        --status-danger-color: #fecdd3;
-        --status-message-color: #fca5a5;
-        --form-status: #94a3b8;
-        --form-status-error: #fca5a5;
-        --form-status-success: #bbf7d0;
-        --button-primary-bg: #14b8a6;
+        --badge-bg: var(--color-accent-soft);
+        --badge-color: var(--color-accent-strong);
+        --badge-note-bg: var(--color-accent-soft);
+        --badge-note-color: var(--color-accent-strong);
+        --badge-revoked-bg: var(--color-danger-soft);
+        --badge-revoked-color: var(--color-danger);
+        --badge-visited-bg: var(--color-success-soft);
+        --badge-visited-color: var(--color-success);
+        --status-active-bg: var(--color-success-soft);
+        --status-active-color: var(--color-success);
+        --status-pending-bg: var(--color-info-soft);
+        --status-pending-color: var(--color-info);
+        --status-danger-bg: var(--color-danger-soft);
+        --status-danger-color: var(--color-danger);
+        --status-message-color: var(--color-danger);
+        --form-status: var(--color-text-soft);
+        --form-status-error: var(--color-danger);
+        --form-status-success: var(--color-success);
+        --button-primary-bg: #0f766e;
         --button-primary-shadow: 0 16px 34px -20px rgba(20, 184, 166, 0.65);
         --button-secondary-bg: rgba(71, 85, 105, 0.7);
         --button-secondary-color: #e2e8f0;
@@ -108,9 +108,9 @@
       }
 
       .container {
-        max-width: 1080px;
+        max-width: var(--content-width-wide);
         margin: 0 auto;
-        padding: 32px 24px 64px;
+        padding: var(--space-8) var(--space-6) var(--space-16);
       }
 
       /* Hide header and container padding when showing login */
@@ -127,11 +127,11 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 32px;
-        gap: 16px;
-        padding: 22px 24px;
+        margin-bottom: var(--space-8);
+        gap: var(--space-4);
+        padding: var(--space-5) var(--space-6);
         border: 1px solid var(--panel-border-color);
-        border-radius: 30px;
+        border-radius: var(--radius-3xl);
         background:
           linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.36)),
           rgba(255, 255, 255, 0.46);
@@ -146,17 +146,17 @@
       }
       .page-title-group {
         display: grid;
-        gap: 6px;
+        gap: var(--space-2);
       }
       .page-kicker {
         display: inline-flex;
         align-items: center;
         width: fit-content;
-        padding: 6px 12px;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-pill);
+        font-size: var(--font-size-xs);
+        font-weight: var(--font-weight-bold);
+        letter-spacing: var(--letter-spacing-label);
         text-transform: uppercase;
         background: rgba(99, 102, 241, 0.12);
         color: var(--badge-color);
@@ -165,27 +165,27 @@
         margin: 0;
         color: var(--text-muted);
         max-width: 64ch;
-        line-height: 1.5;
+        line-height: var(--line-height-body);
       }
 
       .header-actions {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: var(--space-3);
       }
 
       h1 {
-        font-size: clamp(1.8rem, 2.2vw, 2.4rem);
+        font-size: var(--font-size-3xl);
         margin: 0;
-        letter-spacing: -0.05em;
+        letter-spacing: var(--letter-spacing-tight);
       }
 
       button {
         cursor: pointer;
         border: 1px solid rgba(255, 255, 255, 0.18);
-        border-radius: 999px;
-        font-weight: 800;
-        padding: 10px 18px;
+        border-radius: var(--radius-pill);
+        font-weight: var(--font-weight-bold);
+        padding: var(--space-2) var(--space-5);
         background:
           linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
           var(--button-primary-bg);
@@ -194,9 +194,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        min-height: 40px;
-        box-shadow: 0 12px 28px -24px rgba(15, 23, 42, 0.65);
+        gap: var(--space-2);
+        min-height: var(--control-height);
+        box-shadow: var(--shadow-sm);
         transition:
           transform 0.16s ease,
           box-shadow 0.16s ease,
@@ -244,25 +244,14 @@
 
       .panel {
         background: var(--panel-background);
-        border-radius: 28px;
-        padding: clamp(20px, 3vw, 32px);
+        border-radius: var(--radius-2xl);
+        padding: clamp(var(--space-5), 3vw, var(--space-8));
         box-shadow: var(--panel-shadow);
-        margin-bottom: 24px;
+        margin-bottom: var(--space-6);
         border: 1px solid var(--panel-border-color);
         backdrop-filter: blur(14px);
       }
 
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
 
       /* Login page specific styles */
       .login-page-wrapper {
@@ -335,7 +324,7 @@
         width: 56px;
         height: 56px;
         margin: 0 auto 16px;
-        background: linear-gradient(135deg, var(--button-primary-bg), #8b5cf6);
+        background: linear-gradient(135deg, var(--button-primary-bg), #4338ca);
         border-radius: 16px;
         display: flex;
         align-items: center;
@@ -644,6 +633,7 @@
       .status-pill[data-status='canceled'],
       .status-pill[data-status='expired'],
       .status-pill[data-status='trial_expired'],
+      .status-pill[data-status='failed'],
       .status-pill[data-status='suspended'] {
         background: var(--status-danger-bg);
         color: var(--status-danger-color);
@@ -1725,13 +1715,6 @@
         font-weight: 500;
       }
 
-      .hidden {
-        display: none;
-      }
-
-      [hidden] {
-        display: none !important;
-      }
 
       .dashboard-legend {
         position: sticky;
@@ -2326,7 +2309,7 @@
       }
 
       .two-factor-settings-fields input.two-factor-manual-key {
-        font-family: 'Consolas', 'SFMono-Regular', monospace;
+        font-family: var(--font-mono);
         letter-spacing: 0.16em;
       }
 
@@ -3324,11 +3307,7 @@
       .setup-checklist-grid {
         display: grid;
         gap: 12px;
-      }
-      @media (min-width: 900px) {
-        .setup-checklist-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr));
-        }
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
       .setup-checklist-item {
         display: grid;
@@ -3338,6 +3317,18 @@
         border: 1px solid var(--panel-border-color);
         background:
           radial-gradient(circle at top right, rgba(245, 158, 11, 0.13), transparent 6rem),
+          var(--input-background);
+      }
+      .setup-checklist-item[data-health-state='verified'] {
+        border-color: rgba(34, 197, 94, 0.32);
+        background:
+          radial-gradient(circle at top right, rgba(34, 197, 94, 0.12), transparent 7rem),
+          var(--input-background);
+      }
+      .setup-checklist-item[data-health-state='failed'] {
+        border-color: rgba(248, 113, 113, 0.36);
+        background:
+          radial-gradient(circle at top right, rgba(248, 113, 113, 0.12), transparent 7rem),
           var(--input-background);
       }
       .setup-checklist-item strong {
@@ -3350,6 +3341,47 @@
       }
       .setup-checklist-item .status-pill {
         width: fit-content;
+      }
+      .system-health-panel {
+        overflow: hidden;
+      }
+      .system-health-summary {
+        display: grid;
+        min-width: min(240px, 100%);
+        gap: 8px;
+        justify-items: end;
+      }
+      .system-health-progress {
+        width: min(240px, 100%);
+        height: 8px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+      }
+      .system-health-progress > span {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #0f766e, #22c55e);
+        transition: width 0.25s ease;
+      }
+      .setup-checklist-item .system-health-meta {
+        min-height: 2.5em;
+        color: var(--text-muted-soft);
+        font-size: 0.78rem;
+      }
+      .system-health-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-self: end;
+        padding-top: 6px;
+      }
+      .system-health-actions button {
+        min-height: 36px;
+        padding: 7px 12px;
+        font-size: 0.78rem;
       }
       .admin-metric-grid {
         display: grid;
@@ -3445,6 +3477,15 @@
           align-items: stretch;
           flex-direction: column;
         }
+        .system-health-summary {
+          justify-items: stretch;
+        }
+        .system-health-progress {
+          width: 100%;
+        }
+        .system-health-actions button {
+          flex: 1 1 120px;
+        }
       }
       .panel-disclosure {
         margin-top: 20px;
@@ -3507,28 +3548,10 @@
       }
 
       /* ── Skip to content (accessibility) ── */
-      .skip-link {
-        position: absolute;
-        top: -40px;
-        left: 16px;
-        background: var(--button-primary-bg);
-        color: var(--button-primary-color);
-        padding: 8px 16px;
-        border-radius: 8px;
-        font-weight: 600;
-        z-index: 1000;
-        transition: top 0.2s ease;
-        text-decoration: none;
-      }
-
-      .skip-link:focus {
-        top: 16px;
-      }
-
       /* Calmer admin UI pass: denser layout, quieter surfaces, clearer hierarchy. */
       :root {
-        font-family: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-        --panel-shadow: 0 18px 48px -38px rgba(15, 23, 42, 0.45);
+        font-family: var(--font-sans);
+        --panel-shadow: var(--shadow-md);
         --button-primary-shadow: 0 12px 28px -22px rgba(15, 118, 110, 0.7);
         --button-secondary-shadow: 0 8px 18px -16px rgba(15, 23, 42, 0.32);
         --button-danger-shadow: 0 8px 18px -16px rgba(185, 28, 28, 0.42);
@@ -3548,8 +3571,8 @@
       }
 
       .container {
-        max-width: 1180px;
-        padding: 22px 20px 48px;
+        max-width: var(--content-width-admin);
+        padding: var(--space-6) var(--space-5) var(--space-12);
       }
 
       header,
@@ -3566,9 +3589,9 @@
       }
 
       header {
-        border-radius: 14px;
-        padding: 18px 20px;
-        margin-bottom: 20px;
+        border-radius: var(--radius-lg);
+        padding: var(--space-4) var(--space-5);
+        margin-bottom: var(--space-5);
       }
 
       h1,
@@ -3586,16 +3609,16 @@
       }
 
       button {
-        min-height: 36px;
-        border-radius: 10px;
-        padding: 8px 14px;
-        font-weight: 700;
+        min-height: var(--control-height-compact);
+        border-radius: var(--radius-md);
+        padding: var(--space-2) var(--space-4);
+        font-weight: var(--font-weight-bold);
         background: var(--button-primary-bg);
         transition:
-          background 0.14s ease,
-          border-color 0.14s ease,
-          color 0.14s ease,
-          box-shadow 0.14s ease;
+          background var(--duration-fast) var(--ease-standard),
+          border-color var(--duration-fast) var(--ease-standard),
+          color var(--duration-fast) var(--ease-standard),
+          box-shadow var(--duration-fast) var(--ease-standard);
       }
 
       button:hover:not(:disabled) {
@@ -3631,9 +3654,9 @@
       }
 
       .panel {
-        border-radius: 14px;
-        padding: clamp(18px, 2.2vw, 24px);
-        margin-bottom: 18px;
+        border-radius: var(--radius-lg);
+        padding: clamp(var(--space-4), 2.2vw, var(--space-6));
+        margin-bottom: var(--space-5);
       }
 
       .dashboard-legend {

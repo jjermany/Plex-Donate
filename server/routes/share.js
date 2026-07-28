@@ -349,6 +349,8 @@ function buildShareResponse({
           lastPaymentAt: donor.lastPaymentAt,
           accessExpiresAt: donor.accessExpiresAt || null,
           hasPassword: Boolean(donor.hasPassword),
+          emailVerified: Boolean(donor.emailVerified),
+          emailVerifiedAt: donor.emailVerifiedAt || null,
           plexLinked: hasPlexLink(donor),
           plexAccountId: donor.plexAccountId || null,
           plexEmail: donor.plexEmail || '',
