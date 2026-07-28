@@ -1077,7 +1077,19 @@
                     <input name="token" type="password" autocomplete="new-password" />
                   </label>
                   <div class="library-selector" data-library-picker>
-                    <label class="library-selector-label">Library access</label>
+                    <div class="library-selector-heading">
+                      <div>
+                        <span class="library-selector-label" id="plex-library-label">
+                          Library access
+                        </span>
+                        <p class="help" data-library-help>
+                          Test the Plex connection to load your server's libraries.
+                        </p>
+                      </div>
+                      <span class="library-selector-count" data-library-count hidden>
+                        0 selected
+                      </span>
+                    </div>
                     <input
                       name="librarySectionIds"
                       type="hidden"
@@ -1088,22 +1100,56 @@
                         type="button"
                         class="secondary library-selector-toggle"
                         data-library-toggle
-                        aria-haspopup="true"
+                        aria-labelledby="plex-library-label plex-library-toggle-value"
+                        aria-controls="plex-library-dropdown"
                         aria-expanded="false"
                         disabled
                       >
-                        Select libraries
+                        <span class="library-selector-toggle-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none">
+                            <path d="M4 6.5h16v11H4z" />
+                            <path d="M7 10h10M7 14h6" />
+                          </svg>
+                        </span>
+                        <span class="library-selector-toggle-copy">
+                          <span class="library-selector-toggle-kicker">Shared with new subscribers</span>
+                          <strong id="plex-library-toggle-value" data-library-toggle-value>
+                            Select libraries
+                          </strong>
+                        </span>
+                        <svg class="library-selector-chevron" viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="m6 8 4 4 4-4" />
+                        </svg>
                       </button>
-                      <p class="help" data-library-help>
-                        Test the Plex connection to load your server's libraries.
-                      </p>
-                      <p
-                        class="muted-text subtle-text library-selector-summary"
+                      <div
+                        class="library-selector-summary"
                         data-library-summary
+                        role="status"
+                        aria-live="polite"
                         hidden
-                      ></p>
+                      ></div>
                     </div>
-                    <div class="library-selector-dropdown" data-library-dropdown hidden>
+                    <div
+                      class="library-selector-dropdown"
+                      id="plex-library-dropdown"
+                      data-library-dropdown
+                      role="group"
+                      aria-labelledby="plex-library-dialog-title"
+                      hidden
+                    >
+                      <div class="library-selector-dropdown-header">
+                        <div>
+                          <strong id="plex-library-dialog-title">Choose libraries</strong>
+                          <span>Every selected library is included with new Plex invites.</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="library-selector-select-all"
+                          data-library-select-all
+                        >
+                          Select all
+                        </button>
+                      </div>
                       <div class="library-selector-options" data-library-options></div>
                       <p class="library-selector-empty" data-library-empty hidden>
                         No libraries were returned. Check your Plex permissions and try again.
@@ -1112,8 +1158,8 @@
                         <button type="button" class="secondary" data-library-clear>
                           Clear selection
                         </button>
-                        <button type="button" class="secondary" data-library-apply>
-                          OK
+                        <button type="button" data-library-apply>
+                          Done
                         </button>
                       </div>
                     </div>

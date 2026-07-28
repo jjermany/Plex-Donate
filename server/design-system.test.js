@@ -86,3 +86,26 @@ test('shared component primitives replace duplicated page-level definitions', ()
 
   assert.doesNotMatch(readPublicFile('admin.css'), /\.skip-link\s*\{/);
 });
+
+test('Plex library picker uses the shared visual system and accessible controls', () => {
+  const adminHtml = readPublicFile('index.html');
+  const adminCss = readPublicFile('admin.css');
+  const adminJs = readPublicFile('admin.js');
+
+  assert.match(adminHtml, /aria-controls="plex-library-dropdown"/);
+  assert.match(adminHtml, /data-library-toggle-value/);
+  assert.match(adminHtml, /data-library-count/);
+  assert.match(adminHtml, /data-library-select-all/);
+  assert.match(adminHtml, /data-library-summary[\s\S]*role="status"/);
+
+  assert.match(adminCss, /\.library-option\[data-selected='true'\]/);
+  assert.match(adminCss, /\.library-selection-chip/);
+  assert.match(adminCss, /\.library-selector-toggle-icon/);
+  assert.match(adminCss, /max-height:\s*min\(72dvh,\s*560px\)/);
+  assert.match(adminCss, /var\(--color-accent-soft\)/);
+  assert.match(adminCss, /var\(--radius-xl\)/);
+
+  assert.match(adminJs, /markSettingsFormDirty\(form\)/);
+  assert.match(adminJs, /plexLibrarySelectAllButton\.addEventListener/);
+  assert.match(adminJs, /library-option-icon/);
+});

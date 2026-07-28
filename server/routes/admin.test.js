@@ -1535,6 +1535,57 @@ test('system health records saved integration tests and resets after changes', a
   assert.ok(Number.isFinite(Date.parse(body.health.appTestedAt)));
 });
 
+test('successful Plex verification records health when server discovery mutates the test config', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  const savedPlex = {
+    baseUrl: 'https://plex.local',
+    token: 'plex-token',
+    serverIdentifier: '',
+    librarySectionIds: '',
+  };
+
+  let response = await agent.request('/api/admin/settings/plex', {
+    method: 'PUT',
+    headers: { 'x-csrf-token': csrfToken },
+    body: savedPlex,
+  });
+  assert.equal(response.status, 200);
+
+  const originalVerifyConnection = plexService.verifyConnection;
+  plexService.verifyConnection = async (config) => {
+    config.serverIdentifier = 'resolved-server-id';
+    return {
+      message: 'Plex invite configuration verified successfully.',
+      details: {
+        serverIdentifier: config.serverIdentifier,
+        librarySectionIds: [],
+      },
+      libraries: [{ id: '1', title: 'Movies' }],
+    };
+  };
+  t.after(() => {
+    plexService.verifyConnection = originalVerifyConnection;
+  });
+
+  response = await agent.post('/api/admin/settings/plex/test', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: savedPlex,
+  });
+  assert.equal(response.status, 200);
+  let body = await response.json();
+  assert.equal(body.healthRecorded, true);
+  assert.equal(body.health.plexStatus, 'verified');
+  assert.match(body.health.plexMessage, /verified successfully/i);
+  assert.ok(Number.isFinite(Date.parse(body.health.plexTestedAt)));
+
+  response = await agent.get('/api/admin/settings');
+  assert.equal(response.status, 200);
+  body = await response.json();
+  assert.equal(body.settings.health.plexStatus, 'verified');
+});
+
 test('POST /api/admin/announcements/email sends announcement email to donors', async (t) => {
   resetDatabase();
   const agent = await startServer(t);

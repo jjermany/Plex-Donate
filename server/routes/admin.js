@@ -1591,6 +1591,7 @@ router.post(
     const group = req.params.group;
     const overrides = req.body || {};
     let testedConfig = null;
+    let testedSavedSettings = false;
 
     if (!TESTABLE_SETTINGS_GROUPS.has(group)) {
       return res.status(404).json({
@@ -1603,9 +1604,17 @@ router.post(
       let result;
       if (group === 'app') {
         testedConfig = settingsStore.previewGroup('app', overrides);
+        testedSavedSettings = settingsGroupsEqual(
+          settingsStore.getGroup(group),
+          testedConfig
+        );
         result = verifyAppSettings(testedConfig);
       } else if (group === 'paypal') {
         testedConfig = settingsStore.previewGroup('paypal', overrides);
+        testedSavedSettings = settingsGroupsEqual(
+          settingsStore.getGroup(group),
+          testedConfig
+        );
         const verification = await paypalService.verifyConnection(testedConfig);
         const environment =
           (testedConfig.apiBase || '').includes('sandbox') ? 'sandbox' : 'live';
@@ -1616,9 +1625,17 @@ router.post(
         };
       } else if (group === 'smtp') {
         testedConfig = settingsStore.previewGroup('smtp', overrides);
+        testedSavedSettings = settingsGroupsEqual(
+          settingsStore.getGroup(group),
+          testedConfig
+        );
         result = await emailService.verifyConnection(testedConfig);
       } else if (group === 'plex') {
         testedConfig = settingsStore.previewGroup('plex', overrides);
+        testedSavedSettings = settingsGroupsEqual(
+          settingsStore.getGroup(group),
+          testedConfig
+        );
         result = await plexService.verifyConnection(testedConfig);
       }
 
@@ -1627,10 +1644,6 @@ router.post(
         result && result.message
           ? result.message
           : `${group} settings verified successfully.`;
-      const testedSavedSettings = settingsGroupsEqual(
-        settingsStore.getGroup(group),
-        testedConfig
-      );
       const health = testedSavedSettings
         ? recordSettingsHealth(group, 'verified', message)
         : settingsStore.getGroup('health');
@@ -1643,10 +1656,6 @@ router.post(
       });
     } catch (err) {
       logger.warn(`Failed to verify ${group} settings`, err.message);
-      const testedSavedSettings = Boolean(
-        testedConfig &&
-          settingsGroupsEqual(settingsStore.getGroup(group), testedConfig)
-      );
       const health = testedSavedSettings
         ? recordSettingsHealth(
             group,

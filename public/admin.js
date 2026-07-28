@@ -228,6 +228,12 @@
       const plexLibraryToggle = plexLibraryPicker
         ? plexLibraryPicker.querySelector('[data-library-toggle]')
         : null;
+      const plexLibraryToggleValue = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-toggle-value]')
+        : null;
+      const plexLibraryCount = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-count]')
+        : null;
       const plexLibraryDropdown = plexLibraryPicker
         ? plexLibraryPicker.querySelector('[data-library-dropdown]')
         : null;
@@ -248,6 +254,9 @@
         : null;
       const plexLibraryApplyButton = plexLibraryPicker
         ? plexLibraryPicker.querySelector('[data-library-apply]')
+        : null;
+      const plexLibrarySelectAllButton = plexLibraryPicker
+        ? plexLibraryPicker.querySelector('[data-library-select-all]')
         : null;
       const paypalPlanSection = document.getElementById('paypal-plan-management');
       const paypalPlanBody = document.getElementById('paypal-plan-body');
@@ -2396,7 +2405,7 @@
       }
 
       function updatePlexLibraryToggleLabel() {
-        if (!plexLibraryToggle) {
+        if (!plexLibraryToggleValue) {
           return;
         }
         const selection = getPlexLibrarySelection();
@@ -2407,11 +2416,29 @@
         const count = hasLoadedLibraries ? selection.length : rawSelection.length;
 
         if (count === 1) {
-          plexLibraryToggle.textContent = '1 library selected';
+          plexLibraryToggleValue.textContent = '1 library selected';
         } else if (count > 1) {
-          plexLibraryToggle.textContent = `${count} libraries selected`;
+          plexLibraryToggleValue.textContent = `${count} libraries selected`;
         } else {
-          plexLibraryToggle.textContent = 'Select libraries';
+          plexLibraryToggleValue.textContent = 'Select libraries';
+        }
+
+        if (plexLibraryCount) {
+          plexLibraryCount.textContent = `${count} selected`;
+          plexLibraryCount.hidden = count === 0;
+        }
+        if (plexLibrarySelectAllButton) {
+          const availableCount = Array.isArray(state.plexLibraries)
+            ? state.plexLibraries.length
+            : 0;
+          const allSelected = availableCount > 0 && count === availableCount;
+          plexLibrarySelectAllButton.textContent = allSelected
+            ? 'Clear all'
+            : 'Select all';
+          plexLibrarySelectAllButton.setAttribute(
+            'aria-pressed',
+            allSelected ? 'true' : 'false'
+          );
         }
       }
 
@@ -2443,7 +2470,8 @@
             return;
           }
           const label = document.createElement('label');
-          label.className = 'checkbox-row library-option';
+          label.className = 'library-option';
+          label.dataset.selected = selected.has(id) ? 'true' : 'false';
           const checkbox = document.createElement('input');
           checkbox.type = 'checkbox';
           checkbox.value = id;
@@ -2457,13 +2485,34 @@
             }
             const nextSelection = Array.from(rawSelection);
             setPlexLibrarySelection(nextSelection, { rawValue: nextSelection });
+            label.dataset.selected = checkbox.checked ? 'true' : 'false';
+            const form = plexLibraryPicker
+              ? plexLibraryPicker.closest('form')
+              : null;
+            if (form) {
+              markSettingsFormDirty(form);
+            }
             updatePlexLibrarySummary();
             updatePlexLibraryToggleLabel();
           });
+          const icon = document.createElement('span');
+          icon.className = 'library-option-icon';
+          icon.setAttribute('aria-hidden', 'true');
+          icon.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="14" rx="2.5"></rect><path d="M7 9h10M7 13h7"></path><circle cx="17" cy="15.5" r="1"></circle></svg>';
+          const copy = document.createElement('span');
+          copy.className = 'library-option-copy';
           const name = document.createElement('span');
+          name.className = 'library-option-name';
           name.textContent = library.title || 'Unnamed library';
+          const detail = document.createElement('span');
+          detail.className = 'library-option-detail';
+          detail.textContent = 'Include with new invites';
+          copy.appendChild(name);
+          copy.appendChild(detail);
           label.appendChild(checkbox);
-          label.appendChild(name);
+          label.appendChild(icon);
+          label.appendChild(copy);
           plexLibraryOptions.appendChild(label);
         });
       }
@@ -2485,6 +2534,7 @@
         if (librariesLoaded && missing.length) {
           plexLibrarySummary.textContent =
             'Some previously selected libraries are no longer available. Test the Plex connection again to refresh the list.';
+          plexLibrarySummary.dataset.tone = 'warning';
           plexLibrarySummary.hidden = false;
           return;
         }
@@ -2492,12 +2542,14 @@
         if (!librariesLoaded && rawSelection.length) {
           plexLibrarySummary.textContent =
             'Your saved library selection will appear after testing the Plex connection.';
+          plexLibrarySummary.dataset.tone = 'neutral';
           plexLibrarySummary.hidden = false;
           return;
         }
 
         if (librariesLoaded && hasLibraries && validatedSelection.length === 0) {
           plexLibrarySummary.textContent = 'No libraries selected yet.';
+          plexLibrarySummary.dataset.tone = 'neutral';
           plexLibrarySummary.hidden = false;
           return;
         }
@@ -2513,13 +2565,28 @@
             .filter(Boolean);
 
           if (names.length) {
-            plexLibrarySummary.textContent = `Selected libraries: ${names.join(', ')}.`;
+            plexLibrarySummary.replaceChildren();
+            plexLibrarySummary.dataset.tone = 'selected';
+            const label = document.createElement('span');
+            label.className = 'library-selection-label';
+            label.textContent = 'Sharing';
+            const chips = document.createElement('span');
+            chips.className = 'library-selection-chips';
+            names.forEach((name) => {
+              const chip = document.createElement('span');
+              chip.className = 'library-selection-chip';
+              chip.textContent = name;
+              chips.appendChild(chip);
+            });
+            plexLibrarySummary.appendChild(label);
+            plexLibrarySummary.appendChild(chips);
             plexLibrarySummary.hidden = false;
             return;
           }
         }
 
         plexLibrarySummary.textContent = '';
+        delete plexLibrarySummary.dataset.tone;
         plexLibrarySummary.hidden = true;
       }
 
@@ -2597,6 +2664,12 @@
         plexLibraryToggle.setAttribute('aria-expanded', 'true');
         document.addEventListener('click', handlePlexLibraryDocumentClick, true);
         document.addEventListener('keydown', handlePlexLibraryKeydown);
+        const firstCheckbox = plexLibraryOptions
+          ? plexLibraryOptions.querySelector('input[type="checkbox"]')
+          : null;
+        if (firstCheckbox) {
+          firstCheckbox.focus();
+        }
       }
 
       function handlePlexLibraryDocumentClick(event) {
@@ -2610,6 +2683,14 @@
       }
 
       function handlePlexLibraryKeydown(event) {
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.handleDialogKeydown(
+            event,
+            plexLibraryDropdown,
+            () => closePlexLibraryDropdown({ focusToggle: true })
+          );
+          return;
+        }
         if (event.key === 'Escape') {
           closePlexLibraryDropdown({ focusToggle: true });
         }
@@ -2640,6 +2721,39 @@
         plexLibraryClearButton.addEventListener('click', (event) => {
           event.preventDefault();
           setPlexLibrarySelection([], { rawValue: [] });
+          const form = plexLibraryPicker
+            ? plexLibraryPicker.closest('form')
+            : null;
+          if (form) {
+            markSettingsFormDirty(form);
+          }
+          updatePlexLibraryOptions();
+          updatePlexLibrarySummary();
+          updatePlexLibraryToggleLabel();
+        });
+      }
+
+      if (plexLibrarySelectAllButton) {
+        plexLibrarySelectAllButton.addEventListener('click', (event) => {
+          event.preventDefault();
+          const libraries = Array.isArray(state.plexLibraries)
+            ? state.plexLibraries
+            : [];
+          const currentSelection = getPlexLibrarySelection();
+          const allSelected =
+            libraries.length > 0 && currentSelection.length === libraries.length;
+          const nextSelection = allSelected
+            ? []
+            : libraries.map((library) => String(library.id));
+          setPlexLibrarySelection(nextSelection, {
+            rawValue: nextSelection,
+          });
+          const form = plexLibraryPicker
+            ? plexLibraryPicker.closest('form')
+            : null;
+          if (form) {
+            markSettingsFormDirty(form);
+          }
           updatePlexLibraryOptions();
           updatePlexLibrarySummary();
           updatePlexLibraryToggleLabel();
