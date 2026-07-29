@@ -110,6 +110,10 @@ const state = {
       const subscriptionCta = document.getElementById('subscription-cta');
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
+      const accessOptionsTitle = document.getElementById('access-options-title');
+      const accessOptionsDescription = document.getElementById(
+        'access-options-description'
+      );
       const trialButton = document.getElementById('trial-button');
       const trialStatus = document.getElementById('trial-status');
       const trialPanel = document.getElementById('trial-panel');
@@ -1739,7 +1743,7 @@ const state = {
 
         const normalizedRefreshError =
           typeof refreshError === 'string' ? refreshError.trim() : '';
-        if (normalizedRefreshError) {
+        if (normalizedRefreshError && !(donor && donor.courtesyAccess)) {
           setStatusText(memberStatusMessage, normalizedRefreshError, 'error');
           memberStatusMessage.classList.add('small');
           return;
@@ -1751,6 +1755,25 @@ const state = {
             'Check your inbox for the verification email to unlock your dashboard.',
             'error'
           );
+          memberStatusMessage.classList.add('small');
+          return;
+        }
+
+        if (donor && donor.courtesyAccess) {
+          const supporting = Boolean(
+            donor.subscriptionId &&
+              String(donor.status || '').toLowerCase() === 'active'
+          );
+          let message = supporting
+            ? 'Your courtesy access is active, and thank you for choosing to help with server costs. Your access does not depend on your PayPal support.'
+            : 'Your courtesy access is active and provided by the server administrator. No payment is required.';
+          if (nextInviteMessage && cooldownActive) {
+            message += ` ${nextInviteMessage}`;
+          } else {
+            message +=
+              ' You can send a referral below when you are ready to welcome someone new.';
+          }
+          setStatusText(memberStatusMessage, message, 'success');
           memberStatusMessage.classList.add('small');
           return;
         }
@@ -2074,7 +2097,8 @@ const state = {
         const isTrial = normalizedStatus === 'trial';
         const isTrialExpired = normalizedStatus === 'trial_expired';
         const subscriptionComplete = normalizedStatus === 'active';
-        const accessActive = subscriptionComplete || isTrial;
+        const courtesyAccess = Boolean(donor && donor.courtesyAccess);
+        const accessActive = subscriptionComplete || isTrial || courtesyAccess;
         const subscriptionStarted = Boolean(donor && donor.subscriptionId) || isTrial;
         const plexLinked = Boolean(donor && donor.plexLinked);
         const plexLinkPending = Boolean(
@@ -2163,6 +2187,9 @@ const state = {
           } else if (!plexLinked) {
             stepSubscriptionNote.textContent =
               'Connect Plex first. Trial and subscription actions unlock immediately afterward.';
+          } else if (courtesyAccess) {
+            stepSubscriptionNote.textContent =
+              'Courtesy access is active. PayPal support is optional and never required for your access.';
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
@@ -2287,7 +2314,10 @@ const state = {
           const _emailVerified = Boolean(_donorForTab.emailVerified);
           const _plexLinked = Boolean(_donorForTab.plexLinked);
           const _status = String(_donorForTab.status || 'pending').toLowerCase();
-          const _accessActive = _status === 'active' || _status === 'trial';
+          const _accessActive =
+            _status === 'active' ||
+            _status === 'trial' ||
+            Boolean(_donorForTab.courtesyAccess);
           if (_emailVerified && (!_plexLinked || !_accessActive)) {
             setActiveDashboardTab('plex', { force: true });
           } else {
@@ -2332,10 +2362,15 @@ const state = {
           : 'Set your preferred streaming email under profile settings.';
 
         const normalizedStatus = (donor.status || 'pending').toLowerCase();
+        const courtesyAccess = Boolean(donor.courtesyAccess);
         const plexLinked = Boolean(donor.plexLinked);
         if (memberStatusEl) {
           memberStatusEl.dataset.status = normalizedStatus;
-          memberStatusEl.textContent = normalizedStatus || 'pending';
+          memberStatusEl.textContent = courtesyAccess
+            ? donor.subscriptionId && normalizedStatus === 'active'
+              ? 'Courtesy + supporting'
+              : 'Courtesy access'
+            : normalizedStatus || 'pending';
         }
 
         if (donor.subscriptionId) {
@@ -2419,7 +2454,7 @@ const state = {
 
         if (trialPanel) {
           const shouldShowTrialPanel =
-            normalizedStatus === 'trial' && trialHasTimeRemaining;
+            !courtesyAccess && normalizedStatus === 'trial' && trialHasTimeRemaining;
           setElementVisibility(trialPanel, shouldShowTrialPanel);
 
           if (shouldShowTrialPanel) {
@@ -2478,7 +2513,13 @@ const state = {
           if (subscriptionButton) {
             subscriptionButton.textContent = defaultSubscriptionButtonLabel;
 
-            if (!emailVerified) {
+            if (courtesyAccess && emailVerified && subscriptionCheckoutEligible) {
+              subscriptionButton.textContent = 'Optionally support through PayPal';
+              subscriptionButtonVisible = true;
+              subscriptionButtonAvailable = true;
+              subscriptionNoteMessage =
+                'Your access is already covered. If you choose to help, PayPal opens in a new tab.';
+            } else if (!emailVerified) {
               subscriptionButtonVisible = true;
               subscriptionButtonAvailable = false;
               subscriptionNoteMessage =
@@ -2532,7 +2573,11 @@ const state = {
           }
 
           if (trialButton || trialStatus) {
-            if (!emailVerified) {
+            if (courtesyAccess) {
+              trialButtonHidden = true;
+              trialButtonAvailable = false;
+              trialStatusMessage = '';
+            } else if (!emailVerified) {
               trialButtonHidden = false;
               trialButtonAvailable = false;
               trialStatusMessage =
@@ -2607,6 +2652,17 @@ const state = {
             subscriptionButtonVisibleNow || trialVisible || trialMessageVisible;
 
           setElementVisibility(subscriptionCta, shouldShowSubscriptionCta);
+        }
+
+        if (accessOptionsTitle) {
+          accessOptionsTitle.textContent = courtesyAccess
+            ? 'Optional server support'
+            : '7-day risk-free trial';
+        }
+        if (accessOptionsDescription) {
+          accessOptionsDescription.textContent = courtesyAccess
+            ? 'Your courtesy access does not depend on donating. If you ever want to help with monthly server costs, you can choose to support through PayPal below—there is no obligation.'
+            : 'Start watching for 7 days with no payment information required. PayPal checkout is only needed if you decide to keep access after the trial.';
         }
 
         profileEmail.value = donor.email || '';
@@ -3767,6 +3823,7 @@ const state = {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               email: inviteEmail.value.trim(),
+              intent: inviteIntent,
               note:
                 inviteIntent === 'restore'
                   ? `Access recovery${inviteNote.value.trim() ? `: ${inviteNote.value.trim()}` : ''}`

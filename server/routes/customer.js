@@ -96,6 +96,10 @@ const {
   getInviteEmailDiagnostics,
 } = require('../utils/validation');
 const { resolvePublicBaseUrl } = require('../utils/public-base-url');
+const {
+  hasActivePaidAccess,
+  canSendReferralInvites,
+} = require('../utils/donor-entitlements');
 
 const router = express.Router();
 
@@ -617,6 +621,8 @@ function buildDashboardResponse({
           plexLinked: hasPlexLink(donor),
           plexEmailMatches: donor.plexAccountId ? plexEmailsMatch(donor) : true,
           plexRequiresRelink: requiresPlexRelink(donor),
+          courtesyAccess: Boolean(donor.courtesyAccess),
+          canSendReferralInvites: canSendReferralInvites(donor),
         }
       : null,
     invite: invite || null,
@@ -726,11 +732,68 @@ async function finalizeCustomerAuthentication(req, res, donor, options = {}) {
 }
 
 function hasActiveSubscription(donor) {
-  if (!donor) {
-    return false;
+  return hasActivePaidAccess(donor);
+}
+
+async function ensureCourtesyPlexAccess(donor) {
+  if (!donor || !donor.courtesyAccess || !plexService.isConfigured()) {
+    return null;
   }
-  const status = (donor.status || '').toLowerCase();
-  return status === 'active';
+
+  const sharesResult = await plexService.getCurrentPlexShares();
+  if (
+    sharesResult.success &&
+    plexService.checkDonorHasPlexShare(donor, sharesResult.shares)
+  ) {
+    return null;
+  }
+
+  const plexEmail = (donor.plexEmail || donor.email || '').trim();
+  if (!plexEmail) {
+    return null;
+  }
+  const inviteData = await plexService.createInvite({
+    email: plexEmail,
+    friendlyName: donor.name || undefined,
+    invitedId: donor.plexAccountId || undefined,
+  });
+  const invite = createInviteRecord({
+    donorId: donor.id,
+    inviteId: inviteData.inviteId,
+    inviteUrl: inviteData.inviteUrl || '',
+    inviteStatus: inviteData.status || null,
+    invitedAt: inviteData.invitedAt || new Date().toISOString(),
+    sharedLibraries: Array.isArray(inviteData.sharedLibraries)
+      ? inviteData.sharedLibraries
+      : undefined,
+    recipientEmail: plexEmail,
+    note: 'Admin-granted courtesy access',
+    plexAccountId: donor.plexAccountId,
+    plexEmail: donor.plexEmail,
+  });
+  const inviteUrl =
+    invite.inviteUrl ||
+    'https://app.plex.tv/desktop#!/settings/manage-library-access';
+  try {
+    await emailService.sendInviteEmail({
+      to: donor.email,
+      inviteUrl,
+      name: donor.name,
+      subscriptionId: donor.subscriptionId,
+    });
+    markInviteEmailSent(invite.id);
+  } catch (err) {
+    logger.warn('Courtesy Plex access was granted but its email could not be sent', {
+      donorId: donor.id,
+      error: err && err.message,
+    });
+  }
+  logEvent('invite.courtesy.generated', {
+    donorId: donor.id,
+    inviteId: invite.id,
+    plexInviteId: invite.plexInviteId || null,
+  });
+  return invite;
 }
 
 function getAuthenticatedDonor(req) {
@@ -2035,6 +2098,16 @@ router.get(
       });
 
       let invite = getLatestActiveInviteForDonor(donor.id);
+      if (!invite && updatedDonor.courtesyAccess) {
+        try {
+          invite = await ensureCourtesyPlexAccess(updatedDonor);
+        } catch (err) {
+          logger.warn('Failed to grant Plex access after courtesy account linking', {
+            donorId: updatedDonor.id,
+            error: err && err.message,
+          });
+        }
+      }
       if (invite) {
         invite = updateInvitePlexDetails(invite.id, {
           plexAccountId: identity.plexAccountId,
@@ -2159,6 +2232,8 @@ router.post(
     const requestedName = req.body && typeof req.body.name === 'string'
       ? req.body.name.trim()
       : donor.name || '';
+    const inviteIntent =
+      req.body && req.body.intent === 'restore' ? 'restore' : 'referral';
 
     if (!requestedEmail) {
       return res
@@ -2170,10 +2245,10 @@ router.post(
       return res.status(400).json({ error: 'Please provide a valid email address.' });
     }
 
-    if (!hasActiveSubscription(donor)) {
+    if (!canSendReferralInvites(donor)) {
       return res.status(403).json({
         error:
-          'An active subscription is required to generate a new invite.',
+          'An active subscription or admin-confirmed courtesy access is required to generate a referral invite.',
       });
     }
 
@@ -2218,7 +2293,7 @@ router.post(
       updates.name = requestedName;
     }
 
-    if (Object.keys(updates).length > 0) {
+    if (inviteIntent === 'restore' && Object.keys(updates).length > 0) {
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
@@ -2375,6 +2450,13 @@ router.post(
   asyncHandler(async (req, res) => {
     const donor = req.customer.donor;
     res.locals.sessionToken = ensureSessionToken(req);
+
+    if (donor.courtesyAccess) {
+      return res.status(409).json({
+        error:
+          'Your courtesy access is already active. Optional PayPal support remains available if you would like to help with server costs.',
+      });
+    }
 
     if (!hasPlexLink(donor)) {
       return res.status(409).json({

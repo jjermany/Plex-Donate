@@ -32,6 +32,9 @@ const {
   deleteSupportRequestById,
   addSupportMessageToRequest,
   listInvitesForDonor,
+  createDonor,
+  getDonorByEmailAddress,
+  setDonorCourtesyAccess,
 } = require('../db');
 const { requireAdmin } = require('../middleware/auth');
 const paypalService = require('../services/paypal');
@@ -63,6 +66,9 @@ const {
 } = require('../utils/plex');
 const { getInviteEmailDiagnostics } = require('../utils/validation');
 const { resolvePublicBaseUrl } = require('../utils/public-base-url');
+const {
+  hasAccessEntitlement,
+} = require('../utils/donor-entitlements');
 const {
   buildOtpAuthUrl,
   DEFAULT_ISSUER,
@@ -1234,6 +1240,209 @@ router.get(
   })
 );
 
+router.patch(
+  '/subscribers/:id/courtesy-access',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+    if (typeof req.body.courtesyAccess !== 'boolean') {
+      return res.status(400).json({
+        error: 'courtesyAccess must be true or false',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const updated = setDonorCourtesyAccess(donorId, req.body.courtesyAccess);
+    logEvent('donor.courtesy_access.updated', {
+      donorId,
+      courtesyAccess: updated.courtesyAccess,
+      previousCourtesyAccess: Boolean(donor.courtesyAccess),
+    });
+
+    const { donors, plexContext } = await buildDonorListWithPlex();
+    return res.json({
+      success: true,
+      donor: donors.find((entry) => entry.id === donorId) || updated,
+      message: updated.courtesyAccess
+        ? 'Courtesy access granted. This member can use access and referral features without a paid subscription.'
+        : 'Courtesy access removed. Plex access was not revoked.',
+      plex: {
+        configured: plexContext.configured,
+        error: plexContext.error,
+      },
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+function buildPlexImportCandidates(shares, donors) {
+  const donorEmails = new Set();
+  const donorIds = new Set();
+  (Array.isArray(donors) ? donors : []).forEach((donor) => {
+    collectDonorEmailCandidates(donor).forEach((value) => donorEmails.add(value));
+    collectDonorIdCandidates(donor).forEach((value) => donorIds.add(value));
+  });
+
+  const seen = new Set();
+  return (Array.isArray(shares) ? shares : [])
+    .filter((share) => share && !share.pending)
+    .map((share) => {
+      const email = Array.isArray(share.emails)
+        ? share.emails.map((value) => String(value).trim()).find(Boolean) || ''
+        : '';
+      const accountId = Array.isArray(share.userIds)
+        ? share.userIds.map((value) => String(value).trim()).find(Boolean) || ''
+        : '';
+      const normalizedEmail = normalizeValue(email);
+      const normalizedId = normalizeValue(accountId);
+      const key = normalizedId || normalizedEmail;
+      if (!key || seen.has(key)) {
+        return null;
+      }
+      seen.add(key);
+      return {
+        email,
+        accountId,
+        status: share.status || 'accepted',
+        available:
+          Boolean(normalizedEmail) &&
+          !donorEmails.has(normalizedEmail) &&
+          (!normalizedId || !donorIds.has(normalizedId)),
+        unavailableReason: !normalizedEmail
+          ? 'Plex did not provide an email address'
+          : donorEmails.has(normalizedEmail) || (normalizedId && donorIds.has(normalizedId))
+          ? 'Already linked to a Plex Donate account'
+          : '',
+      };
+    })
+    .filter(Boolean);
+}
+
+router.get(
+  '/plex/import-candidates',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!plexService.isConfigured()) {
+      return res.status(400).json({ error: 'Plex integration is not configured' });
+    }
+    const sharesResult = await plexService.getCurrentPlexShares();
+    if (!sharesResult.success) {
+      return res.status(502).json({
+        error: sharesResult.reason || 'Failed to load existing Plex users',
+      });
+    }
+    const candidates = buildPlexImportCandidates(
+      sharesResult.shares,
+      listDonorsWithDetails()
+    );
+    return res.json({
+      candidates: candidates.filter((candidate) => candidate.available),
+      linkedCount: candidates.filter((candidate) => !candidate.available).length,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
+router.post(
+  '/plex/import-candidates',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const requested = Array.isArray(req.body && req.body.candidates)
+      ? req.body.candidates.slice(0, 100)
+      : [];
+    if (requested.length === 0) {
+      return res.status(400).json({ error: 'Select at least one Plex user' });
+    }
+    if (!plexService.isConfigured()) {
+      return res.status(400).json({ error: 'Plex integration is not configured' });
+    }
+
+    const sharesResult = await plexService.getCurrentPlexShares();
+    if (!sharesResult.success) {
+      return res.status(502).json({
+        error: sharesResult.reason || 'Failed to refresh existing Plex users',
+      });
+    }
+    const authoritative = buildPlexImportCandidates(
+      sharesResult.shares,
+      listDonorsWithDetails()
+    ).filter((candidate) => candidate.available);
+    const byKey = new Map();
+    authoritative.forEach((candidate) => {
+      if (candidate.accountId) {
+        byKey.set(`id:${normalizeValue(candidate.accountId)}`, candidate);
+      }
+      if (candidate.email) {
+        byKey.set(`email:${normalizeValue(candidate.email)}`, candidate);
+      }
+    });
+
+    const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before importing users.',
+      });
+    }
+
+    const imported = [];
+    const skipped = [];
+    for (const selection of requested) {
+      const requestedId = normalizeValue(selection && selection.accountId);
+      const requestedEmail = normalizeValue(selection && selection.email);
+      const candidate =
+        (requestedId && byKey.get(`id:${requestedId}`)) ||
+        (requestedEmail && byKey.get(`email:${requestedEmail}`));
+      if (!candidate || getDonorByEmailAddress(candidate.email)) {
+        skipped.push({
+          email: (selection && selection.email) || '',
+          reason: 'User is no longer available to import',
+        });
+        continue;
+      }
+
+      const donor = createDonor({
+        email: candidate.email,
+        name:
+          selection && typeof selection.name === 'string'
+            ? selection.name.trim()
+            : '',
+        status: 'pending',
+        plexAccountId: candidate.accountId || null,
+        plexEmail: candidate.email,
+        courtesyAccess: true,
+        hadPreexistingAccess: true,
+      });
+      const shareLink = createOrUpdateShareLink({
+        donorId: donor.id,
+        token: nanoid(36),
+        sessionToken: nanoid(48),
+      });
+      imported.push({
+        donor,
+        setupUrl: `${origin}/share/${shareLink.token}`,
+      });
+      logEvent('donor.courtesy_access.imported', {
+        donorId: donor.id,
+        email: donor.email,
+        plexAccountId: donor.plexAccountId,
+      });
+    }
+
+    return res.status(imported.length ? 201 : 409).json({
+      imported,
+      skipped,
+      message: imported.length
+        ? `Imported ${imported.length} existing Plex user${imported.length === 1 ? '' : 's'} with courtesy access.`
+        : 'No selected Plex users were available to import.',
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
 router.post(
   '/subscribers/:id/refresh',
   requireAdmin,
@@ -1944,9 +2153,9 @@ router.post(
     }
 
     const normalizedStatus = normalizeValue(donor.status || '');
-    if (normalizedStatus !== 'active' && normalizedStatus !== 'trial') {
+    if (!hasAccessEntitlement(donor)) {
       return res.status(403).json({
-        error: `Only subscribers with an active subscription or trial can receive Plex invites (current status: ${normalizedStatus || 'unknown'}).`,
+        error: `Only subscribers with paid, trial, or courtesy access can receive Plex invites (current status: ${normalizedStatus || 'unknown'}).`,
         csrfToken: res.locals.csrfToken,
       });
     }
@@ -2169,7 +2378,73 @@ router.post(
     const name =
       payload && typeof payload.name === 'string' ? payload.name.trim() : '';
     const prospectIdRaw = payload && payload.prospectId;
+    const donorIdRaw = payload && payload.donorId;
     const regenerate = Boolean(payload && payload.regenerate);
+    const courtesyAccess = payload && payload.courtesyAccess === true;
+
+    if (courtesyAccess || donorIdRaw) {
+      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+        return res.status(400).json({
+          error: 'A valid contact email is required for courtesy access.',
+          csrfToken: res.locals.csrfToken,
+        });
+      }
+
+      const parsedDonorId = Number.parseInt(donorIdRaw, 10);
+      let donor =
+        Number.isFinite(parsedDonorId) && parsedDonorId > 0
+          ? getDonorById(parsedDonorId)
+          : null;
+      const existingByEmail = !donor ? getDonorByEmailAddress(email) : null;
+      if (existingByEmail) {
+        return res.status(409).json({
+          error:
+            'A Plex Donate account already uses this email. Grant courtesy access from that subscriber’s account details instead.',
+          csrfToken: res.locals.csrfToken,
+        });
+      }
+      if (!donor) {
+        donor = createDonor({
+          email,
+          name,
+          status: 'pending',
+          courtesyAccess: true,
+        });
+      } else if (!donor.courtesyAccess) {
+        donor = setDonorCourtesyAccess(donor.id, true);
+      }
+
+      let shareLink = getShareLinkByDonorId(donor.id);
+      if (!shareLink || regenerate) {
+        shareLink = createOrUpdateShareLink({
+          donorId: donor.id,
+          token: nanoid(36),
+          sessionToken: nanoid(48),
+        });
+      }
+      const origin = resolvePublicBaseUrl(req);
+      if (!origin) {
+        return res.status(503).json({
+          error: 'Public base URL is not configured. Configure it before generating share links.',
+          csrfToken: res.locals.csrfToken,
+        });
+      }
+      logEvent('donor.courtesy_access.invited', {
+        donorId: donor.id,
+        email: donor.email,
+        shareLinkId: shareLink.id,
+        regenerated: Boolean(regenerate),
+      });
+      return res.json({
+        donor,
+        prospect: null,
+        shareLink: {
+          ...shareLink,
+          url: `${origin}/share/${shareLink.token}`,
+        },
+        csrfToken: res.locals.csrfToken,
+      });
+    }
 
     let prospect = null;
     const parsedProspectId = Number.parseInt(prospectIdRaw, 10);
@@ -2519,8 +2794,7 @@ router.post(
       // 3. Clearing would require users to re-link their Plex account if re-invited
       // 4. Only explicit admin revoke should clear the identity link
       const accessEligibleDonors = donorsWithPlex.filter((donor) => {
-        const status = normalizeValue(donor && donor.status);
-        return status === 'active' || status === 'trial';
+        return hasAccessEntitlement(donor);
       });
       let mismatchCount = 0;
       const mismatchedDonors = [];
@@ -2529,8 +2803,7 @@ router.post(
         const donorWithPlex = annotateDonorWithPlex(donor, syncPlexContext);
         const hasShare = donorWithPlex.plexShared;
         const diagnostics = resolvePlexMatchDiagnostics(donor, syncPlexContext);
-        const status = normalizeValue(donor && donor.status);
-        const accessEligible = status === 'active' || status === 'trial';
+        const accessEligible = hasAccessEntitlement(donor);
 
         logger.info('Checked linked donor Plex share state', {
           donorId: donor.id,

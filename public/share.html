@@ -1441,7 +1441,12 @@
           return;
         }
 
-        if (!donor || normalizedStatus === 'active' || hasPlexAccess) {
+        if (
+          !donor ||
+          donor.courtesyAccess ||
+          normalizedStatus === 'active' ||
+          hasPlexAccess
+        ) {
           trialCta.classList.add('hidden');
           if (trialMessage) {
             trialMessage.textContent = DEFAULT_TRIAL_MESSAGE;
@@ -1867,6 +1872,9 @@
         if (!plexLinked) {
           return 'plex';
         }
+        if (donor && donor.courtesyAccess) {
+          return 'complete';
+        }
         if (!['active', 'trial'].includes(normalizedStatus)) {
           return 'activate';
         }
@@ -1905,7 +1913,13 @@
         }
 
         if (completionTitle && completionDescription && completionStatus) {
-          if (normalizedStatus === 'trial') {
+          if (donor && donor.courtesyAccess) {
+            completionTitle.textContent = 'Your courtesy access is ready';
+            completionDescription.textContent =
+              'Your access is provided by the server administrator. Open the supporter dashboard for Plex status, referrals, and optional server support.';
+            completionStatus.textContent =
+              'No payment is required for your courtesy access.';
+          } else if (normalizedStatus === 'trial') {
             completionTitle.textContent = 'Your 7-day trial is active';
             completionDescription.textContent =
               'Your setup is complete. Open the supporter dashboard to check Plex access and subscribe whenever you’re ready.';
@@ -1949,6 +1963,8 @@
           : 'pending'
         ).toLowerCase();
         const isActive = normalizedStatus === 'active';
+        const courtesyAccess = Boolean(donor && donor.courtesyAccess);
+        const canRefer = isActive || courtesyAccess;
         const accessExpiresAt = donor && donor.accessExpiresAt
           ? donor.accessExpiresAt
           : null;
@@ -2009,7 +2025,7 @@
         const hasSevereIssue = !isProspect && severeStatuses.has(normalizedStatus);
         state.hasSevereIssue = hasSevereIssue;
         applyTrialCtaFromState();
-        const inviteLocked = isProspect || !plexLinked || !isActive || limitReached;
+        const inviteLocked = isProspect || !plexLinked || !canRefer || limitReached;
 
         if (generateButton) {
           generateButton.dataset.blocked = inviteLocked ? 'true' : 'false';
@@ -2049,6 +2065,10 @@
             actionStatus.textContent =
               'This subscription needs attention before another referral invite can be generated. Contact the server admin if you need help.';
             actionStatus.className = 'status-text error';
+          } else if (courtesyAccess) {
+            actionStatus.textContent =
+              'Courtesy access is active. You can send one referral invite each month.';
+            actionStatus.className = 'status-text success';
           } else if (normalizedStatus === 'trial') {
             if (trialCountdownLabel) {
               actionStatus.textContent = `Your 7-day risk-free trial is active. Access expires in ${trialCountdownLabel}. No billing info was needed to start.`;
@@ -2159,9 +2179,9 @@
         } else if (!plexLinked && !limitReached) {
           inviteDescription.textContent =
             'Link your Plex account to unlock checkout and referral invites.';
-        } else if (!isActive && !limitReached) {
+        } else if (!canRefer && !limitReached) {
           inviteDescription.textContent =
-            'Referral invites unlock once your subscription is active.';
+            'Referral invites unlock with an active subscription or admin-confirmed courtesy access.';
         }
 
         const identifier =
@@ -2198,6 +2218,10 @@
           } else if (isActive) {
             paypalStatus.textContent = 'Subscription is already active.';
             paypalStatus.className = 'status-text small success';
+          } else if (courtesyAccess) {
+            paypalStatus.textContent =
+              'Your access is already covered. PayPal support is optional and never required.';
+            paypalStatus.className = 'status-text small info';
           } else if (hasSevereIssue) {
             paypalStatus.textContent = 'Subscription needs attention.';
             paypalStatus.className = 'status-text small error';
@@ -2209,7 +2233,7 @@
 
         // Show account management for active donors
         if (accountManagement) {
-          if (isActive && accountReady) {
+          if ((isActive || courtesyAccess) && accountReady) {
             accountManagement.classList.remove('hidden');
           } else {
             accountManagement.classList.add('hidden');
@@ -2493,6 +2517,7 @@
             headers,
             body: JSON.stringify({
               email,
+              intent: inviteIntent,
               name:
                 inviteIntent === 'restore' && !name
                   ? 'Access recovery'

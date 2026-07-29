@@ -347,6 +347,19 @@ async function revokeDonorAccess(donor, options = {}) {
     return;
   }
 
+  if (donor.courtesyAccess) {
+    logger.info('Preserving Plex access for donor with courtesy access', {
+      donorId: donor.id,
+      email: donor.email,
+    });
+    logEvent('plex.access.preserved', {
+      donorId: donor.id,
+      email: donor.email,
+      reason: 'courtesy_access',
+    });
+    return;
+  }
+
   // Preserve access for users who had it before subscribing
   if (donor.hadPreexistingAccess) {
     logger.info('Preserving Plex access for donor with pre-existing access', {

@@ -1466,6 +1466,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(firstResponse.body.invite.recipientEmail, firstInviteEmail);
       assert.equal(firstResponse.body.inviteLimitReached, true);
       assert.equal(typeof firstResponse.body.nextInviteAvailableAt, 'string');
+      assert.equal(getDonorById(donor.id).email, 'cooldown@example.com');
+      assert.equal(getDonorById(donor.id).name, 'Cooldown Donor');
       const firstInviteId = firstResponse.body.invite.id;
       assert.ok(firstInviteId);
       const firstNextAvailable = firstResponse.body.nextInviteAvailableAt;

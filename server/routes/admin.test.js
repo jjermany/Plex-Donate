@@ -862,6 +862,105 @@ test('GET /api/admin/subscribers keeps Plex invite disabled for pending donors',
   assert.equal(donor.needsPlexInvite, false);
 });
 
+test('admin can grant and remove courtesy access without changing billing status', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+  const donor = createDonor({
+    email: 'courtesy-toggle@example.com',
+    name: 'Courtesy Toggle',
+    status: 'pending',
+  });
+
+  const grantedResponse = await agent.request(
+    `/api/admin/subscribers/${donor.id}/courtesy-access`,
+    {
+      method: 'PATCH',
+      headers: { 'x-csrf-token': csrfToken },
+      body: { courtesyAccess: true },
+    }
+  );
+  assert.equal(grantedResponse.status, 200);
+  const grantedBody = await grantedResponse.json();
+  assert.equal(grantedBody.donor.courtesyAccess, true);
+  assert.equal(grantedBody.donor.status, 'pending');
+  assert.equal(getDonorById(donor.id).courtesyAccess, true);
+
+  const removedResponse = await agent.request(
+    `/api/admin/subscribers/${donor.id}/courtesy-access`,
+    {
+      method: 'PATCH',
+      headers: { 'x-csrf-token': csrfToken },
+      body: { courtesyAccess: false },
+    }
+  );
+  assert.equal(removedResponse.status, 200);
+  const removedBody = await removedResponse.json();
+  assert.equal(removedBody.donor.courtesyAccess, false);
+  assert.equal(removedBody.donor.status, 'pending');
+});
+
+test('admin can import an unlinked existing Plex user with courtesy access', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('app', {
+    publicBaseUrl: 'https://donate.example.test',
+  });
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-import',
+    serverIdentifier: 'server-import',
+    librarySectionIds: '1',
+  });
+
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      {
+        emails: ['existing-plex@example.com'],
+        userIds: ['plex-user-42'],
+        pending: false,
+        status: 'accepted',
+      },
+    ],
+  });
+  t.after(() => {
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const candidatesResponse = await agent.get('/api/admin/plex/import-candidates');
+  assert.equal(candidatesResponse.status, 200);
+  const candidatesBody = await candidatesResponse.json();
+  assert.equal(candidatesBody.candidates.length, 1);
+
+  const importResponse = await agent.post('/api/admin/plex/import-candidates', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: {
+      candidates: [
+        {
+          email: 'existing-plex@example.com',
+          accountId: 'plex-user-42',
+        },
+      ],
+    },
+  });
+  assert.equal(importResponse.status, 201);
+  const importBody = await importResponse.json();
+  assert.equal(importBody.imported.length, 1);
+  assert.match(importBody.imported[0].setupUrl, /^https:\/\/donate\.example\.test\/share\//);
+  assert.equal(importBody.imported[0].donor.courtesyAccess, true);
+  assert.equal(importBody.imported[0].donor.hadPreexistingAccess, true);
+  assert.equal(importBody.imported[0].donor.plexAccountId, 'plex-user-42');
+
+  const refreshedCandidates = await agent.get('/api/admin/plex/import-candidates');
+  const refreshedBody = await refreshedCandidates.json();
+  assert.equal(refreshedBody.candidates.length, 0);
+  assert.equal(refreshedBody.linkedCount, 1);
+});
+
 test('POST /api/admin/subscribers/:id/extend-trial extends active trial from current expiration', async (t) => {
   resetDatabase();
   const agent = await startServer(t);

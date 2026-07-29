@@ -15,6 +15,8 @@ Automated system to handle:
 - Activity log for webhook events and admin actions.
 - Shareable donor dashboard so supporters can confirm donations, pick their invite email, and self-serve Plex access.
 - Built-in referral share links that generate Plex invites directly—no external tooling or Wizarr deployment required.
+- Admin-managed courtesy access for friends, family, and existing Plex members without fabricating a paid subscription.
+- Existing Plex-user discovery and import, with duplicate-account matching by Plex identity and email.
 - Dedicated customer dashboard at `/dashboard` where subscribers can log in with their PayPal subscription ID to manage invites and update contact details.
 
 ## 📋 Requirements
@@ -328,6 +330,10 @@ Successful responses look like:
 Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. Once the supporter signs in on that page they can generate a Plex invite directly from Plex Donate, send it to their recipient, and resend the same link later without leaving the app. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
 
 Subscribers can also access the same invite controls from the `/dashboard` experience. When they create a referral invite, the dashboard and share page both surface the generated `inviteUrl` along with cooldown messaging so they know when the next referral is available.
+
+Paid members and admin-confirmed courtesy members can send referral invites. Member-generated referrals always use the normal trial/paid onboarding path; only an administrator can grant courtesy access. Courtesy members see a quieter dashboard that makes clear their access is already covered while leaving an unobtrusive, optional PayPal support action available.
+
+From the **Subscribers** tab, use **Import Plex users** to find accepted members who already have access to the configured server but are not connected to Plex Donate. Imported users receive courtesy access and a setup link without receiving a duplicate Plex share. To invite someone new with courtesy access, use **Invite supporter**, select **Grant courtesy access**, and share the generated setup link. Courtesy access can also be granted or removed from an existing subscriber’s detail actions; removing it does not automatically revoke the Plex share.
 
 ### Customer dashboard
 

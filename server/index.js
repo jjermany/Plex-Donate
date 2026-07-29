@@ -288,6 +288,18 @@ async function processAccessExpirations() {
           }
         }
 
+        if (donorForRevocation.courtesyAccess) {
+          setDonorAccessExpirationById(donor.id, null);
+          logEvent('donor.access.expiration.preserved', {
+            donorId: donor.id,
+            subscriptionId: donor.subscriptionId,
+            status: statusForEvent,
+            reason: 'courtesy_access',
+            source: 'scheduled-job',
+          });
+          continue;
+        }
+
         await webhookRouter.revokeDonorAccess(donorForRevocation, {
           context: isTrial ? 'trial-expiration' : 'scheduled-job',
           reason: isTrial ? 'trial_expired' : 'access_expired',

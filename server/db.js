@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS donors (
   password_hash TEXT,
   plex_account_id TEXT,
   plex_email TEXT,
+  courtesy_access INTEGER NOT NULL DEFAULT 0,
   email_verified_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -560,6 +561,23 @@ function ensurePreexistingAccessColumn() {
   }
 }
 
+function ensureCourtesyAccessColumn() {
+  const columns = db.prepare("PRAGMA table_info('donors')").all();
+  if (columns.length === 0) {
+    return;
+  }
+
+  const hasCourtesyAccess = columns.some(
+    (column) => column.name === 'courtesy_access'
+  );
+
+  if (!hasCourtesyAccess) {
+    db.exec(
+      'ALTER TABLE donors ADD COLUMN courtesy_access INTEGER NOT NULL DEFAULT 0'
+    );
+  }
+}
+
 function ensureTrialReminderColumn() {
   const columns = db.prepare("PRAGMA table_info('donors')").all();
   if (columns.length === 0) {
@@ -586,6 +604,7 @@ ensureDonorTwoFactorColumns();
 ensurePaymentProviderColumn();
 ensurePaymentRecordProviderColumn();
 ensurePreexistingAccessColumn();
+ensureCourtesyAccessColumn();
 ensureTrialReminderColumn();
 ensureInviteLinksSupportsProspects();
 ensureInviteLinkSessionTokens();
@@ -735,6 +754,12 @@ const statements = {
   updateDonorStatusById: db.prepare(
     `UPDATE donors
      SET status = @status,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE id = @id`
+  ),
+  updateDonorCourtesyAccessById: db.prepare(
+    `UPDATE donors
+     SET courtesy_access = @courtesyAccess,
          updated_at = CURRENT_TIMESTAMP
      WHERE id = @id`
   ),
@@ -1185,6 +1210,7 @@ function mapDonor(row) {
     },
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
+    courtesyAccess: Boolean(row.courtesy_access),
     emailVerifiedAt: row.email_verified_at,
     emailVerified: Boolean(row.email_verified_at),
     hadPreexistingAccess: Boolean(row.had_preexisting_access),
@@ -2311,6 +2337,7 @@ function createDonor({
   plexEmail = null,
   emailVerifiedAt = null,
   hadPreexistingAccess = false,
+  courtesyAccess = false,
 } = {}) {
   const normalizedEmail = normalizeEmail(email);
   const normalizedAccessExpiresAt = normalizeAccessExpiresAt(accessExpiresAt);
@@ -2336,7 +2363,25 @@ function createDonor({
         : normalizeAccessExpiresAt(emailVerifiedAt) || null,
     hadPreexistingAccess: hadPreexistingAccess ? 1 : 0,
   });
+  if (courtesyAccess) {
+    statements.updateDonorCourtesyAccessById.run({
+      id: info.lastInsertRowid,
+      courtesyAccess: 1,
+    });
+  }
   return mapDonor(statements.getDonorById.get(info.lastInsertRowid));
+}
+
+function setDonorCourtesyAccess(donorId, courtesyAccess = false) {
+  if (!donorId) {
+    throw new Error('donorId is required to update courtesy access');
+  }
+
+  statements.updateDonorCourtesyAccessById.run({
+    id: donorId,
+    courtesyAccess: courtesyAccess ? 1 : 0,
+  });
+  return mapDonor(statements.getDonorById.get(donorId));
 }
 
 function updateDonorSubscriptionId(donorId, subscriptionId) {
@@ -2670,6 +2715,7 @@ module.exports = {
   setDonorAccessExpirationById,
   extendDonorTrial,
   setDonorPreexistingAccess,
+  setDonorCourtesyAccess,
   listTrialDonorsNeedingReminder,
   markTrialReminderSent,
   startDonorTrial,

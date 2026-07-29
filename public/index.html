@@ -641,6 +641,13 @@
                   </div>
                 <div class="donors-controls">
                   <button
+                    id="plex-import-open"
+                    type="button"
+                    class="secondary donors-action-button"
+                  >
+                    Import Plex users
+                  </button>
+                  <button
                     id="prospect-share-open"
                     type="button"
                     class="secondary donors-action-button"
@@ -689,6 +696,9 @@
                   </button>
                   <button type="button" class="donors-filter-tab" data-filter="active">
                     Active <span class="filter-count" data-count-for="active">0</span>
+                  </button>
+                  <button type="button" class="donors-filter-tab" data-filter="courtesy">
+                    Courtesy <span class="filter-count" data-count-for="courtesy">0</span>
                   </button>
                   <button type="button" class="donors-filter-tab" data-filter="pending">
                     Pending <span class="filter-count" data-count-for="pending">0</span>
@@ -1351,6 +1361,7 @@
         </div>
         <form id="prospect-share-form">
           <input type="hidden" name="prospectId" />
+          <input type="hidden" name="donorId" />
           <div class="field-grid">
             <label>
               Contact email
@@ -1374,6 +1385,13 @@
           <label>
             Internal notes
             <textarea name="note" placeholder="Optional details for other admins"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input name="courtesyAccess" type="checkbox" />
+            <span>
+              Grant courtesy access
+              <span class="help">Admin-managed access with referral privileges. PayPal support remains optional.</span>
+            </span>
           </label>
           <p class="form-status" data-status-for="prospect-share"></p>
           <div class="form-actions">
@@ -1400,6 +1418,37 @@
           </div>
           <div class="share-output-meta" id="prospect-share-note"></div>
         </div>
+      </div>
+    </div>
+    <div
+      class="invite-supporter-modal"
+      id="plex-import-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="plex-import-title"
+      hidden
+    >
+      <div class="invite-supporter-modal-panel">
+        <div class="invite-supporter-modal-header">
+          <div>
+            <h3 id="plex-import-title">Import existing Plex users</h3>
+            <p class="muted-text" style="margin:0;">
+              Select server members who are not yet connected to Plex Donate. Imported members receive courtesy access.
+            </p>
+          </div>
+          <button type="button" class="secondary" id="plex-import-close">Close</button>
+        </div>
+        <form id="plex-import-form">
+          <div id="plex-import-list" class="plex-import-list">
+            <p class="muted-text">Refresh to find available Plex users.</p>
+          </div>
+          <p id="plex-import-status" class="form-status"></p>
+          <div class="form-actions">
+            <button type="button" class="secondary" id="plex-import-refresh">Refresh Plex users</button>
+            <button type="submit" id="plex-import-submit">Import selected</button>
+          </div>
+        </form>
+        <div id="plex-import-results" class="share-output hidden"></div>
       </div>
     </div>
     <script src="/accessibility.js?v=accessibility-20260728"></script>

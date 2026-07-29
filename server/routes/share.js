@@ -61,6 +61,10 @@ const {
   getInviteEmailDiagnostics,
 } = require('../utils/validation');
 const { resolvePublicBaseUrl } = require('../utils/public-base-url');
+const {
+  hasActivePaidAccess,
+  canSendReferralInvites,
+} = require('../utils/donor-entitlements');
 
 const router = express.Router();
 const { annotateDonorWithPlex, loadPlexContext } = require('../utils/plex');
@@ -351,6 +355,8 @@ function buildShareResponse({
           hasPassword: Boolean(donor.hasPassword),
           emailVerified: Boolean(donor.emailVerified),
           emailVerifiedAt: donor.emailVerifiedAt || null,
+          courtesyAccess: Boolean(donor.courtesyAccess),
+          canSendReferralInvites: canSendReferralInvites(donor),
           plexLinked: hasPlexLink(donor),
           plexAccountId: donor.plexAccountId || null,
           plexEmail: donor.plexEmail || '',
@@ -435,11 +441,7 @@ async function createShareResponse(
 }
 
 function hasActiveSubscription(donor) {
-  if (!donor) {
-    return false;
-  }
-  const status = (donor.status || '').toLowerCase();
-  return status === 'active';
+  return hasActivePaidAccess(donor);
 }
 
 function getProvidedSessionToken(req) {
@@ -674,10 +676,13 @@ router.post(
       req.body && typeof req.body.name === 'string'
         ? req.body.name.trim()
         : '';
+    const inviteIntent =
+      req.body && req.body.intent === 'restore' ? 'restore' : 'referral';
 
-    if (!hasActiveSubscription(donor)) {
+    if (!canSendReferralInvites(donor)) {
       return res.status(403).json({
-        error: 'Start or resume your subscription to generate a new invite.',
+        error:
+          'An active subscription or admin-confirmed courtesy access is required to generate a referral invite.',
       });
     }
 
@@ -739,7 +744,7 @@ router.post(
       updates.name = requestedName;
     }
 
-    if (Object.keys(updates).length > 0) {
+    if (inviteIntent === 'restore' && Object.keys(updates).length > 0) {
       activeDonor = updateDonorContact(donor.id, updates);
     }
 
@@ -908,6 +913,13 @@ router.post(
     const donor = getDonorById(shareLink.donorId);
     if (!donor) {
       return res.status(404).json({ error: 'Share link is no longer valid' });
+    }
+
+    if (donor.courtesyAccess) {
+      return res.status(409).json({
+        error:
+          'Courtesy access is already active. PayPal support remains optional from the member dashboard.',
+      });
     }
 
     if (!hasPlexLink(donor)) {

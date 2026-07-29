@@ -307,6 +307,15 @@
       const prospectShareCopy = document.getElementById('prospect-share-copy');
       const prospectShareRegenerate = document.getElementById('prospect-share-regenerate');
       const prospectShareReset = document.getElementById('prospect-share-reset');
+      const plexImportOpen = document.getElementById('plex-import-open');
+      const plexImportModal = document.getElementById('plex-import-modal');
+      const plexImportClose = document.getElementById('plex-import-close');
+      const plexImportForm = document.getElementById('plex-import-form');
+      const plexImportList = document.getElementById('plex-import-list');
+      const plexImportStatus = document.getElementById('plex-import-status');
+      const plexImportRefresh = document.getElementById('plex-import-refresh');
+      const plexImportSubmit = document.getElementById('plex-import-submit');
+      const plexImportResults = document.getElementById('plex-import-results');
       const themeToggleButton = document.getElementById('theme-toggle');
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
@@ -3026,6 +3035,8 @@
 
         const shareData = state.prospectShare || null;
         const prospect = shareData && shareData.prospect ? shareData.prospect : null;
+        const donor = shareData && shareData.donor ? shareData.donor : null;
+        const recipient = donor || prospect;
         const shareLink = shareData && shareData.shareLink ? shareData.shareLink : null;
         const shareUrl = buildShareUrl(shareLink);
 
@@ -3041,16 +3052,20 @@
 
         if (prospectShareNote) {
           prospectShareNote.textContent =
-            prospect && prospect.note ? `Note: ${prospect.note}` : '';
+            prospect && prospect.note
+              ? `Note: ${prospect.note}`
+              : donor && donor.courtesyAccess
+              ? 'Courtesy access is enabled. Optional PayPal support will be presented quietly.'
+              : '';
         }
 
         if (prospectShareSummary) {
           const summaryParts = [];
-          if (prospect && prospect.name) {
-            summaryParts.push(prospect.name);
+          if (recipient && recipient.name) {
+            summaryParts.push(recipient.name);
           }
-          if (prospect && prospect.email) {
-            summaryParts.push(prospect.email);
+          if (recipient && recipient.email) {
+            summaryParts.push(recipient.email);
           }
           if (shareUrl) {
             prospectShareSummary.textContent =
@@ -3074,7 +3089,10 @@
             prospectShareCopy.disabled = true;
           }
           if (prospectShareRegenerate) {
-            prospectShareRegenerate.disabled = !(prospect && prospect.id);
+            prospectShareRegenerate.disabled = !(
+              (prospect && prospect.id) ||
+              (donor && donor.id)
+            );
           }
           return;
         }
@@ -3103,11 +3121,16 @@
           email: (formPayload.email || '').trim(),
           name: (formPayload.name || '').trim(),
           note: (formPayload.note || '').trim(),
+          courtesyAccess: Boolean(formPayload.courtesyAccess),
         };
 
         const parsedProspectId = Number.parseInt(formPayload.prospectId, 10);
         if (Number.isFinite(parsedProspectId) && parsedProspectId > 0) {
           requestBody.prospectId = parsedProspectId;
+        }
+        const parsedDonorId = Number.parseInt(formPayload.donorId, 10);
+        if (Number.isFinite(parsedDonorId) && parsedDonorId > 0) {
+          requestBody.donorId = parsedDonorId;
         }
         if (regenerate) {
           requestBody.regenerate = true;
@@ -3138,17 +3161,19 @@
           });
 
           const prospect = response.prospect || null;
+          const donor = response.donor || null;
           const shareLink = response.shareLink || null;
-          state.prospectShare = { prospect, shareLink };
+          state.prospectShare = { prospect, donor, shareLink };
+          const recipient = donor || prospect;
 
           if (prospectShareForm) {
             const emailInput = prospectShareForm.querySelector('[name="email"]');
             if (emailInput) {
-              emailInput.value = prospect && prospect.email ? prospect.email : '';
+              emailInput.value = recipient && recipient.email ? recipient.email : '';
             }
             const nameInput = prospectShareForm.querySelector('[name="name"]');
             if (nameInput) {
-              nameInput.value = prospect && prospect.name ? prospect.name : '';
+              nameInput.value = recipient && recipient.name ? recipient.name : '';
             }
             const noteInput = prospectShareForm.querySelector('[name="note"]');
             if (noteInput) {
@@ -3157,6 +3182,16 @@
             const idInput = prospectShareForm.querySelector('[name="prospectId"]');
             if (idInput) {
               idInput.value = prospect && prospect.id ? String(prospect.id) : '';
+            }
+            const donorIdInput = prospectShareForm.querySelector('[name="donorId"]');
+            if (donorIdInput) {
+              donorIdInput.value = donor && donor.id ? String(donor.id) : '';
+            }
+            const courtesyInput = prospectShareForm.querySelector(
+              '[name="courtesyAccess"]'
+            );
+            if (courtesyInput) {
+              courtesyInput.checked = Boolean(donor && donor.courtesyAccess);
             }
           }
 
@@ -3193,8 +3228,9 @@
           }
           const hasProspect = Boolean(
             state.prospectShare &&
-              state.prospectShare.prospect &&
-              state.prospectShare.prospect.id
+              ((state.prospectShare.prospect &&
+                state.prospectShare.prospect.id) ||
+                (state.prospectShare.donor && state.prospectShare.donor.id))
           );
           const hasShareLink = Boolean(
             buildShareUrl(state.prospectShare && state.prospectShare.shareLink)
@@ -3205,6 +3241,133 @@
           if (prospectShareCopy) {
             prospectShareCopy.disabled = !hasShareLink;
           }
+        }
+      }
+
+      function closePlexImportModal() {
+        if (!plexImportModal || plexImportModal.hidden) return;
+        plexImportModal.hidden = true;
+        document.body.style.overflow = '';
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.deactivateDialog(plexImportModal);
+        }
+      }
+
+      function renderPlexImportCandidates(candidates, linkedCount = 0) {
+        if (!plexImportList) return;
+        plexImportList.innerHTML = '';
+        if (!Array.isArray(candidates) || candidates.length === 0) {
+          const empty = document.createElement('p');
+          empty.className = 'muted-text';
+          empty.textContent = linkedCount
+            ? `No unlinked Plex users found. ${linkedCount} existing user${linkedCount === 1 ? ' is' : 's are'} already connected or unavailable.`
+            : 'No eligible existing Plex users were found.';
+          plexImportList.appendChild(empty);
+          return;
+        }
+        candidates.forEach((candidate, index) => {
+          const row = document.createElement('label');
+          row.className = 'checkbox-row plex-import-candidate';
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.name = 'plexCandidate';
+          checkbox.value = String(index);
+          checkbox.dataset.email = candidate.email || '';
+          checkbox.dataset.accountId = candidate.accountId || '';
+          const copy = document.createElement('span');
+          const title = document.createElement('strong');
+          title.textContent = candidate.email || 'Unknown Plex user';
+          const detail = document.createElement('span');
+          detail.className = 'help';
+          detail.textContent = candidate.accountId
+            ? `Plex account ${candidate.accountId}`
+            : 'Plex account ID unavailable';
+          copy.append(title, detail);
+          row.append(checkbox, copy);
+          plexImportList.appendChild(row);
+        });
+        if (plexImportStatus) {
+          plexImportStatus.textContent = linkedCount
+            ? `${linkedCount} existing Plex user${linkedCount === 1 ? ' was' : 's were'} already linked or could not be imported.`
+            : '';
+        }
+      }
+
+      async function refreshPlexImportCandidates() {
+        if (plexImportRefresh) plexImportRefresh.disabled = true;
+        if (plexImportStatus) plexImportStatus.textContent = 'Finding existing Plex users…';
+        try {
+          const response = await api('/api/admin/plex/import-candidates');
+          renderPlexImportCandidates(
+            response.candidates || [],
+            Number(response.linkedCount || 0)
+          );
+        } catch (err) {
+          if (plexImportStatus) plexImportStatus.textContent = err.message;
+          renderPlexImportCandidates([]);
+        } finally {
+          if (plexImportRefresh) plexImportRefresh.disabled = false;
+        }
+      }
+
+      async function openPlexImportModal() {
+        if (!plexImportModal || !state.authenticated) return;
+        plexImportModal.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (window.PlexDonateA11y) {
+          window.PlexDonateA11y.activateDialog(plexImportModal, plexImportRefresh);
+        }
+        await refreshPlexImportCandidates();
+      }
+
+      async function importSelectedPlexUsers() {
+        if (!plexImportList) return;
+        const selected = Array.from(
+          plexImportList.querySelectorAll('input[name="plexCandidate"]:checked')
+        ).map((checkbox) => ({
+          email: checkbox.dataset.email || '',
+          accountId: checkbox.dataset.accountId || '',
+        }));
+        if (!selected.length) {
+          if (plexImportStatus) plexImportStatus.textContent = 'Select at least one Plex user.';
+          return;
+        }
+        if (plexImportSubmit) plexImportSubmit.disabled = true;
+        if (plexImportStatus) plexImportStatus.textContent = 'Importing selected users…';
+        try {
+          const response = await api('/api/admin/plex/import-candidates', {
+            method: 'POST',
+            body: { candidates: selected },
+          });
+          if (plexImportResults) {
+            plexImportResults.innerHTML = '';
+            (response.imported || []).forEach((entry) => {
+              const item = document.createElement('div');
+              const label = document.createElement('strong');
+              label.textContent =
+                (entry.donor && (entry.donor.name || entry.donor.email)) ||
+                'Imported member';
+              const link = document.createElement('a');
+              link.className = 'share-url';
+              link.href = entry.setupUrl;
+              link.target = '_blank';
+              link.rel = 'noopener';
+              link.textContent = entry.setupUrl;
+              item.append(label, link);
+              plexImportResults.appendChild(item);
+            });
+            plexImportResults.classList.toggle(
+              'hidden',
+              !(response.imported || []).length
+            );
+          }
+          if (plexImportStatus) plexImportStatus.textContent = response.message || 'Import complete.';
+          await loadDashboardData();
+          await refreshPlexImportCandidates();
+        } catch (err) {
+          if (plexImportStatus) plexImportStatus.textContent = err.message;
+        } finally {
+          if (plexImportSubmit) plexImportSubmit.disabled = false;
         }
       }
 
@@ -3313,7 +3476,12 @@
         return donors.filter(donor => {
           // Apply status filter
           const status = (donor.status || 'pending').toLowerCase();
-          if (currentFilter !== 'all' && status !== currentFilter) {
+          if (
+            currentFilter !== 'all' &&
+            (currentFilter === 'courtesy'
+              ? !donor.courtesyAccess
+              : status !== currentFilter)
+          ) {
             return false;
           }
 
@@ -3335,6 +3503,7 @@
         const counts = {
           all: donors.length,
           active: 0,
+          courtesy: 0,
           pending: 0,
           cancelled: 0,
           suspended: 0
@@ -3342,6 +3511,9 @@
 
         donors.forEach(donor => {
           const status = (donor.status || 'pending').toLowerCase();
+          if (donor.courtesyAccess) {
+            counts.courtesy++;
+          }
           if (counts.hasOwnProperty(status)) {
             counts[status]++;
           }
@@ -3364,7 +3536,7 @@
           : 0;
         const activeCount = donors.filter((donor) => {
           const status = (donor.status || '').toLowerCase();
-          return status === 'active' || status === 'trial';
+          return status === 'active' || status === 'trial' || Boolean(donor.courtesyAccess);
         }).length;
         const plexSharedCount = donors.filter(
           (donor) => donor && (donor.plexShareState === 'shared' || donor.plexShared)
@@ -3377,7 +3549,9 @@
             donor.paypalRefreshError.trim()
         ).length;
         const pendingCount = donors.filter(
-          (donor) => (donor.status || '').toLowerCase() === 'pending'
+          (donor) =>
+            (donor.status || '').toLowerCase() === 'pending' &&
+            !donor.courtesyAccess
         ).length;
         const attentionCount = needsInviteCount + refreshErrorCount + openSupportCount;
 
@@ -3457,6 +3631,12 @@
           card.dataset.status = status;
           statusEl.dataset.status = status;
           statusEl.textContent = status.replace(/_/g, ' ');
+          if (donor.courtesyAccess) {
+            statusEl.textContent =
+              donor.subscriptionId && status === 'active'
+                ? 'courtesy + supporting'
+                : 'courtesy';
+          }
 
           // Enhanced payment display - show both amount and date
           const paymentText = formatAmount(donor);
@@ -3650,7 +3830,11 @@
         if (donorDetailStatus) {
           const status = (donor.status || 'pending').toLowerCase();
           donorDetailStatus.dataset.status = status;
-          donorDetailStatus.textContent = status.replace(/_/g, ' ');
+          donorDetailStatus.textContent = donor.courtesyAccess
+            ? donor.subscriptionId && status === 'active'
+              ? 'courtesy + supporting'
+              : 'courtesy'
+            : status.replace(/_/g, ' ');
         }
 
         // Payment card
@@ -3858,7 +4042,8 @@
         // or active trial. A pending invite is informational only; admin can
         // still click to get status feedback.
         const plexConfigured = Boolean(plexState && plexState.configured !== false);
-        const statusAllowsInvite = status === 'active' || status === 'trial';
+        const statusAllowsInvite =
+          status === 'active' || status === 'trial' || Boolean(donor.courtesyAccess);
         const canInvite = plexConfigured && Boolean(donor.email) && !donor.plexShared && statusAllowsInvite;
         const inviteBtn = document.createElement('button');
         inviteBtn.className = 'secondary';
@@ -3873,7 +4058,7 @@
         } else if (donor.plexShared) {
           inviteBtn.title = 'User already has Plex access.';
         } else if (!statusAllowsInvite) {
-          inviteBtn.title = 'User must have an active subscription or trial to receive a Plex invite.';
+          inviteBtn.title = 'User must have paid, trial, or courtesy access to receive a Plex invite.';
         } else if (donor.plexPending) {
           inviteBtn.title = 'A Plex invite is already pending; click to check status or resend.';
         } else {
@@ -3890,6 +4075,19 @@
         shareBtn.dataset.donorId = donor.id;
         shareBtn.title = shareUrl ? 'Copy the existing setup link' : 'Create a setup link first';
         donorDetailActions.appendChild(shareBtn);
+
+        const courtesyBtn = document.createElement('button');
+        courtesyBtn.className = 'secondary';
+        courtesyBtn.textContent = donor.courtesyAccess
+          ? 'Remove courtesy access'
+          : 'Grant courtesy access';
+        courtesyBtn.dataset.action = 'courtesy-access';
+        courtesyBtn.dataset.donorId = donor.id;
+        courtesyBtn.dataset.enabled = donor.courtesyAccess ? 'true' : 'false';
+        courtesyBtn.title = donor.courtesyAccess
+          ? 'Remove Plex Donate courtesy privileges without revoking the Plex share'
+          : 'Grant admin-managed courtesy access and referral privileges';
+        donorDetailActions.appendChild(courtesyBtn);
 
         // Verify payment
         const refreshBtn = document.createElement('button');
@@ -4102,7 +4300,11 @@
 
           const status = (donor.status || 'pending').toLowerCase();
           statusPill.dataset.status = status;
-          statusPill.textContent = status.replace(/_/g, ' ');
+          statusPill.textContent = donor.courtesyAccess
+            ? donor.subscriptionId && status === 'active'
+              ? 'courtesy + supporting'
+              : 'courtesy'
+            : status.replace(/_/g, ' ');
 
           if (statusNote) {
             const refreshError =
@@ -5381,6 +5583,40 @@
         });
       }
 
+      if (plexImportOpen) {
+        plexImportOpen.addEventListener('click', () => {
+          openPlexImportModal();
+        });
+      }
+      if (plexImportClose) {
+        plexImportClose.addEventListener('click', closePlexImportModal);
+      }
+      if (plexImportRefresh) {
+        plexImportRefresh.addEventListener('click', refreshPlexImportCandidates);
+      }
+      if (plexImportForm) {
+        plexImportForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          await importSelectedPlexUsers();
+        });
+      }
+      if (plexImportModal) {
+        plexImportModal.addEventListener('click', (event) => {
+          if (event.target === plexImportModal) closePlexImportModal();
+        });
+        plexImportModal.addEventListener('keydown', (event) => {
+          if (window.PlexDonateA11y) {
+            window.PlexDonateA11y.handleDialogKeydown(
+              event,
+              plexImportModal,
+              closePlexImportModal
+            );
+          } else if (event.key === 'Escape') {
+            closePlexImportModal();
+          }
+        });
+      }
+
       if (prospectShareClose) {
         prospectShareClose.addEventListener('click', () => {
           closeProspectShareModal();
@@ -6044,6 +6280,31 @@
                     ? 'Setup link regenerated and copied to clipboard.'
                     : 'Setup link copied to clipboard.'
               );
+            } else if (action === 'courtesy-access') {
+              const currentlyEnabled = button.dataset.enabled === 'true';
+              if (
+                currentlyEnabled &&
+                !(await showConfirmModal(
+                  'Remove courtesy access',
+                  'This removes courtesy privileges and referral access. It will not remove the member from Plex.'
+                ))
+              ) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/courtesy-access`,
+                {
+                  method: 'PATCH',
+                  body: { courtesyAccess: !currentlyEnabled },
+                }
+              );
+              mergeDonorIntoState(response && response.donor);
+              showDashboardToast(
+                (response && response.message) || 'Courtesy access updated.',
+                'success'
+              );
             } else if (action === 'refresh') {
               requiresReload = false;
               const response = await api(`/api/admin/subscribers/${donorId}/refresh`, {
@@ -6329,6 +6590,31 @@
                   : regenerate
                     ? 'Setup link regenerated and copied to clipboard.'
                     : 'Setup link copied to clipboard.'
+              );
+            } else if (action === 'courtesy-access') {
+              const currentlyEnabled = button.dataset.enabled === 'true';
+              if (
+                currentlyEnabled &&
+                !(await showConfirmModal(
+                  'Remove courtesy access',
+                  'This removes courtesy privileges and referral access. It will not remove the member from Plex.'
+                ))
+              ) {
+                button.disabled = false;
+                return;
+              }
+              requiresReload = false;
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/courtesy-access`,
+                {
+                  method: 'PATCH',
+                  body: { courtesyAccess: !currentlyEnabled },
+                }
+              );
+              mergeDonorIntoState(response && response.donor);
+              showDashboardToast(
+                (response && response.message) || 'Courtesy access updated.',
+                'success'
               );
             } else if (action === 'refresh') {
               requiresReload = false;

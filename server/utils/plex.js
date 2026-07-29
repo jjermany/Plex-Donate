@@ -1,6 +1,7 @@
 const plexService = require('../services/plex');
 const logger = require('./logger');
 const { isInviteStale } = require('./invite-stale');
+const { hasAccessEntitlement } = require('./donor-entitlements');
 
 const SHARED_MEMBER_WARNING_THROTTLE_MS = 10 * 60 * 1000;
 let lastSharedMemberWarning = { key: '', timestamp: 0 };
@@ -205,8 +206,8 @@ function annotateDonorWithPlex(donor, context) {
     'suspended',
     'trial_expired',
   ].includes(normalizedStatus);
-  const statusIsActive = normalizedStatus === 'active';
-  const statusAllowsAccess = statusIsActive && !statusIsRevoked;
+  const statusAllowsAccess =
+    hasAccessEntitlement(donor) && (!statusIsRevoked || Boolean(donor && donor.courtesyAccess));
   const plexPending = statusAllowsAccess && plexPendingFromUser;
   const hasEmail = emailSet.size > 0 && normalizeValue((donor && donor.email) || '') !== '';
   const canInvite = Boolean(context && context.configured && hasEmail && statusAllowsAccess);

@@ -11,6 +11,7 @@ const {
 const emailService = require('../services/email');
 const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
+const { hasAccessEntitlement } = require('../utils/donor-entitlements');
 
 const router = express.Router();
 const AUTOMATION_STATE_KEY = 'automation_state';
@@ -220,9 +221,7 @@ function listUpsRecipients() {
   const recipients = listDonorsWithDetails()
     .filter((donor) => {
       const email = donor && donor.email ? String(donor.email).trim() : '';
-      const status =
-        donor && donor.status ? String(donor.status).trim().toLowerCase() : '';
-      return Boolean(email) && ['active', 'trial'].includes(status);
+      return Boolean(email) && hasAccessEntitlement(donor);
     })
     .map((donor) => ({
       email: String(donor.email).trim(),
