@@ -916,6 +916,9 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
   });
 
   const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  const originalSendImportedPlexUserSetupEmail =
+    emailService.sendImportedPlexUserSetupEmail;
+  const setupEmails = [];
   plexService.getCurrentPlexShares = async () => ({
     success: true,
     shares: [
@@ -927,8 +930,13 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
       },
     ],
   });
+  emailService.sendImportedPlexUserSetupEmail = async (payload) => {
+    setupEmails.push(payload);
+  };
   t.after(() => {
     plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+    emailService.sendImportedPlexUserSetupEmail =
+      originalSendImportedPlexUserSetupEmail;
   });
 
   const candidatesResponse = await agent.get('/api/admin/plex/import-candidates');
@@ -945,6 +953,7 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
           accountId: 'plex-user-42',
         },
       ],
+      sendEmail: true,
     },
   });
   assert.equal(importResponse.status, 201);
@@ -954,6 +963,14 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
   assert.equal(importBody.imported[0].donor.courtesyAccess, true);
   assert.equal(importBody.imported[0].donor.hadPreexistingAccess, true);
   assert.equal(importBody.imported[0].donor.plexAccountId, 'plex-user-42');
+  assert.equal(importBody.imported[0].emailSent, true);
+  assert.equal(importBody.imported[0].emailError, null);
+  assert.equal(setupEmails.length, 1);
+  assert.deepEqual(setupEmails[0], {
+    to: 'existing-plex@example.com',
+    name: '',
+    setupUrl: importBody.imported[0].setupUrl,
+  });
 
   const shareLinksResponse = await agent.get('/api/admin/share-links');
   assert.equal(shareLinksResponse.status, 200);

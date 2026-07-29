@@ -331,6 +331,7 @@
       const plexImportRefresh = document.getElementById('plex-import-refresh');
       const plexImportSubmit = document.getElementById('plex-import-submit');
       const plexImportResults = document.getElementById('plex-import-results');
+      const plexImportSendEmail = document.getElementById('plex-import-send-email');
       const themeToggleButton = document.getElementById('theme-toggle');
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
@@ -3354,7 +3355,10 @@
         try {
           const response = await api('/api/admin/plex/import-candidates', {
             method: 'POST',
-            body: { candidates: selected },
+            body: {
+              candidates: selected,
+              sendEmail: Boolean(plexImportSendEmail && plexImportSendEmail.checked),
+            },
           });
           if (plexImportResults) {
             plexImportResults.innerHTML = '';
@@ -3370,7 +3374,16 @@
               link.target = '_blank';
               link.rel = 'noopener';
               link.textContent = entry.setupUrl;
-              item.append(label, link);
+              const delivery = document.createElement('span');
+              delivery.className = 'share-output-meta';
+              if (entry.emailSent) {
+                delivery.textContent = 'Setup email sent.';
+              } else if (entry.emailError) {
+                delivery.textContent = `Setup email failed: ${entry.emailError}`;
+              } else {
+                delivery.textContent = 'Setup link created; email not requested.';
+              }
+              item.append(label, link, delivery);
               plexImportResults.appendChild(item);
             });
             plexImportResults.classList.toggle(

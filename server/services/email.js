@@ -624,6 +624,71 @@ async function sendInviteEmail(
     html,
   });
 }
+
+async function sendImportedPlexUserSetupEmail(
+  { to, setupUrl, name },
+  overrideSettings
+) {
+  if (!setupUrl) {
+    throw new Error('setupUrl is required to send imported Plex user email');
+  }
+
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const subject = 'Set up your Plex Donate account';
+  const recipientName = name || 'there';
+  const dashboardUrl = resolveDashboardUrl({ fallbackUrls: [setupUrl] });
+  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
+  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
+
+  const textLines = [
+    `Hi ${recipientName},`,
+    '',
+    'Your existing Plex access has been connected to Plex Donate with courtesy access.',
+    '',
+    `Use this personal setup link to finish creating your account: ${setupUrl}`,
+  ];
+
+  if (dashboardTextLine) {
+    textLines.push('', dashboardTextLine);
+  }
+
+  textLines.push(
+    '',
+    'This setup will not send another Plex library invitation or change your existing access.',
+    '',
+    'If you did not expect this email or need help, reply to this email.',
+    '',
+    '-- Plex Donate'
+  );
+
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: 'Account Setup',
+    recipientName,
+    intro:
+      'Your existing Plex access has been connected to Plex Donate with courtesy access.',
+    bodyHtml:
+      buildEmailActionButtonHtml(
+        'Finish Account Setup',
+        setupUrl,
+        getEmailTonePalette('brand')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">This setup will not send another Plex library invitation or change your existing access.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you need help, just reply to this email.</p>',
+    dashboardHtml,
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text: textLines.join('\n'),
+    html,
+  });
+}
+
 async function sendSubscriptionThankYouEmail(
   { to, name, subscriptionId, amount, currency, paidAt },
   overrideSettings
@@ -1560,6 +1625,7 @@ async function verifyConnection(overrideSettings) {
 
 module.exports = {
   sendInviteEmail,
+  sendImportedPlexUserSetupEmail,
   sendSubscriptionThankYouEmail,
   sendAccountWelcomeEmail,
   sendPasswordResetEmail,

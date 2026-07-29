@@ -1355,6 +1355,7 @@ router.post(
     const requested = Array.isArray(req.body && req.body.candidates)
       ? req.body.candidates.slice(0, 100)
       : [];
+    const sendEmail = req.body && req.body.sendEmail === true;
     if (requested.length === 0) {
       return res.status(400).json({ error: 'Select at least one Plex user' });
     }
@@ -1422,10 +1423,43 @@ router.post(
         token: nanoid(36),
         sessionToken: nanoid(48),
       });
-      imported.push({
+      const setupUrl = `${origin}/share/${shareLink.token}`;
+      const importedEntry = {
         donor,
-        setupUrl: `${origin}/share/${shareLink.token}`,
-      });
+        setupUrl,
+        emailSent: false,
+        emailError: null,
+      };
+
+      if (sendEmail) {
+        try {
+          await emailService.sendImportedPlexUserSetupEmail({
+            to: donor.email,
+            name: donor.name,
+            setupUrl,
+          });
+          importedEntry.emailSent = true;
+          logEvent('donor.courtesy_access.import_email.sent', {
+            donorId: donor.id,
+            email: donor.email,
+          });
+        } catch (err) {
+          importedEntry.emailError =
+            err && err.message ? err.message : 'Failed to send setup email';
+          logger.warn('Failed to email imported Plex user setup link', {
+            donorId: donor.id,
+            email: donor.email,
+            error: importedEntry.emailError,
+          });
+          logEvent('donor.courtesy_access.import_email.failed', {
+            donorId: donor.id,
+            email: donor.email,
+            error: importedEntry.emailError,
+          });
+        }
+      }
+
+      imported.push(importedEntry);
       logEvent('donor.courtesy_access.imported', {
         donorId: donor.id,
         email: donor.email,
@@ -1433,12 +1467,22 @@ router.post(
       });
     }
 
+    const emailsSent = imported.filter((entry) => entry.emailSent).length;
+    const emailFailures = imported.filter((entry) => entry.emailError).length;
+    let message = imported.length
+      ? `Imported ${imported.length} existing Plex user${imported.length === 1 ? '' : 's'} with courtesy access.`
+      : 'No selected Plex users were available to import.';
+    if (sendEmail && imported.length) {
+      message += ` Sent ${emailsSent} setup email${emailsSent === 1 ? '' : 's'}.`;
+      if (emailFailures) {
+        message += ` ${emailFailures} email${emailFailures === 1 ? '' : 's'} could not be sent.`;
+      }
+    }
+
     return res.status(imported.length ? 201 : 409).json({
       imported,
       skipped,
-      message: imported.length
-        ? `Imported ${imported.length} existing Plex user${imported.length === 1 ? '' : 's'} with courtesy access.`
-        : 'No selected Plex users were available to import.',
+      message,
       csrfToken: res.locals.csrfToken,
     });
   })

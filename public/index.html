@@ -1509,6 +1509,13 @@
           <div id="plex-import-list" class="plex-import-list">
             <p class="muted-text">Refresh to find available Plex users.</p>
           </div>
+          <label class="checkbox-row">
+            <input id="plex-import-send-email" name="sendEmail" type="checkbox" />
+            <span>
+              Email setup links to imported users
+              <span class="help">Sends each selected user their personal account setup link. Their existing Plex access will not be changed.</span>
+            </span>
+          </label>
           <p id="plex-import-status" class="form-status"></p>
           <div class="form-actions">
             <button type="button" class="secondary" id="plex-import-refresh">Refresh Plex users</button>

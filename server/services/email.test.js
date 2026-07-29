@@ -85,6 +85,35 @@ test('sendInviteEmail includes the dashboard button and text link', async (t) =>
   assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
 });
 
+test('sendImportedPlexUserSetupEmail sends the personal setup link without promising a new Plex invite', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendImportedPlexUserSetupEmail(
+    {
+      to: 'existing@example.com',
+      setupUrl: 'https://plex.example.com/share/setup-token',
+      name: 'Existing User',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.subject, 'Set up your Plex Donate account');
+  assert.match(message.html, /Finish Account Setup/);
+  assert.match(message.text, /https:\/\/plex\.example\.com\/share\/setup-token/);
+  assert.match(message.text, /will not send another Plex library invitation/);
+});
+
 test('sendSubscriptionThankYouEmail includes payment and subscription details', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;
