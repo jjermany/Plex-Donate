@@ -635,27 +635,28 @@ async function sendImportedPlexUserSetupEmail(
 
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
-  const subject = 'Set up your Plex Donate account';
+  const subject = 'Your Plex server access and optional dashboard setup';
   const recipientName = name || 'there';
-  const dashboardUrl = resolveDashboardUrl({ fallbackUrls: [setupUrl] });
-  const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
-  const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
 
   const textLines = [
     `Hi ${recipientName},`,
     '',
-    'Your existing Plex access has been connected to Plex Donate with courtesy access.',
+    'You already have access to this Plex server. The server owner has added you as a courtesy member in Plex Donate, the private dashboard used to support this server.',
     '',
-    `Use this personal setup link to finish creating your account: ${setupUrl}`,
+    'Courtesy access is free. No payment or donation is required, and your existing Plex access will not change.',
+    '',
+    'As a courtesy member, you can:',
+    '- Receive email alerts for server power outages, recoveries, and shutdowns.',
+    '- Send support requests and follow replies for playback, access, or other issues.',
+    '- Share referral invites that give friends a trial. They can subscribe afterward if they choose to keep access.',
+    '- Review your access status and keep your account details current.',
+    '',
+    `Set up your dashboard with this personal link: ${setupUrl}`,
   ];
-
-  if (dashboardTextLine) {
-    textLines.push('', dashboardTextLine);
-  }
 
   textLines.push(
     '',
-    'This setup will not send another Plex library invitation or change your existing access.',
+    'Dashboard setup is optional. It will not send another Plex library invitation or change your existing access.',
     '',
     'If you did not expect this email or need help, reply to this email.',
     '',
@@ -665,19 +666,30 @@ async function sendImportedPlexUserSetupEmail(
   const html = buildEmailFrameHtml({
     tone: 'brand',
     subject,
-    badge: 'Account Setup',
+    badge: 'Courtesy Access',
     recipientName,
     intro:
-      'Your existing Plex access has been connected to Plex Donate with courtesy access.',
+      'You already have access to this Plex server. The server owner has added you as a courtesy member in Plex Donate, the private dashboard used to support this server.',
     bodyHtml:
+      '<p style="margin:0 0 20px;color:#0f172a;"><strong>Courtesy access is free.</strong> No payment or donation is required, and your existing Plex access will not change.</p>' +
+      buildEmailDetailPanelHtml(
+        'Your courtesy benefits',
+        [
+          'Receive email alerts for server power outages, recoveries, and shutdowns.',
+          'Send support requests and follow replies for playback, access, or other issues.',
+          'Share referral invites that give friends a trial. They can subscribe afterward if they choose to keep access.',
+          'Review your access status and keep your account details current.',
+        ],
+        getEmailTonePalette('brand')
+      ) +
       buildEmailActionButtonHtml(
-        'Finish Account Setup',
+        'Set Up My Dashboard',
         setupUrl,
         getEmailTonePalette('brand')
       ) +
-      '<p style="margin:0 0 16px;color:#0f172a;">This setup will not send another Plex library invitation or change your existing access.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">Dashboard setup is optional. It will not send another Plex library invitation or change your existing access.</p>' +
       '<p style="margin:0 0 16px;color:#0f172a;">If you need help, just reply to this email.</p>',
-    dashboardHtml,
+    dashboardHtml: '',
   });
 
   await mailer.sendMail({

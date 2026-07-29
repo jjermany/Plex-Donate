@@ -1210,6 +1210,7 @@ router.post(
 
     if (donor) {
       const status = (donor.status || '').toLowerCase();
+      const isFirstAccountSetup = !donor.hasPassword;
       const blockedStatuses = new Set(['cancelled', 'suspended', 'expired']);
       if (blockedStatuses.has(status)) {
         return res.status(403).json({
@@ -1348,6 +1349,26 @@ router.post(
         donorId: activeDonor.id,
         shareLinkId: updatedLink.id,
       });
+
+      if (isFirstAccountSetup) {
+        const source = activeDonor.hadPreexistingAccess
+          ? 'Imported Plex member setup'
+          : activeDonor.courtesyAccess
+          ? 'Courtesy member setup'
+          : 'Existing donor setup';
+        adminNotifications
+          .notifyDonorCreated({
+            donor: activeDonor,
+            source,
+            shareLinkId: updatedLink.id,
+          })
+          .catch((err) =>
+            logger.warn(
+              'Failed to send admin account created notification',
+              err && err.message
+            )
+          );
+      }
 
       const { response } = await createShareResponse(
         {

@@ -85,7 +85,7 @@ test('sendInviteEmail includes the dashboard button and text link', async (t) =>
   assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
 });
 
-test('sendImportedPlexUserSetupEmail sends the personal setup link without promising a new Plex invite', async (t) => {
+test('sendImportedPlexUserSetupEmail clearly explains free courtesy access and dashboard benefits', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;
   nodemailer.createTransport = () => ({
@@ -108,10 +108,22 @@ test('sendImportedPlexUserSetupEmail sends the personal setup link without promi
 
   assert.equal(messages.length, 1);
   const message = messages[0];
-  assert.equal(message.subject, 'Set up your Plex Donate account');
-  assert.match(message.html, /Finish Account Setup/);
+  assert.equal(
+    message.subject,
+    'Your Plex server access and optional dashboard setup'
+  );
+  assert.match(message.html, /Courtesy Access/);
+  assert.match(message.html, /Set Up My Dashboard/);
+  assert.match(message.text, /No payment or donation is required/);
+  assert.match(message.text, /server power outages, recoveries, and shutdowns/);
+  assert.match(message.text, /Send support requests and follow replies/);
+  assert.match(
+    message.text,
+    /referral invites that give friends a trial.*subscribe afterward/
+  );
   assert.match(message.text, /https:\/\/plex\.example\.com\/share\/setup-token/);
-  assert.match(message.text, /will not send another Plex library invitation/);
+  assert.match(message.text, /Dashboard setup is optional/);
+  assert.doesNotMatch(message.html, /Open Dashboard/);
 });
 
 test('sendSubscriptionThankYouEmail includes payment and subscription details', async (t) => {

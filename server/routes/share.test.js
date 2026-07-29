@@ -41,6 +41,7 @@ const paypalService = require('../services/paypal');
 const settingsStore = require('../state/settings');
 const SqliteSessionStore = require('../session-store');
 const emailService = require('../services/email');
+const adminNotifications = require('../services/admin-notifications');
 const plexService = require('../services/plex');
 const { hashPassword, hashPasswordSync } = require('../utils/passwords');
 const { ensureSessionToken } = require('../utils/session-tokens');
@@ -529,6 +530,11 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       'sendAccountWelcomeEmail',
       async () => {}
     );
+    const adminNotificationMock = t.mock.method(
+      adminNotifications,
+      'notifyDonorCreated',
+      async () => {}
+    );
     const app = createApp();
     const server = await startServer(app);
 
@@ -537,7 +543,9 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
         email: 'existing@example.com',
         name: 'Existing Donor',
         subscriptionId: 'I-123456789',
-        status: 'active',
+        status: 'pending',
+        courtesyAccess: true,
+        hadPreexistingAccess: true,
       });
       const shareLink = createOrUpdateShareLink({
         donorId: donor.id,
@@ -589,6 +597,14 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
             `${server.origin}/dashboard/verify?token=`
           )
       );
+      assert.equal(adminNotificationMock.mock.callCount(), 1);
+      const notificationArgs =
+        adminNotificationMock.mock.calls[0].arguments[0];
+      assert.equal(notificationArgs.donor.id, accountResponse.body.donor.id);
+      assert.equal(notificationArgs.donor.email, 'updated@example.com');
+      assert.equal(notificationArgs.donor.hadPreexistingAccess, true);
+      assert.equal(notificationArgs.source, 'Imported Plex member setup');
+      assert.equal(notificationArgs.shareLinkId, shareLink.id);
 
       const row = db
         .prepare('SELECT password_hash, email_verified_at FROM donors WHERE id = ?')
@@ -605,6 +621,7 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(tokenRow.used_at, null);
     } finally {
       welcomeMock.mock.restore();
+      adminNotificationMock.mock.restore();
       await server.close();
     }
   });
