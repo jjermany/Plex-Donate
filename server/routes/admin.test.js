@@ -961,6 +961,18 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
   assert.equal(shareLinksBody.shareLinks.length, 1);
   assert.equal(shareLinksBody.shareLinks[0].donor.courtesyAccess, true);
   assert.equal(shareLinksBody.shareLinks[0].donor.hadPreexistingAccess, true);
+  assert.equal(shareLinksBody.shareLinks[0].donor.hasPassword, false);
+
+  db.prepare(
+    'UPDATE invite_links SET used_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(shareLinksBody.shareLinks[0].id);
+  const completedLinksResponse = await agent.get('/api/admin/share-links');
+  const completedLinksBody = await completedLinksResponse.json();
+  assert.equal(completedLinksBody.shareLinks.length, 0);
+  assert.equal(
+    db.prepare('SELECT COUNT(*) AS count FROM invite_links').get().count,
+    0
+  );
 
   const refreshedCandidates = await agent.get('/api/admin/plex/import-candidates');
   const refreshedBody = await refreshedCandidates.json();
@@ -1208,6 +1220,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   const body = await response.json();
   assert.ok(body.invite);
   assert.equal(body.invite.plexInviteId, 'plex-123');
+  assert.equal(body.invite.createdBy, 'admin');
   assert.ok(body.invite.inviteUrl);
   assert.ok(body.message.includes('Plex invite'));
   assert.ok(createInviteRequest);
@@ -1230,6 +1243,7 @@ test('POST /api/admin/subscribers/:id/invite creates a Plex invite', async (t) =
   const latestInvite = updated.invites[0];
   assert.equal(latestInvite.plexInviteId, 'plex-123');
   assert.equal(latestInvite.inviteUrl, 'https://plex.local/invite/plex-123');
+  assert.equal(latestInvite.createdBy, 'admin');
 
   assert.ok(body.donor);
   assert.equal(body.donor.needsPlexInvite, false);

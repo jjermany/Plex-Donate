@@ -770,6 +770,7 @@ async function ensureCourtesyPlexAccess(donor) {
     note: 'Admin-granted courtesy access',
     plexAccountId: donor.plexAccountId,
     plexEmail: donor.plexEmail,
+    createdBy: 'system',
   });
   const inviteUrl =
     invite.inviteUrl ||
@@ -2411,6 +2412,7 @@ router.post(
       note,
       plexAccountId: activeDonor.plexAccountId,
       plexEmail: activeDonor.plexEmail,
+      createdBy: 'subscriber',
     });
 
     logEvent('invite.customer.generated', {
@@ -2604,6 +2606,7 @@ router.post(
               note,
               plexAccountId: trialDonor.plexAccountId,
               plexEmail: trialDonor.plexEmail,
+              createdBy: 'system',
             });
 
             logEvent('invite.trial.generated', {

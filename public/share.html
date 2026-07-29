@@ -616,6 +616,22 @@
       .invite-link:hover {
         text-decoration: underline;
       }
+      .share-error-state {
+        display: grid;
+        justify-items: start;
+        gap: 12px;
+      }
+      .share-error-state h1 {
+        font-size: clamp(1.35rem, 4vw, 1.8rem);
+      }
+      .share-error-state p {
+        margin: 0;
+        color: var(--text-muted);
+        line-height: 1.6;
+      }
+      .share-error-state .cta-button {
+        margin-top: 4px;
+      }
       @media (max-width: 640px) {
         .journey-progress {
           grid-template-columns: 1fr;
@@ -645,7 +661,7 @@
         .form-actions {
           align-items: stretch;
         }
-        button,
+        button:not(.theme-toggle),
         .cta-button {
           width: 100%;
         }
@@ -1273,7 +1289,40 @@
 
       function showError(message) {
         loadingPanel.classList.add('hidden');
-        errorPanel.textContent = message || 'Something went wrong.';
+        const normalizedMessage = String(message || 'Something went wrong.').trim();
+        const inactiveLink = /not found|no longer|expired|used|invalid/i.test(
+          normalizedMessage
+        );
+        if (typeof document.createElement !== 'function') {
+          errorPanel.textContent = normalizedMessage;
+          errorPanel.classList.remove('hidden');
+          content.classList.add('hidden');
+          return;
+        }
+        const errorState = document.createElement('div');
+        errorState.className = 'share-error-state';
+
+        const eyebrow = document.createElement('span');
+        eyebrow.className = 'eyebrow';
+        eyebrow.textContent = inactiveLink ? 'Link complete' : 'Unable to continue';
+
+        const heading = document.createElement('h1');
+        heading.textContent = inactiveLink
+          ? 'This setup link is no longer active.'
+          : 'We couldn’t open this setup page.';
+
+        const detail = document.createElement('p');
+        detail.textContent = inactiveLink
+          ? 'The account may already be set up, or this private link has expired. Sign in to continue or ask the server owner for a new setup link.'
+          : normalizedMessage;
+
+        const dashboardLink = document.createElement('a');
+        dashboardLink.className = 'cta-button';
+        dashboardLink.href = '/dashboard';
+        dashboardLink.textContent = 'Go to subscriber sign in';
+
+        errorState.append(eyebrow, heading, detail, dashboardLink);
+        errorPanel.replaceChildren(errorState);
         errorPanel.classList.remove('hidden');
         content.classList.add('hidden');
       }

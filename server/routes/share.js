@@ -26,6 +26,7 @@ const {
   resetDonorEmailVerification,
   createDonorEmailVerificationToken,
   startDonorTrial,
+  deleteShareLinkById,
 } = require('../db');
 const settingsStore = require('../state/settings');
 const logger = require('../utils/logger');
@@ -854,6 +855,7 @@ router.post(
       note,
       plexAccountId: activeDonor.plexAccountId,
       plexEmail: activeDonor.plexEmail,
+      createdBy: 'subscriber',
     });
 
     logEvent('invite.share.generated', {
@@ -1349,7 +1351,7 @@ router.post(
 
       const { response } = await createShareResponse(
         {
-          shareLink: updatedLink,
+          shareLink: null,
           donor: activeDonor,
           invite: invitePayload,
           prospect: null,
@@ -1359,6 +1361,12 @@ router.post(
         },
         { logContext: 'share dashboard' }
       );
+      logEvent('share_link.completed', {
+        donorId: activeDonor.id,
+        shareLinkId: updatedLink.id,
+        flow: 'existing-donor',
+      });
+      deleteShareLinkById(updatedLink.id);
       return res.json(response);
     }
 
@@ -1546,7 +1554,7 @@ router.post(
 
     const { response } = await createShareResponse(
       {
-        shareLink: updatedLink,
+        shareLink: null,
         donor: activeDonor,
         invite: invitePayload,
         prospect: null,
@@ -1556,6 +1564,13 @@ router.post(
       },
       { logContext: 'share dashboard' }
     );
+    logEvent('share_link.completed', {
+      donorId: activeDonor.id,
+      shareLinkId: updatedLink.id,
+      prospectId: prospect ? prospect.id : null,
+      flow: 'prospect-promotion',
+    });
+    deleteShareLinkById(updatedLink.id);
     return res.json(response);
   })
 );

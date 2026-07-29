@@ -954,6 +954,7 @@ async function ensureInviteForActiveDonor(donor, { paymentId } = {}) {
       note,
       plexAccountId: donor.plexAccountId,
       plexEmail: donor.plexEmail,
+      createdBy: 'system',
     });
 
     logEvent('invite.auto.generated', {

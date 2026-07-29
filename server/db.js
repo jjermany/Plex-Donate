@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS invites (
   plex_revoked_at TEXT,
   plex_account_id TEXT,
   plex_email TEXT,
+  created_by TEXT NOT NULL DEFAULT 'unknown',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (donor_id) REFERENCES donors(id) ON DELETE CASCADE
 );
@@ -324,6 +325,24 @@ function ensureInvitePlexColumns() {
   ensureColumn('plex_invited_at');
   ensureColumn('plex_invite_status');
   ensureColumn('plex_shared_libraries');
+  ensureColumn('created_by', "TEXT NOT NULL DEFAULT 'unknown'");
+
+  db.exec(`
+    UPDATE invites
+       SET created_by = CASE
+         WHEN LOWER(COALESCE(note, '')) LIKE '%generated from share link%'
+           OR LOWER(COALESCE(note, '')) LIKE '%customer dashboard%'
+           OR LOWER(COALESCE(note, '')) LIKE '%referral%'
+           THEN 'subscriber'
+         WHEN LOWER(COALESCE(note, '')) LIKE '%admin%'
+           THEN 'admin'
+         WHEN LOWER(COALESCE(note, '')) LIKE '%auto-generated%'
+           OR LOWER(COALESCE(note, '')) LIKE '%automatic%'
+           THEN 'system'
+         ELSE 'unknown'
+       END
+     WHERE COALESCE(TRIM(created_by), '') IN ('', 'unknown');
+  `);
 
   db.exec(`
     UPDATE invites
@@ -824,6 +843,16 @@ const statements = {
   getInviteLinkByDonorId: db.prepare(
     'SELECT * FROM invite_links WHERE donor_id = ?'
   ),
+  getActiveInviteLinkByDonorId: db.prepare(`
+    SELECT *
+      FROM invite_links
+     WHERE donor_id = ?
+       AND used_at IS NULL
+       AND (
+         expires_at IS NULL
+         OR DATETIME(expires_at) > DATETIME('now')
+       )
+  `),
   getInviteLinkByProspectId: db.prepare(
     'SELECT * FROM invite_links WHERE prospect_id = ?'
   ),
@@ -839,6 +868,12 @@ const statements = {
            donors.status AS donor_status,
            donors.courtesy_access AS donor_courtesy_access,
            donors.had_preexisting_access AS donor_had_preexisting_access,
+           CASE
+             WHEN donors.password_hash IS NOT NULL
+              AND TRIM(donors.password_hash) <> ''
+             THEN 1
+             ELSE 0
+           END AS donor_has_password,
            prospects.email AS prospect_email,
            prospects.name AS prospect_name
       FROM invite_links
@@ -869,6 +904,14 @@ const statements = {
      WHERE id = @id`
   ),
   deleteInviteLinkById: db.prepare('DELETE FROM invite_links WHERE id = ?'),
+  deleteInactiveInviteLinks: db.prepare(`
+    DELETE FROM invite_links
+     WHERE used_at IS NOT NULL
+        OR (
+          expires_at IS NOT NULL
+          AND DATETIME(expires_at) <= DATETIME('now')
+        )
+  `),
   assignInviteLinkOwner: db.prepare(
     `UPDATE invite_links
      SET donor_id = @donorId,
@@ -901,7 +944,8 @@ const statements = {
        recipient_email,
        email_sent_at,
        plex_account_id,
-       plex_email
+       plex_email,
+       created_by
      )
      VALUES (
        @donorId,
@@ -916,7 +960,8 @@ const statements = {
        @recipientEmail,
        @emailSentAt,
        @plexAccountId,
-       @plexEmail
+       @plexEmail,
+       @createdBy
      )`
   ),
   updateInviteEmailSent: db.prepare(
@@ -1249,6 +1294,9 @@ function mapInvite(row) {
     plexRevokedAt: row.plex_revoked_at,
     plexAccountId: row.plex_account_id,
     plexEmail: row.plex_email,
+    createdBy: ['admin', 'subscriber', 'system'].includes(row.created_by)
+      ? row.created_by
+      : 'unknown',
     createdAt: row.created_at,
   };
 }
@@ -1574,7 +1622,7 @@ function listDonorsWithDetails() {
       .listPaymentsForDonor.all(donor.id)
       .map(mapPayment),
     shareLink: ensureShareLinkHasSessionToken(
-      mapInviteLink(statements.getInviteLinkByDonorId.get(donor.id))
+      mapInviteLink(statements.getActiveInviteLinkByDonorId.get(donor.id))
     ),
   }));
 }
@@ -1584,6 +1632,7 @@ function listDonorsWithSubscriptionId() {
 }
 
 function listShareLinks() {
+  statements.deleteInactiveInviteLinks.run();
   return statements.listInviteLinks.all().map((row) => {
     const shareLink = ensureShareLinkHasSessionToken(mapInviteLink(row));
     const donor = row.donor_id
@@ -1595,6 +1644,7 @@ function listShareLinks() {
           status: row.donor_status || '',
           courtesyAccess: Boolean(row.donor_courtesy_access),
           hadPreexistingAccess: Boolean(row.donor_had_preexisting_access),
+          hasPassword: Boolean(row.donor_has_password),
         }
       : null;
     const prospect = row.prospect_id
@@ -1626,6 +1676,7 @@ function createInvite({
   emailSentAt = null,
   plexAccountId = null,
   plexEmail = null,
+  createdBy = 'unknown',
 } = {}) {
   if (!donorId) {
     throw new Error('donorId is required to create invite');
@@ -1652,6 +1703,9 @@ function createInvite({
     emailSentAt,
     plexAccountId: plexAccountId || null,
     plexEmail: plexEmail || null,
+    createdBy: ['admin', 'subscriber', 'system'].includes(createdBy)
+      ? createdBy
+      : 'unknown',
   });
   return mapInvite(statements.getInviteById.get(info.lastInsertRowid));
 }

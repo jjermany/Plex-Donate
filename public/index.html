@@ -274,7 +274,7 @@
           <div class="setup-checklist-header">
             <div>
               <span class="page-kicker">System Health</span>
-              <h2 style="margin:10px 0 4px;">Setup readiness</h2>
+              <h2 style="margin:10px 0 4px;">System health</h2>
               <p class="muted-text" style="margin:0;">
                 Verify the services Plex Donate relies on and return here whenever
                 something needs attention.
@@ -306,7 +306,7 @@
               </button>
             </div>
           </div>
-          <div class="setup-checklist-grid" id="system-health-details" aria-label="System health checks">
+          <div class="setup-checklist-grid" id="system-health-details" aria-label="System health checks" hidden>
             <article class="setup-checklist-item" data-health-card="app">
               <span class="status-pill" id="setup-check-app-state" data-status="pending">Needs review</span>
               <strong>Public app URL</strong>
@@ -744,7 +744,7 @@
                     <div class="subscriber-list-header" aria-hidden="true">
                       <span>Subscriber</span>
                       <span>Access</span>
-                      <span>Access type</span>
+                      <span>Type & setup</span>
                       <span>Last modified</span>
                     </div>
                     <div class="donors-list" id="donors-list"></div>
@@ -862,32 +862,41 @@
                 </div>
               </section>
 
-              <section class="panel" id="share-links-panel">
-                <div class="share-links-panel-header">
-                  <div>
-                    <h2>Setup and recovery links</h2>
-                    <p class="muted-text">
-                      Review active setup URLs, their source, and recent use.
-                    </p>
+              <section class="panel active-links-panel" id="share-links-panel" hidden>
+                <details class="active-links-disclosure">
+                  <summary>
+                    <div>
+                      <div class="active-links-title-row">
+                        <h2>Active setup links</h2>
+                        <span class="active-links-count" id="active-links-count">0</span>
+                      </div>
+                      <p class="muted-text">
+                        Unused links that still require account setup or recovery.
+                      </p>
+                    </div>
+                    <span class="active-links-review">
+                      Review
+                      <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    </span>
+                  </summary>
+                  <div class="share-links-table-wrap">
+                    <table id="share-links-table">
+                      <caption class="visually-hidden">
+                        Active setup and account recovery links
+                      </caption>
+                      <thead>
+                        <tr>
+                          <th>Owner</th>
+                          <th>Purpose</th>
+                          <th>Created</th>
+                          <th>Expires</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody></tbody>
+                    </table>
                   </div>
-                </div>
-                <div class="share-links-table-wrap">
-                  <table id="share-links-table">
-                    <caption class="visually-hidden">
-                      Active setup and account recovery links
-                    </caption>
-                    <thead>
-                      <tr>
-                        <th>Link</th>
-                        <th>Owner</th>
-                        <th>Created</th>
-                        <th>Last used</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody></tbody>
-                  </table>
-                </div>
+                </details>
               </section>
             </div>
           </div>
@@ -1271,7 +1280,10 @@
           <span class="donor-card-email"></span>
         </div>
         <span class="status-pill donor-card-status"></span>
-        <span class="donor-card-access-type"></span>
+        <span class="donor-card-access">
+          <span class="donor-card-access-type"></span>
+          <span class="donor-card-setup-state"></span>
+        </span>
         <span class="donor-card-updated"></span>
         <span class="donor-card-open" aria-hidden="true">
           <i data-lucide="chevron-right"></i>
@@ -1376,10 +1388,10 @@
 
     <template id="share-link-row">
       <tr>
-        <td class="col-link"></td>
         <td class="col-owner"></td>
+        <td class="col-purpose"></td>
         <td class="col-created"></td>
-        <td class="col-last-used"></td>
+        <td class="col-expires"></td>
         <td>
           <div class="actions">
             <button type="button" data-action="copy" class="secondary">Copy setup link</button>

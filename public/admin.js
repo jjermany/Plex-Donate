@@ -206,6 +206,7 @@
 
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
+      const activeLinksCount = document.getElementById('active-links-count');
       const eventsList = document.getElementById('events-list');
       const refreshButton = document.getElementById('refresh-button');
       const settingsPanel = document.getElementById('settings-panel');
@@ -3749,6 +3750,7 @@
           const emailEl = clone.querySelector('.donor-card-email');
           const statusEl = clone.querySelector('.donor-card-status');
           const accessTypeEl = clone.querySelector('.donor-card-access-type');
+          const setupStateEl = clone.querySelector('.donor-card-setup-state');
           const updatedEl = clone.querySelector('.donor-card-updated');
 
           nameEl.textContent = donor.name || donor.email || 'Unknown';
@@ -3762,6 +3764,12 @@
           const accessType = getDonorAccessType(donor);
           accessTypeEl.textContent = accessType.label;
           accessTypeEl.dataset.accessType = accessType.key;
+          setupStateEl.textContent = donor.hasPassword
+            ? 'Setup complete'
+            : 'Setup required';
+          setupStateEl.dataset.setupState = donor.hasPassword
+            ? 'complete'
+            : 'required';
           updatedEl.textContent = donor.updatedAt
             ? formatDateTime(donor.updatedAt)
             : donor.createdAt
@@ -3971,6 +3979,10 @@
 
           if (invites.length > 0) {
             const invite = invites[0];
+            const creator = getInviteCreatorDetails(invite.createdBy);
+            inviteParts.push(
+              `<span class="badge badge-note" title="${escapeHtml(creator.description)}">${escapeHtml(creator.label)}</span>`
+            );
             if (invite.inviteUrl) {
               inviteParts.push(`<a href="${invite.inviteUrl}">Invite link</a>`);
             }
@@ -4075,6 +4087,31 @@
 
       function isRevokedStatus(status) {
         return ['trial_expired', 'cancelled', 'expired', 'suspended'].includes(status);
+      }
+
+      function getInviteCreatorDetails(createdBy) {
+        switch (createdBy) {
+          case 'subscriber':
+            return {
+              label: 'Created by subscriber',
+              description: 'This invite was created from the subscriber dashboard.',
+            };
+          case 'admin':
+            return {
+              label: 'Created by admin',
+              description: 'This invite was created from the admin dashboard.',
+            };
+          case 'system':
+            return {
+              label: 'Created automatically',
+              description: 'Plex Donate created this invite as part of an automated access flow.',
+            };
+          default:
+            return {
+              label: 'Creator unknown',
+              description: 'This older invite does not include reliable creator information.',
+            };
+        }
       }
 
       function canExtendTrialStatus(status) {
@@ -4261,7 +4298,13 @@
         revokeBtn.disabled = !canRevoke;
         revokeBtn.dataset.action = 'revoke';
         revokeBtn.dataset.donorId = donor.id;
-        revokeBtn.title = canRevoke ? 'Revoke the most recent active invite' : 'No active invite available to revoke';
+        if (activeInvite) {
+          const creator = getInviteCreatorDetails(activeInvite.createdBy);
+          revokeBtn.dataset.inviteCreator = activeInvite.createdBy || 'unknown';
+          revokeBtn.title = `Revoke the most recent active invite. ${creator.description}`;
+        } else {
+          revokeBtn.title = 'No active invite available to revoke';
+        }
         appendAction('danger', revokeBtn, 'mail-x', 'danger');
 
         const canRevokePlex = Boolean(
@@ -5196,24 +5239,21 @@
 
         const links = Array.isArray(state.shareLinks) ? state.shareLinks : [];
 
-        if (!state.authenticated) {
+        if (!state.authenticated || links.length === 0) {
           shareLinksPanel.classList.add('hidden');
+          shareLinksPanel.hidden = true;
           shareLinksTable.innerHTML = '';
+          if (activeLinksCount) {
+            activeLinksCount.textContent = '0';
+          }
           return;
         }
 
         shareLinksPanel.classList.remove('hidden');
+        shareLinksPanel.hidden = false;
         shareLinksTable.innerHTML = '';
-
-        if (links.length === 0) {
-          const row = document.createElement('tr');
-          const cell = document.createElement('td');
-          cell.colSpan = 5;
-          cell.textContent = 'No setup links yet.';
-          cell.style.color = 'var(--text-muted-soft)';
-          row.appendChild(cell);
-          shareLinksTable.appendChild(row);
-          return;
+        if (activeLinksCount) {
+          activeLinksCount.textContent = String(links.length);
         }
 
         const template = document.getElementById('share-link-row');
@@ -5225,24 +5265,22 @@
           const clone = template.content.cloneNode(true);
           const row = clone.querySelector('tr');
           row.dataset.id = link.id;
-          const linkCell = clone.querySelector('.col-link');
           const ownerCell = clone.querySelector('.col-owner');
+          const purposeCell = clone.querySelector('.col-purpose');
           const createdCell = clone.querySelector('.col-created');
-          const lastUsedCell = clone.querySelector('.col-last-used');
+          const expiresCell = clone.querySelector('.col-expires');
+          const actionsCell = clone.querySelector('.actions');
 
           const shareUrl = buildShareUrl(link);
-          linkCell.innerHTML = '';
           if (shareUrl) {
             const openLink = document.createElement('a');
             openLink.className = 'secondary link-open-button';
             openLink.href = shareUrl;
             openLink.target = '_blank';
             openLink.rel = 'noopener';
-            openLink.textContent = 'Open setup page';
+            openLink.textContent = 'Open';
             openLink.title = shareUrl;
-            linkCell.appendChild(openLink);
-          } else {
-            linkCell.textContent = 'Pending setup link configuration';
+            actionsCell.prepend(openLink);
           }
 
           const ownerName = (() => {
@@ -5261,33 +5299,24 @@
           } else if (link.prospect && link.prospect.email) {
             ownerMeta.push(escapeHtml(link.prospect.email));
           }
-          if (link.donor && link.donor.subscriptionId) {
-            ownerMeta.push(
-              escapeHtml(`Sub ID: ${link.donor.subscriptionId}`)
-            );
-          }
-          if (link.donor && link.donor.status) {
-            ownerMeta.push(
-              escapeHtml(
-                `Status: ${link.donor.status.replace(/_/g, ' ')}`
-              )
-            );
-          }
-
-          const sourceLabel = link.donor
+          const purposeLabel = link.donor
             ? link.donor.hadPreexistingAccess
-              ? 'Plex import'
+              ? 'Imported member setup'
               : link.donor.courtesyAccess
-              ? 'Courtesy invite'
-              : 'Subscriber'
+              ? 'Courtesy setup'
+              : link.donor.hasPassword
+              ? 'Account recovery'
+              : 'Account setup'
             : link.prospect
-            ? 'Prospect'
+            ? 'New supporter'
             : 'Unassigned';
-          const sourceTone = link.donor
+          const purposeTone = link.donor
             ? link.donor.hadPreexistingAccess
               ? 'import'
               : link.donor.courtesyAccess
               ? 'courtesy'
+              : link.donor.hasPassword
+              ? 'recovery'
               : 'subscriber'
             : 'prospect';
 
@@ -5296,24 +5325,29 @@
           ownerHeading.className = 'setup-link-owner-heading';
           const ownerStrong = document.createElement('strong');
           ownerStrong.textContent = ownerName;
-          const sourceBadge = document.createElement('span');
-          sourceBadge.className = 'setup-link-source';
-          sourceBadge.dataset.source = sourceTone;
-          sourceBadge.textContent = sourceLabel;
-          ownerHeading.append(ownerStrong, sourceBadge);
+          ownerHeading.append(ownerStrong);
 
           const ownerDetails = document.createElement('span');
           ownerDetails.className = 'subtle-text setup-link-owner-meta';
           ownerDetails.innerHTML = ownerMeta.join(' &middot; ');
           ownerCell.append(ownerHeading, ownerDetails);
 
+          const purposeBadge = document.createElement('span');
+          purposeBadge.className = 'setup-link-source';
+          purposeBadge.dataset.source = purposeTone;
+          purposeBadge.textContent = purposeLabel;
+          purposeCell.appendChild(purposeBadge);
+
           createdCell.textContent = formatDateTime(link.createdAt);
-          lastUsedCell.textContent = link.lastUsedAt
-            ? formatDateTime(link.lastUsedAt)
-            : 'Never';
+          expiresCell.textContent = link.expiresAt
+            ? formatDateTime(link.expiresAt)
+            : 'No expiration';
 
           shareLinksTable.appendChild(clone);
         });
+        if (typeof lucide !== 'undefined') {
+          lucide.createIcons();
+        }
       }
 
       if (togglePasswordVisibilityButton && loginPasswordInput) {
@@ -6492,7 +6526,10 @@
             } else if (action === 'resend') {
               await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
             } else if (action === 'revoke') {
-              if (!(await showConfirmModal('Revoke Plex invite', 'Revoke the latest Plex invite for this subscriber? They will lose access to that invite URL.'))) {
+              const creator = getInviteCreatorDetails(
+                button.dataset.inviteCreator || 'unknown'
+              );
+              if (!(await showConfirmModal('Revoke Plex invite', `${creator.label}. Revoke the latest Plex invite for this subscriber? The recipient will lose access to that invite URL.`))) {
                 return;
               }
               await api(`/api/admin/subscribers/${donorId}/revoke`, { method: 'POST' });
@@ -6854,7 +6891,10 @@
               const successMessage = (response && response.message) || 'Email resent successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke') {
-              if (!(await showConfirmModal('Revoke Plex invite', 'Revoke this Plex invite? The recipient will lose access to that invite URL.'))) {
+              const creator = getInviteCreatorDetails(
+                button.dataset.inviteCreator || 'unknown'
+              );
+              if (!(await showConfirmModal('Revoke Plex invite', `${creator.label}. Revoke this Plex invite? The recipient will lose access to that invite URL.`))) {
                 button.disabled = false;
                 return;
               }
@@ -6951,29 +6991,21 @@
       }
 
       if (systemHealthToggle && systemHealthDetails) {
-        const mobileHealthQuery = window.matchMedia('(max-width: 700px)');
-        let mobileHealthExpanded = false;
+        let systemHealthExpanded = false;
         const syncSystemHealthDisclosure = () => {
-          const isMobile = mobileHealthQuery.matches;
-          systemHealthToggle.hidden = !isMobile;
-          systemHealthDetails.hidden = isMobile && !mobileHealthExpanded;
+          systemHealthDetails.hidden = !systemHealthExpanded;
           systemHealthToggle.setAttribute(
             'aria-expanded',
-            mobileHealthExpanded ? 'true' : 'false'
+            systemHealthExpanded ? 'true' : 'false'
           );
-          systemHealthToggle.textContent = mobileHealthExpanded
+          systemHealthToggle.textContent = systemHealthExpanded
             ? 'Hide details'
             : 'View details';
         };
         systemHealthToggle.addEventListener('click', () => {
-          mobileHealthExpanded = !mobileHealthExpanded;
+          systemHealthExpanded = !systemHealthExpanded;
           syncSystemHealthDisclosure();
         });
-        if (typeof mobileHealthQuery.addEventListener === 'function') {
-          mobileHealthQuery.addEventListener('change', syncSystemHealthDisclosure);
-        } else if (typeof mobileHealthQuery.addListener === 'function') {
-          mobileHealthQuery.addListener(syncSystemHealthDisclosure);
-        }
         syncSystemHealthDisclosure();
       }
 

@@ -575,6 +575,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
       assert.equal(accountResponse.body.donor.email, 'updated@example.com');
       assert.equal(accountResponse.body.donor.name, 'Updated Name');
       assert.equal(accountResponse.body.donor.hasPassword, true);
+      assert.equal(accountResponse.body.shareLink, null);
+      assert.equal(getShareLinkByToken(shareLink.token), null);
 
       assert.equal(welcomeMock.mock.callCount(), 1);
       const welcomeArgs = welcomeMock.mock.calls[0].arguments[0];
@@ -787,9 +789,8 @@ test('share routes handle donor and prospect flows', { concurrency: false }, asy
           )
       );
 
-      const updatedLink = getShareLinkByToken(shareLink.token);
-      assert.equal(updatedLink.donorId, accountResponse.body.donor.id);
-      assert.equal(updatedLink.prospectId, null);
+      assert.equal(accountResponse.body.shareLink, null);
+      assert.equal(getShareLinkByToken(shareLink.token), null);
 
       const prospectRecord = getProspectById(prospect.id);
       assert.ok(prospectRecord && prospectRecord.convertedAt);

@@ -394,6 +394,7 @@ async function createTrialExtensionInvite(donor) {
       recipientEmail: inviteEmail,
       plexEmail: inviteEmail,
       plexAccountId: donor.plexAccountId,
+      createdBy: 'admin',
     });
 
     logEvent('plex.invite.trial_extension_sent', {
@@ -2244,6 +2245,7 @@ router.post(
       note: normalizedNote,
       recipientEmail: donor.email,
       plexEmail: donor.email,
+      createdBy: 'admin',
     });
 
     logEvent('plex.invite.admin_sent', {
