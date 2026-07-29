@@ -3911,6 +3911,11 @@
           return;
         }
         const wasHidden = donorDetailModal.hidden;
+        // The dialog is reused between subscribers. Mobile browsers retain the
+        // scroll position of the inner scroller while it is hidden, which can
+        // otherwise reopen the next subscriber at the empty bottom of the panel.
+        donorDetail.scrollTop = 0;
+        donorDetail.scrollLeft = 0;
         donorDetailModal.hidden = false;
         donorDetail.hidden = false;
         document.body.style.overflow = 'hidden';

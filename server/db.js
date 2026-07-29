@@ -768,7 +768,14 @@ const statements = {
      SET status = @status,
          last_payment_at = COALESCE(@lastPaymentAt, last_payment_at),
          updated_at = CURRENT_TIMESTAMP
-     WHERE paypal_subscription_id = @subscriptionId`
+     WHERE paypal_subscription_id = @subscriptionId
+       AND (
+         status IS NOT @status
+         OR (
+           @lastPaymentAt IS NOT NULL
+           AND last_payment_at IS NOT @lastPaymentAt
+         )
+       )`
   ),
   updateDonorStatusById: db.prepare(
     `UPDATE donors
@@ -786,7 +793,8 @@ const statements = {
     `UPDATE donors
      SET access_expires_at = @accessExpiresAt,
          updated_at = CURRENT_TIMESTAMP
-     WHERE paypal_subscription_id = @subscriptionId`
+     WHERE paypal_subscription_id = @subscriptionId
+       AND access_expires_at IS NOT @accessExpiresAt`
   ),
   updateDonorAccessExpirationById: db.prepare(
     `UPDATE donors

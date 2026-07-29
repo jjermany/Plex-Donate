@@ -9,6 +9,8 @@
     "dev": "NODE_ENV=development nodemon --watch server server/index.js",
     "test": "node server/scripts/run-tests.js",
     "test:watch": "node server/scripts/run-tests.js --watch",
+    "test:env": "node scripts/test-environment.js",
+    "test:env:smoke": "node scripts/test-environment.js --smoke",
     "reset-admin": "node server/scripts/reset-admin-password.js",
     "diag:plex-invite": "node scripts/manual/plex-invite.js",
     "diag:access-expiration": "node scripts/manual/access-expiration.js",

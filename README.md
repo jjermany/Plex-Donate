@@ -143,6 +143,19 @@ npm run diag:plex-sync
 
 The admin dashboard is served from `http://localhost:3000/` and exposes JSON APIs under `/api/admin`. Configure your PayPal webhook to POST to `/api/paypal/webhook`.
 
+### Isolated live test environment
+
+Run `npm run test:env` to start a loopback-only test instance with a temporary
+database, temporary admin credentials, and representative subscriber records.
+The command prints the URL and credentials as `PLEX_DONATE_TEST_ENV` JSON. The
+environment shuts down and deletes its temporary files on Ctrl+C or automatically
+after 15 minutes.
+
+Use `npm run test:env -- --ttl 300` to change the automatic shutdown timeout,
+`npm run test:env -- --empty` to omit seeded subscribers, or
+`npm run test:env:smoke` to start it, verify the health endpoint, and immediately
+clean it up. This environment never uses the configured production database.
+
 ### UPS outage automation
 
 If you use NUT on Unraid, Plex Donate can send automatic outage, recovery, and shutdown-imminent emails to `active` and `trial` users when your UPS state changes.
