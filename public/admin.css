@@ -639,6 +639,12 @@
         color: #1d4ed8;
       }
 
+      .status-pill[data-status='neutral'] {
+        border-color: rgba(100, 116, 139, 0.22);
+        background: rgba(148, 163, 184, 0.08);
+        color: #475569;
+      }
+
       .status-pill[data-status='trial'] {
         background: rgba(20, 184, 166, 0.16);
         color: #0f766e;
@@ -676,6 +682,12 @@
         border-color: rgba(96, 165, 250, 0.26);
         background: rgba(59, 130, 246, 0.1);
         color: #93c5fd;
+      }
+
+      :root[data-theme='dark'] .status-pill[data-status='neutral'] {
+        border-color: rgba(148, 163, 184, 0.22);
+        background: rgba(148, 163, 184, 0.08);
+        color: #cbd5e1;
       }
 
       .donor-status-pill {
@@ -4795,14 +4807,7 @@
         }
       }
 
-      /* Account readiness and the low-noise active setup-link queue. */
-      .donor-card-access {
-        display: grid;
-        justify-items: start;
-        min-width: 0;
-        gap: 4px;
-      }
-
+      /* Only incomplete account setup is surfaced in the subscriber list. */
       .donor-card-setup-state {
         color: var(--text-muted-soft);
         font-size: 0.68rem;
@@ -4810,17 +4815,8 @@
         line-height: 1.2;
       }
 
-      .donor-card-setup-state[data-setup-state='complete'] {
-        color: #15803d;
-      }
-
       .donor-card-setup-state[data-setup-state='required'] {
         color: #b45309;
-      }
-
-      :root[data-theme='dark']
-        .donor-card-setup-state[data-setup-state='complete'] {
-        color: #86efac;
       }
 
       :root[data-theme='dark']
@@ -4965,14 +4961,6 @@
       }
 
       @media (max-width: 700px) {
-        .donor-card-access {
-          grid-area: type;
-        }
-
-        .donor-card-access-type {
-          grid-area: auto;
-        }
-
         .active-links-disclosure summary {
           padding: 12px;
         }
@@ -5080,8 +5068,7 @@
         display: grid;
         grid-template-columns:
           minmax(240px, 2fr)
-          minmax(115px, 0.85fr)
-          minmax(130px, 0.95fr)
+          minmax(145px, 0.9fr)
           minmax(155px, 1fr)
           24px;
         align-items: center;
@@ -5168,6 +5155,29 @@
         font-size: 0.74rem;
       }
 
+      .donor-card-meta {
+        display: flex;
+        min-height: 0;
+        flex-wrap: wrap;
+        gap: 4px 8px;
+        color: var(--text-muted-soft);
+        font-size: 0.68rem;
+        font-weight: 650;
+        line-height: 1.25;
+      }
+
+      .donor-card-meta[hidden] {
+        display: none;
+      }
+
+      .donor-card-source {
+        color: #0369a1;
+      }
+
+      :root[data-theme='dark'] .donor-card-source {
+        color: #7dd3fc;
+      }
+
       .donor-card-status {
         width: fit-content;
         max-width: 100%;
@@ -5176,65 +5186,22 @@
         white-space: nowrap;
       }
 
-      .donor-card-access-type {
-        width: fit-content;
-        max-width: 100%;
-        padding: 3px 7px;
-        overflow: hidden;
-        border: 1px solid rgba(100, 116, 139, 0.26);
-        border-radius: 999px;
-        color: var(--text-muted);
-        background: rgba(148, 163, 184, 0.09);
-        font-size: 0.7rem;
-        font-weight: 700;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .donor-card-access-type[data-access-type='paid'] {
-        color: #0f766e;
-        border-color: rgba(15, 118, 110, 0.3);
-        background: rgba(20, 184, 166, 0.1);
-      }
-
-      .donor-card-access-type[data-access-type='courtesy'] {
-        color: #7c3aed;
-        border-color: rgba(124, 58, 237, 0.28);
-        background: rgba(124, 58, 237, 0.09);
-      }
-
-      .donor-card-access-type[data-access-type='import'] {
-        color: #0369a1;
-        border-color: rgba(3, 105, 161, 0.28);
-        background: rgba(14, 165, 233, 0.09);
-      }
-
-      .donor-card-access-type[data-access-type='trial'] {
-        color: #b45309;
-        border-color: rgba(180, 83, 9, 0.28);
-        background: rgba(245, 158, 11, 0.1);
-      }
-
-      :root[data-theme='dark'] .donor-card-access-type[data-access-type='paid'] {
-        color: #5eead4;
-      }
-
-      :root[data-theme='dark'] .donor-card-access-type[data-access-type='courtesy'] {
-        color: #c4b5fd;
-      }
-
-      :root[data-theme='dark'] .donor-card-access-type[data-access-type='import'] {
-        color: #7dd3fc;
-      }
-
-      :root[data-theme='dark'] .donor-card-access-type[data-access-type='trial'] {
-        color: #fcd34d;
-      }
-
       .donor-card-updated {
         color: var(--text-muted);
         font-size: 0.74rem;
         line-height: 1.35;
+      }
+
+      .subscriber-list-shell .donor-card[data-status] {
+        border-left-color: transparent;
+        background: transparent;
+      }
+
+      .subscriber-list-shell .donor-card[data-status]:hover,
+      .subscriber-list-shell .donor-card[data-status]:focus,
+      .subscriber-list-shell .donor-card[data-status].selected {
+        border-left-color: rgba(20, 184, 166, 0.72);
+        background: rgba(20, 184, 166, 0.07);
       }
 
       .donor-card-open {
@@ -5532,7 +5499,7 @@
           grid-template-columns: minmax(0, 1fr) auto 20px;
           grid-template-areas:
             'info status open'
-            'type updated open';
+            'info updated open';
           gap: 7px 10px;
           min-height: 78px;
           padding: 10px 11px;
@@ -5545,10 +5512,6 @@
         .donor-card-status {
           grid-area: status;
           justify-self: end;
-        }
-
-        .donor-card-access-type {
-          grid-area: type;
         }
 
         .donor-card-updated {

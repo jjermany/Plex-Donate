@@ -3509,26 +3509,20 @@
         if (donor.courtesyAccess) {
           return {
             key: 'courtesy',
-            label: 'Courtesy',
+            label: 'Courtesy access',
             icon: 'shield-check',
           };
         }
         if (status === 'pending') {
-          return donor.hasPassword
-            ? {
-                key: 'complete',
-                label: 'Setup complete',
-                icon: 'check-circle',
-              }
-            : {
-                key: 'pending',
-                label: 'Pending setup',
-                icon: 'clock',
-              };
+          return {
+            key: 'neutral',
+            label: 'No access',
+            icon: 'circle-minus',
+          };
         }
         const displayStatuses = {
-          active: { key: 'active', label: 'Active', icon: 'check-circle' },
-          trial: { key: 'trial', label: 'Trial', icon: 'timer' },
+          active: { key: 'active', label: 'Paid access', icon: 'check-circle' },
+          trial: { key: 'trial', label: 'Trial access', icon: 'timer' },
           suspended: { key: 'suspended', label: 'Suspended', icon: 'pause-circle' },
           cancelled: { key: 'cancelled', label: 'Cancelled', icon: 'x-circle' },
           canceled: { key: 'cancelled', label: 'Cancelled', icon: 'x-circle' },
@@ -3561,6 +3555,46 @@
         element.classList.add('donor-status-pill');
         element.dataset.status = displayStatus.key;
         element.replaceChildren(icon, label);
+      }
+
+      function getDonorSourceLabel(donor) {
+        if (donor.hadPreexistingAccess) {
+          return 'Plex import';
+        }
+        if (donor.courtesyAccess) {
+          return 'Courtesy grant';
+        }
+        return '';
+      }
+
+      function formatCompactDateTime(value) {
+        if (!value) {
+          return 'Not available';
+        }
+        const normalized =
+          typeof value === 'string' &&
+          /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value.trim())
+            ? `${value.trim().replace(' ', 'T')}Z`
+            : value;
+        const date = new Date(normalized);
+        if (Number.isNaN(date.getTime())) {
+          return String(value);
+        }
+        const options = {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        };
+        const timezone =
+          typeof state.timezone === 'string' ? state.timezone.trim() : '';
+        if (timezone) {
+          options.timeZone = timezone;
+        }
+        try {
+          return new Intl.DateTimeFormat(undefined, options).format(date);
+        } catch (err) {
+          delete options.timeZone;
+          return new Intl.DateTimeFormat(undefined, options).format(date);
+        }
       }
 
       function getFilteredDonors() {
@@ -3798,7 +3832,8 @@
           const nameEl = clone.querySelector('.donor-card-name');
           const emailEl = clone.querySelector('.donor-card-email');
           const statusEl = clone.querySelector('.donor-card-status');
-          const accessTypeEl = clone.querySelector('.donor-card-access-type');
+          const metaEl = clone.querySelector('.donor-card-meta');
+          const sourceEl = clone.querySelector('.donor-card-source');
           const setupStateEl = clone.querySelector('.donor-card-setup-state');
           const updatedEl = clone.querySelector('.donor-card-updated');
 
@@ -3809,23 +3844,21 @@
           card.dataset.status = status;
           renderDonorStatusPill(statusEl, donor);
 
-          const accessType = getDonorAccessType(donor);
-          accessTypeEl.textContent = accessType.label;
-          accessTypeEl.dataset.accessType = accessType.key;
-          setupStateEl.textContent = donor.hasPassword
-            ? 'Setup complete'
-            : 'Setup required';
-          setupStateEl.dataset.setupState = donor.hasPassword
-            ? 'complete'
-            : 'required';
-          updatedEl.textContent = donor.updatedAt
-            ? formatDateTime(donor.updatedAt)
-            : donor.createdAt
-            ? formatDateTime(donor.createdAt)
-            : 'Not available';
+          const sourceLabel = getDonorSourceLabel(donor);
+          sourceEl.textContent = sourceLabel;
+          sourceEl.hidden = !sourceLabel;
+          setupStateEl.textContent = donor.hasPassword ? '' : 'Setup required';
+          setupStateEl.hidden = Boolean(donor.hasPassword);
+          setupStateEl.dataset.setupState = 'required';
+          metaEl.hidden = !sourceLabel && Boolean(donor.hasPassword);
+          const modifiedAt = donor.updatedAt || donor.createdAt || '';
+          updatedEl.textContent = formatCompactDateTime(modifiedAt);
+          updatedEl.title = modifiedAt ? formatDateTime(modifiedAt) : '';
           card.setAttribute(
             'aria-label',
-            `Manage ${nameEl.textContent}, ${statusEl.textContent}, ${accessType.label}`
+            `Manage ${nameEl.textContent}, ${statusEl.textContent}${
+              donor.hasPassword ? '' : ', setup required'
+            }${sourceLabel ? `, ${sourceLabel}` : ''}`
           );
 
           card.addEventListener('click', () => selectDonor(donor.id));
