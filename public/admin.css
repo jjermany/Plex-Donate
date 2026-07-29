@@ -5276,6 +5276,12 @@
         padding: 24px;
       }
 
+      html.donor-detail-modal-open,
+      html.donor-detail-modal-open body {
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+
       .donor-detail-modal[hidden] {
         display: none;
       }
@@ -5547,16 +5553,22 @@
 
         .donor-detail-modal {
           align-items: stretch;
+          min-height: 100vh;
+          min-height: 100dvh;
           padding: 0;
+          overscroll-behavior: contain;
         }
 
         .donor-detail-modal .donor-detail {
           width: 100%;
+          height: 100vh;
           height: 100dvh;
           max-height: none;
           padding: 13px;
           border: 0;
           border-radius: 0;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
         }
 
         .donor-detail-modal .donor-detail-header {

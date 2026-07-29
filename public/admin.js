@@ -3928,6 +3928,7 @@
         resetDialogScroll();
         donorDetailModal.hidden = false;
         donorDetail.hidden = false;
+        document.documentElement.classList.add('donor-detail-modal-open');
         document.body.style.overflow = 'hidden';
         if (
           wasHidden &&
@@ -3941,7 +3942,12 @@
         }
         // Focus restoration and sticky headers can adjust a reused scroller on
         // the next frame. Reset again after those focus callbacks have settled.
-        window.requestAnimationFrame(resetDialogScroll);
+        window.requestAnimationFrame(() => {
+          resetDialogScroll();
+          // iOS Safari can finish its focus-driven scroll adjustment one frame
+          // later than Chromium. Reset once more after that adjustment.
+          window.requestAnimationFrame(resetDialogScroll);
+        });
       }
 
       function closeDonorDetailModal({ preserveSelection = false } = {}) {
@@ -3956,6 +3962,7 @@
         if (donorDetail) {
           donorDetail.hidden = true;
         }
+        document.documentElement.classList.remove('donor-detail-modal-open');
         document.body.style.overflow = '';
         if (!preserveSelection) {
           selectedDonorId = null;

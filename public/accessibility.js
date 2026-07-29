@@ -54,7 +54,11 @@
     }
     window.requestAnimationFrame(() => {
       if (target && typeof target.focus === 'function') {
-        target.focus();
+        try {
+          target.focus({ preventScroll: true });
+        } catch (err) {
+          target.focus();
+        }
       }
     });
   }

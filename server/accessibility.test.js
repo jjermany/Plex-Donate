@@ -107,13 +107,14 @@ test('pages expose one main landmark, unique IDs, and named controls', () => {
 test('dialogs and dynamic status regions have reusable keyboard and live-region support', () => {
   const accessibilityJs = readPublic('accessibility.js');
   const adminJs = readPublic('admin.js');
+  const adminCss = readPublic('admin.css');
   const dashboardJs = readPublic('dashboard.js');
   const adminHtml = readPublic('index.html');
   const dashboardHtml = readPublic('dashboard.html');
   const shareHtml = readPublic('share.html');
 
   [adminHtml, dashboardHtml, shareHtml].forEach((html) => {
-    assert.match(html, /\/accessibility\.js\?v=accessibility-20260728/);
+    assert.match(html, /\/accessibility\.js\?v=prevent-focus-scroll-20260729/);
   });
 
   [adminHtml, dashboardHtml].forEach((html) => {
@@ -130,7 +131,13 @@ test('dialogs and dynamic status regions have reusable keyboard and live-region 
   assert.match(accessibilityJs, /event\.key === 'Escape'/);
   assert.match(accessibilityJs, /aria-live/);
   assert.match(accessibilityJs, /aria-atomic/);
+  assert.match(accessibilityJs, /focus\(\{ preventScroll: true \}\)/);
   assert.match(adminJs, /PlexDonateA11y\.handleDialogKeydown/);
+  assert.match(adminJs, /classList\.add\('donor-detail-modal-open'\)/);
+  assert.match(adminJs, /classList\.remove\('donor-detail-modal-open'\)/);
+  assert.match(adminCss, /html\.donor-detail-modal-open body/);
+  assert.match(adminCss, /-webkit-overflow-scrolling:\s*touch/);
+  assert.match(adminHtml, /\/admin\.js\?v=ios-donor-modal-20260729/);
   assert.match(dashboardJs, /PlexDonateA11y\.handleDialogKeydown/);
   assert.match(adminJs, /\['ArrowDown', 'ArrowUp', 'Home', 'End'\]/);
 });
