@@ -47,8 +47,9 @@ function closeServer(server) {
   });
 }
 
-function seedTestSubscribers(dbApi) {
+function seedTestSubscribers(dbApi, { donorPassword }) {
   const { createDonor, db, recordPayment } = dbApi;
+  const { hashPasswordSync } = require('../server/utils/passwords');
   const paid = createDonor({
     email: 'paid.supporter@example.test',
     name: 'Paid Supporter',
@@ -58,6 +59,7 @@ function seedTestSubscribers(dbApi) {
     plexAccountId: 'test-plex-paid',
     plexEmail: 'paid.supporter@example.test',
     emailVerifiedAt: '2026-06-01T12:00:00.000Z',
+    passwordHash: hashPasswordSync(donorPassword),
   });
   createDonor({
     email: 'trial.supporter@example.test',
@@ -105,6 +107,7 @@ async function main() {
   const tempDataDir = path.join(tempRoot, 'data');
   const databaseFile = path.join(tempDataDir, 'plex-donate.sqlite');
   const adminPassword = `Test-${crypto.randomBytes(12).toString('base64url')}`;
+  const donorPassword = `Donor-${crypto.randomBytes(12).toString('base64url')}`;
 
   fs.mkdirSync(tempDataDir, { recursive: true });
   process.env.NODE_ENV = 'test';
@@ -124,7 +127,7 @@ async function main() {
 
   const dbApi = require('../server/db');
   if (shouldSeed) {
-    seedTestSubscribers(dbApi);
+    seedTestSubscribers(dbApi, { donorPassword });
   }
 
   const app = require('../server/index');
@@ -157,6 +160,10 @@ async function main() {
       seeded: shouldSeed,
       ttlSeconds,
     };
+    if (shouldSeed) {
+      details.donorEmail = 'paid.supporter@example.test';
+      details.donorPassword = donorPassword;
+    }
 
     process.stdout.write(`PLEX_DONATE_TEST_ENV=${JSON.stringify(details)}\n`);
     process.stdout.write(
