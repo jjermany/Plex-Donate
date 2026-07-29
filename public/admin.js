@@ -3910,12 +3910,22 @@
         if (!donorDetailModal || !donorDetail) {
           return;
         }
+        // Render the dialog at the document root. Dashboard panels use
+        // transforms for their entrance animation, which otherwise makes this
+        // fixed dialog position itself against a scrolled panel instead of the
+        // viewport.
+        if (donorDetailModal.parentElement !== document.body) {
+          document.body.appendChild(donorDetailModal);
+        }
         const wasHidden = donorDetailModal.hidden;
         // The dialog is reused between subscribers. Mobile browsers retain the
         // scroll position of the inner scroller while it is hidden, which can
         // otherwise reopen the next subscriber at the empty bottom of the panel.
-        donorDetail.scrollTop = 0;
-        donorDetail.scrollLeft = 0;
+        const resetDialogScroll = () => {
+          donorDetail.scrollTop = 0;
+          donorDetail.scrollLeft = 0;
+        };
+        resetDialogScroll();
         donorDetailModal.hidden = false;
         donorDetail.hidden = false;
         document.body.style.overflow = 'hidden';
@@ -3929,6 +3939,9 @@
             donorDetailClose || donorDetail
           );
         }
+        // Focus restoration and sticky headers can adjust a reused scroller on
+        // the next frame. Reset again after those focus callbacks have settled.
+        window.requestAnimationFrame(resetDialogScroll);
       }
 
       function closeDonorDetailModal({ preserveSelection = false } = {}) {
