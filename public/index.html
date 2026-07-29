@@ -724,8 +724,11 @@
                     </div>
                     <div class="donor-detail-content">
                       <!-- Quick Actions at top -->
-                      <div class="donor-detail-section">
-                        <h4><i data-lucide="zap" style="width: 16px; height: 16px;"></i> Subscriber actions</h4>
+                      <div class="donor-detail-section donor-actions-section">
+                        <div class="donor-section-heading">
+                          <h4><i data-lucide="zap" style="width: 16px; height: 16px;"></i> Subscriber actions</h4>
+                          <span>Choose a task</span>
+                        </div>
                         <div class="donor-detail-actions" id="donor-detail-actions"></div>
                       </div>
 
@@ -809,16 +812,19 @@
               </section>
 
               <section class="panel" id="share-links-panel">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;">
+                <div class="share-links-panel-header">
                   <div>
-                    <h2 style="margin:0 0 4px;">Setup and recovery links</h2>
-                    <p class="muted-text" style="margin:0;">
-                      Review active setup URLs and remove any that are no longer needed.
+                    <h2>Setup and recovery links</h2>
+                    <p class="muted-text">
+                      Review active setup URLs, their source, and recent use.
                     </p>
                   </div>
                 </div>
-                <div style="overflow-x:auto;">
+                <div class="share-links-table-wrap">
                   <table id="share-links-table">
+                    <caption class="visually-hidden">
+                      Active setup and account recovery links
+                    </caption>
                     <thead>
                       <tr>
                         <th>Link</th>

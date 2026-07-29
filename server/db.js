@@ -837,6 +837,8 @@ const statements = {
            donors.name AS donor_name,
            donors.paypal_subscription_id AS donor_subscription_id,
            donors.status AS donor_status,
+           donors.courtesy_access AS donor_courtesy_access,
+           donors.had_preexisting_access AS donor_had_preexisting_access,
            prospects.email AS prospect_email,
            prospects.name AS prospect_name
       FROM invite_links
@@ -1591,6 +1593,8 @@ function listShareLinks() {
           name: row.donor_name || '',
           subscriptionId: row.donor_subscription_id || '',
           status: row.donor_status || '',
+          courtesyAccess: Boolean(row.donor_courtesy_access),
+          hadPreexistingAccess: Boolean(row.donor_had_preexisting_access),
         }
       : null;
     const prospect = row.prospect_id

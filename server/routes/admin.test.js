@@ -955,6 +955,13 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
   assert.equal(importBody.imported[0].donor.hadPreexistingAccess, true);
   assert.equal(importBody.imported[0].donor.plexAccountId, 'plex-user-42');
 
+  const shareLinksResponse = await agent.get('/api/admin/share-links');
+  assert.equal(shareLinksResponse.status, 200);
+  const shareLinksBody = await shareLinksResponse.json();
+  assert.equal(shareLinksBody.shareLinks.length, 1);
+  assert.equal(shareLinksBody.shareLinks[0].donor.courtesyAccess, true);
+  assert.equal(shareLinksBody.shareLinks[0].donor.hadPreexistingAccess, true);
+
   const refreshedCandidates = await agent.get('/api/admin/plex/import-candidates');
   const refreshedBody = await refreshedCandidates.json();
   assert.equal(refreshedBody.candidates.length, 0);

@@ -4030,6 +4030,43 @@
         if (!donorDetailActions) return;
 
         donorDetailActions.innerHTML = '';
+        const actionGroups = {};
+        [
+          ['access', 'Access & setup', 'Plex access and setup links'],
+          ['account', 'Account', 'Status and communication'],
+          ['danger', 'Remove access', 'Revocation and removal'],
+        ].forEach(([key, label, description]) => {
+          const group = document.createElement('div');
+          group.className = `donor-action-group donor-action-group-${key}`;
+          group.setAttribute('role', 'group');
+          group.setAttribute('aria-label', label);
+
+          const heading = document.createElement('div');
+          heading.className = 'donor-action-group-heading';
+          const title = document.createElement('strong');
+          title.textContent = label;
+          const help = document.createElement('span');
+          help.textContent = description;
+          heading.append(title, help);
+
+          const buttons = document.createElement('div');
+          buttons.className = 'donor-action-group-buttons';
+          group.append(heading, buttons);
+          donorDetailActions.appendChild(group);
+          actionGroups[key] = buttons;
+        });
+
+        const appendAction = (groupName, button, iconName, variant = 'secondary') => {
+          const label = button.textContent;
+          const icon = document.createElement('i');
+          icon.setAttribute('data-lucide', iconName);
+          icon.setAttribute('aria-hidden', 'true');
+          const text = document.createElement('span');
+          text.textContent = label;
+          button.replaceChildren(icon, text);
+          button.dataset.variant = variant;
+          actionGroups[groupName].appendChild(button);
+        };
         const plexState = state.plex;
         const status = (donor.status || 'pending').toLowerCase();
         const invites = Array.isArray(donor.invites) ? donor.invites : [];
@@ -4064,7 +4101,7 @@
         } else {
           inviteBtn.title = 'Send a Plex invite to this subscriber.';
         }
-        donorDetailActions.appendChild(inviteBtn);
+        appendAction('access', inviteBtn, 'send', canInvite ? 'primary' : 'secondary');
 
         // Copy setup link
         const shareBtn = document.createElement('button');
@@ -4074,7 +4111,12 @@
         shareBtn.dataset.action = 'share';
         shareBtn.dataset.donorId = donor.id;
         shareBtn.title = shareUrl ? 'Copy the existing setup link' : 'Create a setup link first';
-        donorDetailActions.appendChild(shareBtn);
+        appendAction(
+          'access',
+          shareBtn,
+          'copy',
+          !canInvite && shareUrl ? 'primary' : 'secondary'
+        );
 
         const courtesyBtn = document.createElement('button');
         courtesyBtn.className = 'secondary';
@@ -4087,7 +4129,11 @@
         courtesyBtn.title = donor.courtesyAccess
           ? 'Remove Plex Donate courtesy privileges without revoking the Plex share'
           : 'Grant admin-managed courtesy access and referral privileges';
-        donorDetailActions.appendChild(courtesyBtn);
+        appendAction(
+          'account',
+          courtesyBtn,
+          donor.courtesyAccess ? 'user-minus' : 'user-plus'
+        );
 
         // Verify payment
         const refreshBtn = document.createElement('button');
@@ -4096,7 +4142,7 @@
         refreshBtn.dataset.action = 'refresh';
         refreshBtn.dataset.donorId = donor.id;
         refreshBtn.title = 'Refresh this subscriber from PayPal';
-        donorDetailActions.appendChild(refreshBtn);
+        appendAction('account', refreshBtn, 'refresh-cw');
 
         const extendTrialBtn = document.createElement('button');
         extendTrialBtn.className = 'secondary';
@@ -4107,7 +4153,7 @@
         extendTrialBtn.title = canExtendTrialStatus(status)
           ? 'Extend this trial by 1-30 days'
           : 'Only trial subscribers can have their trial extended';
-        donorDetailActions.appendChild(extendTrialBtn);
+        appendAction('account', extendTrialBtn, 'calendar-plus');
 
         // Generate new invite link
         const shareGenBtn = document.createElement('button');
@@ -4116,7 +4162,12 @@
         shareGenBtn.dataset.action = 'share-generate';
         shareGenBtn.dataset.donorId = donor.id;
         shareGenBtn.title = 'Create a new setup link for account setup or recovery';
-        donorDetailActions.appendChild(shareGenBtn);
+        appendAction(
+          'access',
+          shareGenBtn,
+          'link',
+          !canInvite && !shareUrl ? 'primary' : 'secondary'
+        );
 
         // Resend email
         const canResend = Boolean(activeInvite && activeInvite.inviteUrl);
@@ -4127,7 +4178,7 @@
         resendBtn.dataset.action = 'resend';
         resendBtn.dataset.donorId = donor.id;
         resendBtn.title = canResend ? 'Resend the most recent invite email' : 'No active invite available to resend';
-        donorDetailActions.appendChild(resendBtn);
+        appendAction('account', resendBtn, 'mail');
 
         // Revoke Plex invite
         const canRevoke = Boolean(activeInvite);
@@ -4138,7 +4189,7 @@
         revokeBtn.dataset.action = 'revoke';
         revokeBtn.dataset.donorId = donor.id;
         revokeBtn.title = canRevoke ? 'Revoke the most recent active invite' : 'No active invite available to revoke';
-        donorDetailActions.appendChild(revokeBtn);
+        appendAction('danger', revokeBtn, 'mail-x', 'danger');
 
         const canRevokePlex = Boolean(
           plexState &&
@@ -4157,7 +4208,7 @@
           : isRevokedStatus(status)
           ? 'Plex access is already revoked or expired for this subscriber'
           : 'Revoke is available only for subscribers with Plex access or a pending share';
-        donorDetailActions.appendChild(revokePlexBtn);
+        appendAction('danger', revokePlexBtn, 'shield-x', 'danger');
 
         // Remove subscriber
         const removeBtn = document.createElement('button');
@@ -4166,7 +4217,7 @@
         removeBtn.dataset.action = 'remove';
         removeBtn.dataset.donorId = donor.id;
         removeBtn.title = 'Remove this subscriber and all related records';
-        donorDetailActions.appendChild(removeBtn);
+        appendAction('danger', removeBtn, 'trash-2', 'danger');
       }
 
       function showDonorsEmptyState() {
@@ -5136,12 +5187,6 @@
           })();
 
           const ownerMeta = [];
-          const typeLabel = link.donor
-            ? 'User'
-            : link.prospect
-            ? 'Prospect'
-            : 'Unassigned';
-          ownerMeta.push(escapeHtml(typeLabel));
           if (link.donor && link.donor.email) {
             ownerMeta.push(escapeHtml(link.donor.email));
           } else if (link.prospect && link.prospect.email) {
@@ -5160,11 +5205,38 @@
             );
           }
 
-          ownerCell.innerHTML = `<strong>${escapeHtml(
-            ownerName
-          )}</strong><br /><span class="subtle-text">${ownerMeta.join(
-            ' · '
-          )}</span>`;
+          const sourceLabel = link.donor
+            ? link.donor.hadPreexistingAccess
+              ? 'Plex import'
+              : link.donor.courtesyAccess
+              ? 'Courtesy invite'
+              : 'Subscriber'
+            : link.prospect
+            ? 'Prospect'
+            : 'Unassigned';
+          const sourceTone = link.donor
+            ? link.donor.hadPreexistingAccess
+              ? 'import'
+              : link.donor.courtesyAccess
+              ? 'courtesy'
+              : 'subscriber'
+            : 'prospect';
+
+          ownerCell.innerHTML = '';
+          const ownerHeading = document.createElement('div');
+          ownerHeading.className = 'setup-link-owner-heading';
+          const ownerStrong = document.createElement('strong');
+          ownerStrong.textContent = ownerName;
+          const sourceBadge = document.createElement('span');
+          sourceBadge.className = 'setup-link-source';
+          sourceBadge.dataset.source = sourceTone;
+          sourceBadge.textContent = sourceLabel;
+          ownerHeading.append(ownerStrong, sourceBadge);
+
+          const ownerDetails = document.createElement('span');
+          ownerDetails.className = 'subtle-text setup-link-owner-meta';
+          ownerDetails.innerHTML = ownerMeta.join(' &middot; ');
+          ownerCell.append(ownerHeading, ownerDetails);
 
           createdCell.textContent = formatDateTime(link.createdAt);
           lastUsedCell.textContent = link.lastUsedAt
