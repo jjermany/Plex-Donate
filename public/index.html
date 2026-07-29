@@ -26,7 +26,7 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="/theme.js"></script>
     <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
-    <link rel="stylesheet" href="/admin.css?v=ui-components-20260728" />
+    <link rel="stylesheet" href="/admin.css?v=import-polish-20260728" />
   </head>
   <body>
     <a href="#dashboard" class="skip-link">Skip to dashboard</a>
@@ -878,22 +878,19 @@
                       <i data-lucide="chevron-down" aria-hidden="true"></i>
                     </span>
                   </summary>
-                  <div class="share-links-table-wrap">
-                    <table id="share-links-table">
-                      <caption class="visually-hidden">
-                        Active setup and account recovery links
-                      </caption>
-                      <thead>
-                        <tr>
-                          <th>Owner</th>
-                          <th>Purpose</th>
-                          <th>Created</th>
-                          <th>Expires</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody></tbody>
-                    </table>
+                  <div
+                    class="setup-links-list-shell"
+                    role="table"
+                    aria-label="Active setup and account recovery links"
+                  >
+                    <div class="setup-links-list-header" role="row">
+                      <span role="columnheader">Member</span>
+                      <span role="columnheader">Purpose</span>
+                      <span role="columnheader">Created</span>
+                      <span role="columnheader">Expires</span>
+                      <span role="columnheader">Actions</span>
+                    </div>
+                    <div id="share-links-list" class="setup-links-list" role="rowgroup"></div>
                   </div>
                 </details>
               </section>
@@ -1386,18 +1383,18 @@
     </template>
 
     <template id="share-link-row">
-      <tr>
-        <td class="col-owner"></td>
-        <td class="col-purpose"></td>
-        <td class="col-created"></td>
-        <td class="col-expires"></td>
-        <td>
-          <div class="actions">
+      <div class="setup-link-row" role="row">
+        <div class="col-owner" role="cell"></div>
+        <div class="col-purpose" role="cell"></div>
+        <div class="col-created setup-link-date" role="cell"></div>
+        <div class="col-expires setup-link-date" role="cell"></div>
+        <div class="setup-link-actions-cell" role="cell">
+          <div class="actions setup-link-actions">
             <button type="button" data-action="copy" class="secondary">Copy setup link</button>
             <button type="button" data-action="remove" class="danger secondary">Remove</button>
           </div>
-        </td>
-      </tr>
+        </div>
+      </div>
     </template>
 
     <div
@@ -1509,13 +1506,16 @@
           <div id="plex-import-list" class="plex-import-list">
             <p class="muted-text">Refresh to find available Plex users.</p>
           </div>
-          <label class="checkbox-row">
-            <input id="plex-import-send-email" name="sendEmail" type="checkbox" />
-            <span>
-              Email setup links to imported users
-              <span class="help">Sends each selected user their personal account setup link. Their existing Plex access will not be changed.</span>
-            </span>
-          </label>
+          <fieldset class="plex-import-delivery-options">
+            <legend>After import</legend>
+            <label class="plex-import-delivery-option">
+              <input id="plex-import-send-email" name="sendEmail" type="checkbox" />
+              <span class="plex-import-delivery-copy">
+                <strong>Email each setup link</strong>
+                <span class="help">Send every selected member their personal account setup link. Existing Plex access will not be changed.</span>
+              </span>
+            </label>
+          </fieldset>
           <p id="plex-import-status" class="form-status"></p>
           <div class="form-actions">
             <button type="button" class="secondary" id="plex-import-refresh">Refresh Plex users</button>
@@ -1526,6 +1526,6 @@
       </div>
     </div>
     <script src="/accessibility.js?v=accessibility-20260728"></script>
-    <script src="/admin.js?v=accessibility-20260728"></script>
+    <script src="/admin.js?v=import-polish-20260728"></script>
   </body>
 </html>

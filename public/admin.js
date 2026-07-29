@@ -205,7 +205,7 @@
       const DONORS_PER_PAGE = 15;
 
       const shareLinksPanel = document.getElementById('share-links-panel');
-      const shareLinksTable = document.querySelector('#share-links-table tbody');
+      const shareLinksTable = document.getElementById('share-links-list');
       const activeLinksCount = document.getElementById('active-links-count');
       const eventsList = document.getElementById('events-list');
       const refreshButton = document.getElementById('refresh-button');
@@ -4513,7 +4513,7 @@
         const plexState = state.plex;
         donors.forEach((donor) => {
           const clone = template.content.cloneNode(true);
-          const row = clone.querySelector('tr');
+          const row = clone.querySelector('.setup-link-row');
           row.dataset.id = donor.id;
           const subscriberCell = clone.querySelector('.col-subscriber');
           const statusPill = clone.querySelector('.status-pill');
@@ -5352,7 +5352,7 @@
           const purposeCell = clone.querySelector('.col-purpose');
           const createdCell = clone.querySelector('.col-created');
           const expiresCell = clone.querySelector('.col-expires');
-          const actionsCell = clone.querySelector('.actions');
+          const actionsCell = clone.querySelector('.setup-link-actions');
 
           const shareUrl = buildShareUrl(link);
           if (shareUrl) {
@@ -6474,7 +6474,7 @@
   
           const button = event.target.closest('button[data-action]');
           if (!button) return;
-          const row = event.target.closest('tr');
+          const row = event.target.closest('.setup-link-row');
           const donorId = row && row.dataset.id;
           if (!donorId) return;
           const action = button.dataset.action;
