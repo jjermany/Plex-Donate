@@ -607,6 +607,7 @@
         display: inline-flex;
         align-items: center;
         gap: 6px;
+        border: 1px solid transparent;
         font-size: 0.85rem;
         border-radius: 999px;
         padding: 4px 10px;
@@ -615,13 +616,27 @@
       }
 
       .status-pill[data-status='active'] {
-        background: var(--status-active-bg);
-        color: var(--status-active-color);
+        border-color: rgba(22, 163, 74, 0.22);
+        background: rgba(22, 163, 74, 0.08);
+        color: #15803d;
       }
 
       .status-pill[data-status='pending'] {
-        background: var(--status-pending-bg);
-        color: var(--status-pending-color);
+        border-color: rgba(217, 119, 6, 0.24);
+        background: rgba(245, 158, 11, 0.08);
+        color: #92400e;
+      }
+
+      .status-pill[data-status='complete'] {
+        border-color: rgba(22, 163, 74, 0.22);
+        background: rgba(22, 163, 74, 0.08);
+        color: #15803d;
+      }
+
+      .status-pill[data-status='courtesy'] {
+        border-color: rgba(37, 99, 235, 0.22);
+        background: rgba(59, 130, 246, 0.08);
+        color: #1d4ed8;
       }
 
       .status-pill[data-status='trial'] {
@@ -642,6 +657,36 @@
       :root[data-theme='dark'] .status-pill[data-status='trial'] {
         background: rgba(45, 212, 191, 0.2);
         color: #99f6e4;
+      }
+
+      :root[data-theme='dark'] .status-pill[data-status='active'],
+      :root[data-theme='dark'] .status-pill[data-status='complete'] {
+        border-color: rgba(74, 222, 128, 0.24);
+        background: rgba(34, 197, 94, 0.1);
+        color: #86efac;
+      }
+
+      :root[data-theme='dark'] .status-pill[data-status='pending'] {
+        border-color: rgba(251, 191, 36, 0.25);
+        background: rgba(245, 158, 11, 0.1);
+        color: #fcd34d;
+      }
+
+      :root[data-theme='dark'] .status-pill[data-status='courtesy'] {
+        border-color: rgba(96, 165, 250, 0.26);
+        background: rgba(59, 130, 246, 0.1);
+        color: #93c5fd;
+      }
+
+      .donor-status-pill {
+        text-transform: none;
+      }
+
+      .donor-status-pill svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        stroke-width: 2.25;
       }
 
       .status-cell {

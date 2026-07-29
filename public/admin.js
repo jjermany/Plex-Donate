@@ -3504,14 +3504,63 @@
         return { key: 'none', label: 'No current access' };
       }
 
-      function getDonorStatusLabel(donor) {
+      function getDonorDisplayStatus(donor) {
         const status = (donor.status || 'pending').toLowerCase();
         if (donor.courtesyAccess) {
-          return donor.subscriptionId && status === 'active'
-            ? 'Courtesy + supporting'
-            : 'Courtesy';
+          return {
+            key: 'courtesy',
+            label: 'Courtesy',
+            icon: 'shield-check',
+          };
         }
-        return status.replace(/_/g, ' ');
+        if (status === 'pending') {
+          return donor.hasPassword
+            ? {
+                key: 'complete',
+                label: 'Setup complete',
+                icon: 'check-circle',
+              }
+            : {
+                key: 'pending',
+                label: 'Pending setup',
+                icon: 'clock',
+              };
+        }
+        const displayStatuses = {
+          active: { key: 'active', label: 'Active', icon: 'check-circle' },
+          trial: { key: 'trial', label: 'Trial', icon: 'timer' },
+          suspended: { key: 'suspended', label: 'Suspended', icon: 'pause-circle' },
+          cancelled: { key: 'cancelled', label: 'Cancelled', icon: 'x-circle' },
+          canceled: { key: 'cancelled', label: 'Cancelled', icon: 'x-circle' },
+          expired: { key: 'expired', label: 'Expired', icon: 'x-circle' },
+          trial_expired: {
+            key: 'expired',
+            label: 'Trial expired',
+            icon: 'x-circle',
+          },
+        };
+        return (
+          displayStatuses[status] || {
+            key: 'neutral',
+            label: status.replace(/_/g, ' '),
+            icon: 'circle',
+          }
+        );
+      }
+
+      function renderDonorStatusPill(element, donor) {
+        if (!element) {
+          return;
+        }
+        const displayStatus = getDonorDisplayStatus(donor);
+        const icon = document.createElement('i');
+        icon.setAttribute('data-lucide', displayStatus.icon);
+        icon.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = displayStatus.label;
+        element.classList.add('donor-status-pill');
+        element.dataset.status = displayStatus.key;
+        element.replaceChildren(icon, label);
       }
 
       function getFilteredDonors() {
@@ -3758,8 +3807,7 @@
 
           const status = (donor.status || 'pending').toLowerCase();
           card.dataset.status = status;
-          statusEl.dataset.status = status;
-          statusEl.textContent = getDonorStatusLabel(donor);
+          renderDonorStatusPill(statusEl, donor);
 
           const accessType = getDonorAccessType(donor);
           accessTypeEl.textContent = accessType.label;
@@ -3909,13 +3957,7 @@
           emailHeaderEl.textContent = donor.email || '';
         }
         if (donorDetailStatus) {
-          const status = (donor.status || 'pending').toLowerCase();
-          donorDetailStatus.dataset.status = status;
-          donorDetailStatus.textContent = donor.courtesyAccess
-            ? donor.subscriptionId && status === 'active'
-              ? 'courtesy + supporting'
-              : 'courtesy'
-            : status.replace(/_/g, ' ');
+          renderDonorStatusPill(donorDetailStatus, donor);
         }
 
         // Payment card
@@ -4462,12 +4504,7 @@
           subscriberCell.innerHTML = `<strong>${donor.name || donor.email || 'Unknown'}</strong><br /><span style="color:var(--text-muted-soft);font-size:0.85rem;">${donor.email || 'No email'}<br/>Sub ID: ${donor.subscriptionId || 'No subscription ID'}</span>`;
 
           const status = (donor.status || 'pending').toLowerCase();
-          statusPill.dataset.status = status;
-          statusPill.textContent = donor.courtesyAccess
-            ? donor.subscriptionId && status === 'active'
-              ? 'courtesy + supporting'
-              : 'courtesy'
-            : status.replace(/_/g, ' ');
+          renderDonorStatusPill(statusPill, donor);
 
           if (statusNote) {
             const refreshError =
