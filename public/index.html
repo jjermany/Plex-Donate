@@ -295,9 +295,18 @@
               >
                 <span id="system-health-progress-fill"></span>
               </div>
+              <button
+                type="button"
+                class="secondary system-health-toggle"
+                id="system-health-toggle"
+                aria-controls="system-health-details"
+                aria-expanded="false"
+              >
+                View details
+              </button>
             </div>
           </div>
-          <div class="setup-checklist-grid" aria-label="System health checks">
+          <div class="setup-checklist-grid" id="system-health-details" aria-label="System health checks">
             <article class="setup-checklist-item" data-health-card="app">
               <span class="status-pill" id="setup-check-app-state" data-status="pending">Needs review</span>
               <strong>Public app URL</strong>
@@ -637,30 +646,23 @@
                 <div class="donors-panel-header">
                   <div>
                     <h2 style="margin:0 0 4px;">Subscribers</h2>
-                    <p class="muted-text" style="margin:0;">Open a subscriber to manage billing, Plex access, setup links, and status notes from one place.</p>
+                    <p class="muted-text" style="margin:0;">Find a subscriber, then open their management panel for billing, Plex access, and setup links.</p>
                   </div>
-                <div class="donors-controls">
-                  <button
-                    id="plex-import-open"
-                    type="button"
-                    class="secondary donors-action-button"
-                  >
-                    Import Plex users
-                  </button>
-                  <button
-                    id="prospect-share-open"
-                    type="button"
-                    class="secondary donors-action-button"
-                  >
-                    Invite supporter
-                  </button>
-                  <label class="visually-hidden" for="donors-search">Search subscribers</label>
-                  <input
-                      type="search"
-                      id="donors-search"
-                      placeholder="Search subscribers..."
-                      class="donors-search-input"
-                    />
+                  <div class="donors-controls">
+                    <button
+                      id="plex-import-open"
+                      type="button"
+                      class="secondary donors-action-button"
+                    >
+                      Import Plex users
+                    </button>
+                    <button
+                      id="prospect-share-open"
+                      type="button"
+                      class="secondary donors-action-button"
+                    >
+                      Invite supporter
+                    </button>
                     <button id="refresh-button" type="button" class="secondary">Refresh</button>
                   </div>
                 </div>
@@ -689,38 +691,97 @@
                   </article>
                 </div>
 
-                <!-- Filter tabs -->
-                <div class="donors-filter-tabs">
-                  <button type="button" class="donors-filter-tab active" data-filter="all">
-                    All <span class="filter-count" data-count-for="all">0</span>
-                  </button>
-                  <button type="button" class="donors-filter-tab" data-filter="active">
-                    Active <span class="filter-count" data-count-for="active">0</span>
-                  </button>
-                  <button type="button" class="donors-filter-tab" data-filter="courtesy">
-                    Courtesy <span class="filter-count" data-count-for="courtesy">0</span>
-                  </button>
-                  <button type="button" class="donors-filter-tab" data-filter="pending">
-                    Pending <span class="filter-count" data-count-for="pending">0</span>
-                  </button>
-                  <button type="button" class="donors-filter-tab" data-filter="cancelled">
-                    Cancelled <span class="filter-count" data-count-for="cancelled">0</span>
-                  </button>
-                  <button type="button" class="donors-filter-tab" data-filter="suspended">
-                    Suspended <span class="filter-count" data-count-for="suspended">0</span>
-                  </button>
+                <div class="subscriber-list-toolbar" aria-label="Subscriber list controls">
+                  <label class="subscriber-search-field">
+                    <span>Search users</span>
+                    <input
+                      type="search"
+                      id="donors-search"
+                      placeholder="Name, email, Plex account, or subscription ID"
+                      class="donors-search-input"
+                    />
+                  </label>
+                  <label>
+                    <span>Access status</span>
+                    <select id="donors-status-filter">
+                      <option value="all">All statuses</option>
+                      <option value="active">Active</option>
+                      <option value="trial">Trial</option>
+                      <option value="pending">Pending</option>
+                      <option value="suspended">Suspended</option>
+                      <option value="cancelled">Cancelled</option>
+                      <option value="trial_expired">Trial expired</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Access type</span>
+                    <select id="donors-access-filter">
+                      <option value="all">All access types</option>
+                      <option value="paid">Paid supporter</option>
+                      <option value="courtesy">Courtesy</option>
+                      <option value="import">Plex import</option>
+                      <option value="trial">Trial</option>
+                      <option value="none">No current access</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Sort by</span>
+                    <select id="donors-sort">
+                      <option value="updated-desc">Recently updated</option>
+                      <option value="created-desc">Newest added</option>
+                      <option value="created-asc">Oldest added</option>
+                      <option value="name-asc">Name A–Z</option>
+                      <option value="name-desc">Name Z–A</option>
+                      <option value="access-asc">Access status</option>
+                      <option value="type-asc">Access type</option>
+                    </select>
+                  </label>
                 </div>
 
-                <!-- Master-detail layout -->
+                <!-- Paginated subscriber list and management dialog -->
                 <div class="donors-layout">
-                  <div class="donors-list" id="donors-list"></div>
-                  <div class="donor-detail" id="donor-detail" hidden>
+                  <div class="subscriber-list-shell">
+                    <div class="subscriber-list-header" aria-hidden="true">
+                      <span>Subscriber</span>
+                      <span>Access</span>
+                      <span>Access type</span>
+                      <span>Last modified</span>
+                    </div>
+                    <div class="donors-list" id="donors-list"></div>
+                    <div class="subscriber-pagination" id="subscriber-pagination">
+                      <span id="subscriber-page-summary">0 subscribers</span>
+                      <div class="subscriber-pagination-actions">
+                        <button type="button" class="secondary" id="subscriber-page-previous">Previous</button>
+                        <span id="subscriber-page-number">Page 1 of 1</span>
+                        <button type="button" class="secondary" id="subscriber-page-next">Next</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="donor-detail-modal"
+                    id="donor-detail-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="donor-detail-name"
+                    hidden
+                  >
+                    <div
+                      class="donor-detail-backdrop"
+                      id="donor-detail-backdrop"
+                      aria-hidden="true"
+                    ></div>
+                    <div class="donor-detail" id="donor-detail" hidden>
                     <div class="donor-detail-header">
                       <div class="donor-detail-header-info">
                         <h3 id="donor-detail-name"></h3>
                         <span class="donor-detail-header-email" id="donor-detail-email-header"></span>
                       </div>
-                      <span class="status-pill" id="donor-detail-status"></span>
+                      <div class="donor-detail-header-actions">
+                        <span class="status-pill" id="donor-detail-status"></span>
+                        <button type="button" class="secondary donor-detail-close" id="donor-detail-close">
+                          Close
+                        </button>
+                      </div>
                     </div>
                     <div class="donor-detail-content">
                       <!-- Quick Actions at top -->
@@ -797,16 +858,6 @@
                       </div>
                     </div>
                   </div>
-                  <div class="donors-empty-state" id="donors-empty-state">
-                    <div class="empty-state" style="border:none;background:none;">
-                      <div class="empty-state-icon">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <span class="empty-state-title">Select a subscriber</span>
-                      <span class="empty-state-description">Choose someone from the list to view their details, payments, and manage their access.</span>
-                    </div>
                   </div>
                 </div>
               </section>
@@ -1214,18 +1265,17 @@
     </div>
 
     <template id="donor-card">
-      <div class="donor-card" role="button" tabindex="0">
-        <div class="donor-card-header">
-          <div class="donor-card-info">
-            <strong class="donor-card-name"></strong>
-            <span class="donor-card-email"></span>
-          </div>
-          <span class="status-pill donor-card-status"></span>
+      <div class="donor-card" role="button" tabindex="0" aria-haspopup="dialog">
+        <div class="donor-card-info">
+          <strong class="donor-card-name"></strong>
+          <span class="donor-card-email"></span>
         </div>
-        <div class="donor-card-meta">
-          <span class="donor-card-meta-item donor-card-payment"></span>
-          <span class="donor-card-meta-item donor-card-plex-status"></span>
-        </div>
+        <span class="status-pill donor-card-status"></span>
+        <span class="donor-card-access-type"></span>
+        <span class="donor-card-updated"></span>
+        <span class="donor-card-open" aria-hidden="true">
+          <i data-lucide="chevron-right"></i>
+        </span>
       </div>
     </template>
 

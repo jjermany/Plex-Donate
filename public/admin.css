@@ -4749,3 +4749,580 @@
           grid-template-columns: minmax(0, 1fr);
         }
       }
+
+      /* Subscriber directory: explicit filters, 15-user pages, and dialog management. */
+      .subscriber-list-toolbar {
+        display: grid;
+        grid-template-columns: minmax(260px, 2fr) repeat(3, minmax(150px, 1fr));
+        align-items: end;
+        gap: 10px;
+        margin: 16px 0 12px;
+        padding: 12px;
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.045);
+      }
+
+      .subscriber-list-toolbar label {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        color: var(--text-muted);
+        font-size: 0.72rem;
+        font-weight: 750;
+      }
+
+      .subscriber-list-toolbar input,
+      .subscriber-list-toolbar select {
+        width: 100%;
+        min-width: 0;
+        min-height: 40px;
+        margin: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--input-border);
+        border-radius: 9px;
+        color: var(--text-primary);
+        background: var(--input-background);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 550;
+      }
+
+      .subscriber-list-toolbar input:focus,
+      .subscriber-list-toolbar select:focus {
+        outline: none;
+        border-color: rgba(20, 184, 166, 0.72);
+        box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+      }
+
+      .donors-layout {
+        display: block;
+        grid-template-columns: none;
+        gap: 0;
+      }
+
+      .subscriber-list-shell {
+        overflow: hidden;
+        border: 1px solid var(--table-border);
+        border-radius: 12px;
+        background: rgba(148, 163, 184, 0.025);
+      }
+
+      .subscriber-list-header,
+      .donor-card {
+        display: grid;
+        grid-template-columns:
+          minmax(240px, 2fr)
+          minmax(115px, 0.85fr)
+          minmax(130px, 0.95fr)
+          minmax(155px, 1fr)
+          24px;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .subscriber-list-header {
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--table-border);
+        color: var(--text-muted-soft);
+        background: rgba(148, 163, 184, 0.07);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .donors-list {
+        display: block;
+        max-height: none;
+        min-height: 0;
+        overflow: visible;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+
+      .donor-card {
+        position: relative;
+        min-height: 62px;
+        padding: 10px 14px;
+        border: 0;
+        border-bottom: 1px solid var(--table-border);
+        border-left: 3px solid transparent;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        cursor: pointer;
+        transition:
+          background var(--duration-fast) var(--ease-standard),
+          border-color var(--duration-fast) var(--ease-standard);
+      }
+
+      .donor-card:last-child {
+        border-bottom: 0;
+      }
+
+      .donor-card:hover,
+      .donor-card:focus,
+      .donor-card.selected {
+        z-index: 1;
+        border-color: rgba(20, 184, 166, 0.72);
+        background: rgba(20, 184, 166, 0.07);
+        box-shadow: none;
+        transform: none;
+      }
+
+      .donor-card::after {
+        display: none;
+      }
+
+      .donor-card-info {
+        display: grid;
+        min-width: 0;
+        gap: 2px;
+      }
+
+      .donor-card-name,
+      .donor-card-email {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .donor-card-name {
+        color: var(--text-primary);
+        font-size: 0.86rem;
+        font-weight: 750;
+      }
+
+      .donor-card-email {
+        color: var(--text-muted-soft);
+        font-size: 0.74rem;
+      }
+
+      .donor-card-status {
+        width: fit-content;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .donor-card-access-type {
+        width: fit-content;
+        max-width: 100%;
+        padding: 3px 7px;
+        overflow: hidden;
+        border: 1px solid rgba(100, 116, 139, 0.26);
+        border-radius: 999px;
+        color: var(--text-muted);
+        background: rgba(148, 163, 184, 0.09);
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .donor-card-access-type[data-access-type='paid'] {
+        color: #0f766e;
+        border-color: rgba(15, 118, 110, 0.3);
+        background: rgba(20, 184, 166, 0.1);
+      }
+
+      .donor-card-access-type[data-access-type='courtesy'] {
+        color: #7c3aed;
+        border-color: rgba(124, 58, 237, 0.28);
+        background: rgba(124, 58, 237, 0.09);
+      }
+
+      .donor-card-access-type[data-access-type='import'] {
+        color: #0369a1;
+        border-color: rgba(3, 105, 161, 0.28);
+        background: rgba(14, 165, 233, 0.09);
+      }
+
+      .donor-card-access-type[data-access-type='trial'] {
+        color: #b45309;
+        border-color: rgba(180, 83, 9, 0.28);
+        background: rgba(245, 158, 11, 0.1);
+      }
+
+      :root[data-theme='dark'] .donor-card-access-type[data-access-type='paid'] {
+        color: #5eead4;
+      }
+
+      :root[data-theme='dark'] .donor-card-access-type[data-access-type='courtesy'] {
+        color: #c4b5fd;
+      }
+
+      :root[data-theme='dark'] .donor-card-access-type[data-access-type='import'] {
+        color: #7dd3fc;
+      }
+
+      :root[data-theme='dark'] .donor-card-access-type[data-access-type='trial'] {
+        color: #fcd34d;
+      }
+
+      .donor-card-updated {
+        color: var(--text-muted);
+        font-size: 0.74rem;
+        line-height: 1.35;
+      }
+
+      .donor-card-open {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        color: var(--text-muted-soft);
+      }
+
+      .donor-card-open svg {
+        width: 17px;
+        height: 17px;
+      }
+
+      .subscriber-list-empty {
+        display: grid;
+        justify-items: center;
+        gap: 4px;
+        min-height: 150px;
+        padding: 32px 16px;
+        place-content: center;
+        color: var(--text-muted-soft);
+        text-align: center;
+      }
+
+      .subscriber-list-empty strong {
+        color: var(--text-primary);
+        font-size: 0.9rem;
+      }
+
+      .subscriber-list-empty span {
+        font-size: 0.78rem;
+      }
+
+      .subscriber-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: 54px;
+        padding: 8px 12px;
+        border-top: 1px solid var(--table-border);
+        color: var(--text-muted);
+        background: rgba(148, 163, 184, 0.045);
+        font-size: 0.76rem;
+      }
+
+      .subscriber-pagination-actions {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+
+      .subscriber-pagination-actions button {
+        min-height: 34px;
+        padding: 6px 10px;
+        font-size: 0.74rem;
+      }
+
+      #subscriber-page-number {
+        min-width: 76px;
+        text-align: center;
+      }
+
+      .donor-detail-modal {
+        position: fixed;
+        z-index: 80;
+        inset: 0;
+        display: grid;
+        align-items: center;
+        justify-items: center;
+        padding: 24px;
+      }
+
+      .donor-detail-modal[hidden] {
+        display: none;
+      }
+
+      .donor-detail-backdrop {
+        position: absolute;
+        z-index: 0;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: rgba(2, 6, 23, 0.66);
+        box-shadow: none;
+        backdrop-filter: blur(6px);
+        cursor: default;
+      }
+
+      .donor-detail-backdrop:hover {
+        background: rgba(2, 6, 23, 0.66);
+        box-shadow: none;
+        filter: none;
+        transform: none;
+      }
+
+      .donor-detail-modal .donor-detail {
+        position: relative;
+        z-index: 1;
+        width: min(960px, 100%);
+        max-height: min(88dvh, 900px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        border-radius: 16px;
+        padding: 18px;
+        background: var(--panel-background);
+        box-shadow: var(--shadow-lg);
+      }
+
+      .donor-detail-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .donor-detail-close {
+        min-height: 36px;
+        padding: 7px 11px;
+        font-size: 0.76rem;
+      }
+
+      .system-health-toggle {
+        display: none;
+      }
+
+      @media (max-width: 1050px) {
+        .subscriber-list-toolbar {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .subscriber-search-field {
+          grid-column: 1 / -1;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .system-health-panel {
+          padding: 12px 14px;
+        }
+
+        .system-health-panel .setup-checklist-header {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 10px;
+          margin: 0;
+        }
+
+        .system-health-panel .page-kicker,
+        .system-health-panel .setup-checklist-header p {
+          display: none;
+        }
+
+        .system-health-panel .setup-checklist-header h2 {
+          margin: 0 !important;
+          font-size: 0.98rem;
+        }
+
+        .system-health-summary {
+          display: grid;
+          grid-template-columns: auto auto;
+          align-items: center;
+          justify-content: end;
+          justify-items: end;
+          min-width: 0;
+          gap: 5px 8px;
+        }
+
+        .system-health-summary .status-pill {
+          font-size: 0.66rem;
+        }
+
+        #system-health-ready-count {
+          font-size: 0.72rem;
+        }
+
+        .system-health-progress {
+          display: none;
+        }
+
+        .system-health-toggle {
+          display: inline-flex;
+          grid-column: 1 / -1;
+          justify-self: end;
+          min-height: 30px;
+          padding: 4px 8px;
+          font-size: 0.7rem;
+        }
+
+        #system-health-details:not([hidden]) {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px solid var(--table-border);
+        }
+
+        .setup-checklist-item {
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 5px 10px;
+          padding: 11px;
+          border-radius: 10px;
+        }
+
+        .setup-checklist-item .status-pill {
+          grid-column: 2;
+          grid-row: 1;
+        }
+
+        .setup-checklist-item > strong {
+          grid-column: 1;
+          grid-row: 1;
+        }
+
+        .setup-checklist-item > span:not(.status-pill) {
+          grid-column: 1 / -1;
+        }
+
+        .setup-checklist-item .system-health-meta {
+          min-height: 0;
+        }
+
+        .setup-checklist-item .system-health-actions {
+          grid-column: 1 / -1;
+          padding-top: 2px;
+        }
+
+        .subscriber-list-toolbar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          padding: 10px;
+        }
+
+        .subscriber-search-field {
+          grid-column: 1 / -1;
+        }
+
+        .subscriber-list-header {
+          display: none;
+        }
+
+        .donor-card {
+          grid-template-columns: minmax(0, 1fr) auto 20px;
+          grid-template-areas:
+            'info status open'
+            'type updated open';
+          gap: 7px 10px;
+          min-height: 78px;
+          padding: 10px 11px;
+        }
+
+        .donor-card-info {
+          grid-area: info;
+        }
+
+        .donor-card-status {
+          grid-area: status;
+          justify-self: end;
+        }
+
+        .donor-card-access-type {
+          grid-area: type;
+        }
+
+        .donor-card-updated {
+          grid-area: updated;
+          justify-self: end;
+          text-align: right;
+        }
+
+        .donor-card-updated::before {
+          content: 'Updated ';
+          color: var(--text-muted-soft);
+        }
+
+        .donor-card-open {
+          grid-area: open;
+        }
+
+        .subscriber-pagination {
+          align-items: stretch;
+          flex-direction: column;
+          padding: 10px;
+          text-align: center;
+        }
+
+        .subscriber-pagination-actions {
+          display: grid;
+          grid-template-columns: 1fr auto 1fr;
+        }
+
+        .subscriber-pagination-actions button {
+          min-height: 44px;
+        }
+
+        .donor-detail-modal {
+          align-items: stretch;
+          padding: 0;
+        }
+
+        .donor-detail-modal .donor-detail {
+          width: 100%;
+          height: 100dvh;
+          max-height: none;
+          padding: 13px;
+          border: 0;
+          border-radius: 0;
+        }
+
+        .donor-detail-modal .donor-detail-header {
+          position: sticky;
+          z-index: 3;
+          top: -13px;
+          margin: -13px -13px 0;
+          padding: 13px;
+          background: var(--panel-background);
+        }
+
+        .donor-detail-header-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .donor-detail-close {
+          min-height: 44px;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .subscriber-list-toolbar {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .subscriber-search-field {
+          grid-column: auto;
+        }
+
+        .system-health-panel .setup-checklist-header {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .system-health-summary {
+          grid-template-columns: auto 1fr auto;
+          justify-content: stretch;
+          justify-items: start;
+        }
+
+        .system-health-toggle {
+          grid-column: auto;
+          justify-self: end;
+        }
+      }

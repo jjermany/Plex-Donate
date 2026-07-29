@@ -168,9 +168,19 @@
       // Master-detail donors layout elements
       const donorsList = document.getElementById('donors-list');
       const donorDetail = document.getElementById('donor-detail');
+      const donorDetailModal = document.getElementById('donor-detail-modal');
+      const donorDetailClose = document.getElementById('donor-detail-close');
+      const donorDetailBackdrop = document.getElementById('donor-detail-backdrop');
       const donorsEmptyState = document.getElementById('donors-empty-state');
       const donorsSearchInput = document.getElementById('donors-search');
       const donorsFilterTabs = document.querySelectorAll('.donors-filter-tab');
+      const donorsStatusFilter = document.getElementById('donors-status-filter');
+      const donorsAccessFilter = document.getElementById('donors-access-filter');
+      const donorsSort = document.getElementById('donors-sort');
+      const subscriberPageSummary = document.getElementById('subscriber-page-summary');
+      const subscriberPageNumber = document.getElementById('subscriber-page-number');
+      const subscriberPagePrevious = document.getElementById('subscriber-page-previous');
+      const subscriberPageNext = document.getElementById('subscriber-page-next');
       const donorsLayout = document.querySelector('.donors-layout');
 
       // Donor detail elements
@@ -188,7 +198,11 @@
       // Donor state
       let selectedDonorId = null;
       let currentFilter = 'all';
+      let currentAccessFilter = 'all';
+      let currentSort = 'updated-desc';
       let searchQuery = '';
+      let currentDonorPage = 1;
+      const DONORS_PER_PAGE = 15;
 
       const shareLinksPanel = document.getElementById('share-links-panel');
       const shareLinksTable = document.querySelector('#share-links-table tbody');
@@ -364,6 +378,8 @@
       const systemHealthProgressFill = document.getElementById(
         'system-health-progress-fill'
       );
+      const systemHealthToggle = document.getElementById('system-health-toggle');
+      const systemHealthDetails = document.getElementById('system-health-details');
       const serviceSummaryAppState = document.getElementById('service-summary-app-state');
       const serviceSummaryAppCopy = document.getElementById('service-summary-app-copy');
       const serviceSummaryPaypalState = document.getElementById('service-summary-paypal-state');
@@ -3470,31 +3486,113 @@
       }
 
       // Master-detail donors view functions
+      function getDonorAccessType(donor) {
+        const status = (donor.status || 'pending').toLowerCase();
+        if (donor.hadPreexistingAccess) {
+          return { key: 'import', label: 'Plex import' };
+        }
+        if (donor.courtesyAccess) {
+          return { key: 'courtesy', label: 'Courtesy' };
+        }
+        if (status === 'trial') {
+          return { key: 'trial', label: 'Trial' };
+        }
+        if (status === 'active') {
+          return { key: 'paid', label: 'Paid supporter' };
+        }
+        return { key: 'none', label: 'No current access' };
+      }
+
+      function getDonorStatusLabel(donor) {
+        const status = (donor.status || 'pending').toLowerCase();
+        if (donor.courtesyAccess) {
+          return donor.subscriptionId && status === 'active'
+            ? 'Courtesy + supporting'
+            : 'Courtesy';
+        }
+        return status.replace(/_/g, ' ');
+      }
+
       function getFilteredDonors() {
         const donors = Array.isArray(state.donors) ? state.donors : [];
 
-        return donors.filter(donor => {
-          // Apply status filter
+        const filtered = donors.filter((donor) => {
           const status = (donor.status || 'pending').toLowerCase();
-          if (
-            currentFilter !== 'all' &&
-            (currentFilter === 'courtesy'
-              ? !donor.courtesyAccess
-              : status !== currentFilter)
-          ) {
+          const accessType = getDonorAccessType(donor).key;
+          if (currentFilter !== 'all' && status !== currentFilter) {
+            return false;
+          }
+          if (currentAccessFilter !== 'all' && accessType !== currentAccessFilter) {
             return false;
           }
 
-          // Apply search query
-          if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            const name = (donor.name || '').toLowerCase();
-            const email = (donor.email || '').toLowerCase();
-            const subId = (donor.subscriptionId || '').toLowerCase();
-            return name.includes(query) || email.includes(query) || subId.includes(query);
+          if (!searchQuery) {
+            return true;
           }
+          const query = searchQuery.toLowerCase();
+          return [
+            donor.name,
+            donor.email,
+            donor.subscriptionId,
+            donor.plexEmail,
+            donor.plexAccountId,
+          ].some((value) => String(value || '').toLowerCase().includes(query));
+        });
 
-          return true;
+        const collator = new Intl.Collator(undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+        const statusOrder = {
+          active: 0,
+          trial: 1,
+          pending: 2,
+          suspended: 3,
+          cancelled: 4,
+          trial_expired: 5,
+          expired: 6,
+        };
+        const timestamp = (value) => {
+          const parsed = value ? new Date(value).getTime() : 0;
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        const compareName = (a, b) =>
+          collator.compare(a.name || a.email || '', b.name || b.email || '');
+
+        return filtered.sort((a, b) => {
+          if (currentSort === 'created-desc') {
+            return timestamp(b.createdAt) - timestamp(a.createdAt) || compareName(a, b);
+          }
+          if (currentSort === 'created-asc') {
+            return timestamp(a.createdAt) - timestamp(b.createdAt) || compareName(a, b);
+          }
+          if (currentSort === 'name-asc') {
+            return compareName(a, b);
+          }
+          if (currentSort === 'name-desc') {
+            return compareName(b, a);
+          }
+          if (currentSort === 'access-asc') {
+            const aStatus = (a.status || 'pending').toLowerCase();
+            const bStatus = (b.status || 'pending').toLowerCase();
+            return (
+              (statusOrder[aStatus] ?? 99) - (statusOrder[bStatus] ?? 99) ||
+              compareName(a, b)
+            );
+          }
+          if (currentSort === 'type-asc') {
+            return (
+              collator.compare(
+                getDonorAccessType(a).label,
+                getDonorAccessType(b).label
+              ) || compareName(a, b)
+            );
+          }
+          return (
+            timestamp(b.updatedAt || b.createdAt) -
+              timestamp(a.updatedAt || a.createdAt) ||
+            compareName(a, b)
+          );
         });
       }
 
@@ -3598,20 +3696,51 @@
         if (!donorsList) return;
 
         const filteredDonors = getFilteredDonors();
+        const totalPages = Math.max(
+          1,
+          Math.ceil(filteredDonors.length / DONORS_PER_PAGE)
+        );
+        currentDonorPage = Math.min(Math.max(currentDonorPage, 1), totalPages);
+        const pageStart = (currentDonorPage - 1) * DONORS_PER_PAGE;
+        const pageDonors = filteredDonors.slice(
+          pageStart,
+          pageStart + DONORS_PER_PAGE
+        );
         donorsList.innerHTML = '';
 
-        if (filteredDonors.length === 0) {
+        if (subscriberPageSummary) {
+          subscriberPageSummary.textContent = filteredDonors.length
+            ? `Showing ${pageStart + 1}–${Math.min(
+                pageStart + DONORS_PER_PAGE,
+                filteredDonors.length
+              )} of ${filteredDonors.length} subscriber${
+                filteredDonors.length === 1 ? '' : 's'
+              }`
+            : 'No subscribers';
+        }
+        if (subscriberPageNumber) {
+          subscriberPageNumber.textContent = `Page ${currentDonorPage} of ${totalPages}`;
+        }
+        if (subscriberPagePrevious) {
+          subscriberPagePrevious.disabled =
+            filteredDonors.length === 0 || currentDonorPage <= 1;
+        }
+        if (subscriberPageNext) {
+          subscriberPageNext.disabled =
+            filteredDonors.length === 0 || currentDonorPage >= totalPages;
+        }
+
+        if (pageDonors.length === 0) {
           const emptyMessage = document.createElement('div');
-          emptyMessage.className = 'donors-empty-state';
-          emptyMessage.textContent = searchQuery
-            ? 'No subscribers match your search'
-            : 'No subscribers found';
+          emptyMessage.className = 'subscriber-list-empty';
+          emptyMessage.innerHTML =
+            '<strong>No matching subscribers</strong><span>Adjust the search or filters to see more users.</span>';
           donorsList.appendChild(emptyMessage);
           return;
         }
 
         const template = document.getElementById('donor-card');
-        filteredDonors.forEach(donor => {
+        pageDonors.forEach((donor) => {
           const clone = template.content.cloneNode(true);
           const card = clone.querySelector('.donor-card');
           card.dataset.donorId = donor.id;
@@ -3619,126 +3748,29 @@
           const nameEl = clone.querySelector('.donor-card-name');
           const emailEl = clone.querySelector('.donor-card-email');
           const statusEl = clone.querySelector('.donor-card-status');
-          const paymentEl = clone.querySelector('.donor-card-payment');
-          const plexStatusEl = clone.querySelector('.donor-card-plex-status');
-          const metaEl = clone.querySelector('.donor-card-meta');
+          const accessTypeEl = clone.querySelector('.donor-card-access-type');
+          const updatedEl = clone.querySelector('.donor-card-updated');
 
           nameEl.textContent = donor.name || donor.email || 'Unknown';
           emailEl.textContent = donor.email || 'No email';
 
           const status = (donor.status || 'pending').toLowerCase();
-          // Set data-status on card for color-coded borders
           card.dataset.status = status;
           statusEl.dataset.status = status;
-          statusEl.textContent = status.replace(/_/g, ' ');
-          if (donor.courtesyAccess) {
-            statusEl.textContent =
-              donor.subscriptionId && status === 'active'
-                ? 'courtesy + supporting'
-                : 'courtesy';
-          }
+          statusEl.textContent = getDonorStatusLabel(donor);
 
-          // Enhanced payment display - show both amount and date
-          const paymentText = formatAmount(donor);
-          const dateText = donor.lastPaymentAt ? formatDateTime(donor.lastPaymentAt) : '';
-          const paymentParts = [];
-          if (paymentText) {
-            paymentParts.push(`<i data-lucide="dollar-sign" class="donor-card-icon"></i>${paymentText}`);
-          }
-          if (dateText) {
-            paymentParts.push(`<i data-lucide="calendar" class="donor-card-icon"></i>${dateText}`);
-          }
-          paymentEl.innerHTML = paymentParts.length > 0 ? paymentParts.join(' ') : 'No payment';
-
-          // Add Plex status indicator
-          if (plexStatusEl) {
-            let plexIcon = '';
-            if (donor.hadPreexistingAccess) {
-              plexIcon = '<i data-lucide="shield-check" class="donor-card-icon" style="color: #3b82f6;"></i>Pre-existing';
-            } else if (donor.plexShareState === 'shared') {
-              plexIcon = '<i data-lucide="play-circle" class="donor-card-icon"></i>Shared';
-            } else if (donor.plexShareState === 'pending') {
-              plexIcon = '<i data-lucide="clock" class="donor-card-icon"></i>Pending';
-            } else if (donor.needsPlexInvite) {
-              plexIcon = '<i data-lucide="mail" class="donor-card-icon"></i>Invite';
-            } else {
-              plexIcon = '<span class="donor-card-empty">Not checked</span>';
-            }
-            plexStatusEl.innerHTML = plexIcon;
-          }
-
-          if (metaEl && status === 'trial') {
-            const countdown = formatTrialCountdown(donor.accessExpiresAt);
-            if (countdown) {
-              const trialBadge = document.createElement('span');
-              trialBadge.className = 'donor-card-meta-item trial-countdown';
-              trialBadge.innerHTML = `
-                <span class="badge badge-trial"><i data-lucide="hourglass" class="donor-card-icon"></i>${escapeHtml(countdown.remainingShort)}</span>
-                <span class="trial-countdown-date">Ends ${escapeHtml(countdown.expiresOn)}${countdown.expired ? ' (expired)' : ''}</span>
-              `;
-              metaEl.appendChild(trialBadge);
-            }
-          }
-
-          if (selectedDonorId && String(donor.id) === String(selectedDonorId)) {
-            card.classList.add('selected');
-          }
-
-          // Add hover tooltip
-          const tooltip = document.createElement('div');
-          tooltip.className = 'donor-card-tooltip';
-
-          const tooltipRows = [];
-          if (donor.subscriptionId) {
-            tooltipRows.push(`
-              <div class="donor-card-tooltip-row">
-                <span class="donor-card-tooltip-label">Sub ID:</span>
-                <span class="donor-card-tooltip-value">${donor.subscriptionId.substring(0, 12)}...</span>
-              </div>
-            `);
-          }
-          if (paymentText) {
-            tooltipRows.push(`
-              <div class="donor-card-tooltip-row">
-                <span class="donor-card-tooltip-label">Amount:</span>
-                <span class="donor-card-tooltip-value">${paymentText}</span>
-              </div>
-            `);
-          }
-          if (false && donor.hadPreexistingAccess) {
-            tooltipRows.push(`
-              <div class="donor-card-tooltip-row">
-                <span class="donor-card-tooltip-label">Access:</span>
-                <span class="donor-card-tooltip-value">Pre-existing</span>
-              </div>
-            `);
-          } else if (donor.plexShareState) {
-            const plexLabel = donor.plexShareState === 'shared' ? 'Shared' :
-                             donor.plexShareState === 'pending' ? 'Pending' : 'Not checked';
-            tooltipRows.push(`
-              <div class="donor-card-tooltip-row">
-                <span class="donor-card-tooltip-label">Plex:</span>
-                <span class="donor-card-tooltip-value">${plexLabel}</span>
-              </div>
-            `);
-          }
-
-          if (status === 'trial' && donor.accessExpiresAt) {
-            const countdown = formatTrialCountdown(donor.accessExpiresAt);
-            if (countdown) {
-              tooltipRows.push(`
-                <div class="donor-card-tooltip-row">
-                  <span class="donor-card-tooltip-label">Trial ends:</span>
-                  <span class="donor-card-tooltip-value">${escapeHtml(countdown.expiresOn)}${countdown.expired ? ' (expired)' : ''}</span>
-                </div>
-              `);
-            }
-          }
-
-          tooltip.innerHTML = tooltipRows.join('');
-          if (tooltipRows.length > 0) {
-            card.appendChild(tooltip);
-          }
+          const accessType = getDonorAccessType(donor);
+          accessTypeEl.textContent = accessType.label;
+          accessTypeEl.dataset.accessType = accessType.key;
+          updatedEl.textContent = donor.updatedAt
+            ? formatDateTime(donor.updatedAt)
+            : donor.createdAt
+            ? formatDateTime(donor.createdAt)
+            : 'Not available';
+          card.setAttribute(
+            'aria-label',
+            `Manage ${nameEl.textContent}, ${statusEl.textContent}, ${accessType.label}`
+          );
 
           card.addEventListener('click', () => selectDonor(donor.id));
           card.addEventListener('keydown', (e) => {
@@ -3746,7 +3778,6 @@
               e.preventDefault();
               selectDonor(donor.id);
             }
-            // Arrow key navigation
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               e.preventDefault();
               const cards = Array.from(document.querySelectorAll('.donor-card'));
@@ -3768,18 +3799,64 @@
           donorsList.appendChild(clone);
         });
 
-        // Initialize Lucide icons after rendering
         if (typeof lucide !== 'undefined') {
           lucide.createIcons();
         }
       }
 
-      function isCompactDonorLayout() {
-        return (
-          window.innerWidth <= 1024 ||
-          (window.matchMedia &&
-            window.matchMedia('(hover: none) and (pointer: coarse)').matches)
-        );
+      function openDonorDetailModal() {
+        if (!donorDetailModal || !donorDetail) {
+          return;
+        }
+        const wasHidden = donorDetailModal.hidden;
+        donorDetailModal.hidden = false;
+        donorDetail.hidden = false;
+        document.body.style.overflow = 'hidden';
+        if (
+          wasHidden &&
+          window.PlexDonateA11y &&
+          typeof window.PlexDonateA11y.activateDialog === 'function'
+        ) {
+          window.PlexDonateA11y.activateDialog(
+            donorDetailModal,
+            donorDetailClose || donorDetail
+          );
+        }
+      }
+
+      function closeDonorDetailModal({ preserveSelection = false } = {}) {
+        const donorIdToRestore = selectedDonorId;
+        if (!donorDetailModal || donorDetailModal.hidden) {
+          if (!preserveSelection) {
+            selectedDonorId = null;
+          }
+          return;
+        }
+        donorDetailModal.hidden = true;
+        if (donorDetail) {
+          donorDetail.hidden = true;
+        }
+        document.body.style.overflow = '';
+        if (!preserveSelection) {
+          selectedDonorId = null;
+          document
+            .querySelectorAll('.donor-card.selected')
+            .forEach((card) => card.classList.remove('selected'));
+        }
+        if (
+          window.PlexDonateA11y &&
+          typeof window.PlexDonateA11y.deactivateDialog === 'function'
+        ) {
+          window.PlexDonateA11y.deactivateDialog(donorDetailModal);
+        }
+        if (!preserveSelection && donorIdToRestore) {
+          const returnCard = document.querySelector(
+            `.donor-card[data-donor-id="${String(donorIdToRestore)}"]`
+          );
+          if (returnCard) {
+            window.requestAnimationFrame(() => returnCard.focus());
+          }
+        }
       }
 
       function selectDonor(donorId) {
@@ -3804,11 +3881,7 @@
         });
 
         renderDonorDetail(donor);
-
-        // Handle compact/touch view
-        if (donorsLayout && isCompactDonorLayout()) {
-          donorsLayout.classList.add('detail-active');
-        }
+        openDonorDetailModal();
       }
 
       function renderDonorDetail(donor) {
@@ -4221,14 +4294,10 @@
       }
 
       function showDonorsEmptyState() {
-        if (donorDetail) {
-          donorDetail.hidden = true;
-        }
+        closeDonorDetailModal({ preserveSelection: true });
+        selectedDonorId = null;
         if (donorsEmptyState) {
           donorsEmptyState.hidden = false;
-        }
-        if (donorsLayout) {
-          donorsLayout.classList.remove('detail-active');
         }
       }
 
@@ -6591,6 +6660,7 @@
         donorsFilterTabs.forEach(tab => {
           tab.addEventListener('click', () => {
             currentFilter = tab.dataset.filter;
+            currentDonorPage = 1;
             donorsFilterTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             renderDonorsList();
@@ -6600,8 +6670,57 @@
 
       if (donorsSearchInput) {
         donorsSearchInput.addEventListener('input', (e) => {
-          searchQuery = e.target.value;
+          searchQuery = e.target.value.trim();
+          currentDonorPage = 1;
           renderDonorsList();
+        });
+      }
+
+      if (donorsStatusFilter) {
+        donorsStatusFilter.addEventListener('change', (event) => {
+          currentFilter = event.target.value;
+          currentDonorPage = 1;
+          renderDonorsList();
+        });
+      }
+
+      if (donorsAccessFilter) {
+        donorsAccessFilter.addEventListener('change', (event) => {
+          currentAccessFilter = event.target.value;
+          currentDonorPage = 1;
+          renderDonorsList();
+        });
+      }
+
+      if (donorsSort) {
+        donorsSort.addEventListener('change', (event) => {
+          currentSort = event.target.value;
+          currentDonorPage = 1;
+          renderDonorsList();
+        });
+      }
+
+      if (subscriberPagePrevious) {
+        subscriberPagePrevious.addEventListener('click', () => {
+          if (currentDonorPage > 1) {
+            currentDonorPage -= 1;
+            renderDonorsList();
+            donorsList && donorsList.scrollIntoView({ block: 'nearest' });
+          }
+        });
+      }
+
+      if (subscriberPageNext) {
+        subscriberPageNext.addEventListener('click', () => {
+          const totalPages = Math.max(
+            1,
+            Math.ceil(getFilteredDonors().length / DONORS_PER_PAGE)
+          );
+          if (currentDonorPage < totalPages) {
+            currentDonorPage += 1;
+            renderDonorsList();
+            donorsList && donorsList.scrollIntoView({ block: 'nearest' });
+          }
         });
       }
 
@@ -6808,38 +6927,54 @@
         });
       }
 
-      // Add back button for mobile detail view
-      if (donorDetail && donorsLayout) {
-        const backButton = document.createElement('button');
-        backButton.className = 'secondary';
-        backButton.textContent = 'Back to list';
-        backButton.style.display = 'none';
-        backButton.style.marginBottom = '16px';
-        backButton.id = 'donor-detail-back';
-
-        const detailHeader = donorDetail.querySelector('.donor-detail-header');
-        if (detailHeader) {
-          donorDetail.insertBefore(backButton, detailHeader);
-        }
-
-        backButton.addEventListener('click', () => {
-          donorsLayout.classList.remove('detail-active');
-          selectedDonorId = null;
-          renderDonorsList();
-          showDonorsEmptyState();
-        });
-
-        // Show/hide back button based on compact/touch layout
-        const updateBackButtonVisibility = () => {
-          if (isCompactDonorLayout()) {
-            backButton.style.display = 'block';
-          } else {
-            backButton.style.display = 'none';
+      if (donorDetailClose) {
+        donorDetailClose.addEventListener('click', () => closeDonorDetailModal());
+      }
+      if (donorDetailBackdrop) {
+        donorDetailBackdrop.addEventListener('click', () => closeDonorDetailModal());
+      }
+      if (donorDetailModal) {
+        donorDetailModal.addEventListener('keydown', (event) => {
+          if (
+            window.PlexDonateA11y &&
+            typeof window.PlexDonateA11y.handleDialogKeydown === 'function'
+          ) {
+            window.PlexDonateA11y.handleDialogKeydown(
+              event,
+              donorDetailModal,
+              closeDonorDetailModal
+            );
+          } else if (event.key === 'Escape') {
+            closeDonorDetailModal();
           }
-        };
+        });
+      }
 
-        window.addEventListener('resize', updateBackButtonVisibility);
-        updateBackButtonVisibility();
+      if (systemHealthToggle && systemHealthDetails) {
+        const mobileHealthQuery = window.matchMedia('(max-width: 700px)');
+        let mobileHealthExpanded = false;
+        const syncSystemHealthDisclosure = () => {
+          const isMobile = mobileHealthQuery.matches;
+          systemHealthToggle.hidden = !isMobile;
+          systemHealthDetails.hidden = isMobile && !mobileHealthExpanded;
+          systemHealthToggle.setAttribute(
+            'aria-expanded',
+            mobileHealthExpanded ? 'true' : 'false'
+          );
+          systemHealthToggle.textContent = mobileHealthExpanded
+            ? 'Hide details'
+            : 'View details';
+        };
+        systemHealthToggle.addEventListener('click', () => {
+          mobileHealthExpanded = !mobileHealthExpanded;
+          syncSystemHealthDisclosure();
+        });
+        if (typeof mobileHealthQuery.addEventListener === 'function') {
+          mobileHealthQuery.addEventListener('change', syncSystemHealthDisclosure);
+        } else if (typeof mobileHealthQuery.addListener === 'function') {
+          mobileHealthQuery.addListener(syncSystemHealthDisclosure);
+        }
+        syncSystemHealthDisclosure();
       }
 
       checkSession();
