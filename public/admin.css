@@ -2713,13 +2713,16 @@
         top: calc(100% + 8px);
         left: 0;
         z-index: 30;
-        width: min(500px, calc(100vw - 48px));
+        width: min(500px, 100%);
+        max-height: min(72dvh, 560px);
+        box-sizing: border-box;
         border: 1px solid var(--color-border-strong);
         border-radius: var(--radius-xl);
         background: var(--color-surface-raised);
         box-shadow: var(--shadow-lg);
         padding: var(--space-4);
         display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
         gap: var(--space-4);
         overflow: hidden;
       }
@@ -2766,18 +2769,21 @@
 
       .library-selector-options {
         display: grid;
+        align-content: start;
         gap: var(--space-2);
-        max-height: 300px;
+        min-height: 0;
+        max-height: min(300px, 42dvh);
         overflow-y: auto;
         padding-right: 4px;
         scrollbar-gutter: stable;
       }
 
-      .library-option {
+      .settings-form .library-option {
         position: relative;
         min-height: 64px;
         display: grid;
         grid-template-columns: auto auto minmax(0, 1fr);
+        grid-template-rows: auto;
         align-items: center;
         gap: var(--space-3);
         padding: var(--space-3);
@@ -2791,17 +2797,17 @@
           transform var(--duration-fast) var(--ease-standard);
       }
 
-      .library-option:hover {
+      .settings-form .library-option:hover {
         border-color: var(--color-border-strong);
         background: var(--color-surface-solid);
       }
 
-      .library-option[data-selected='true'] {
+      .settings-form .library-option[data-selected='true'] {
         border-color: var(--color-accent);
         background: var(--color-accent-soft);
       }
 
-      .library-option:focus-within {
+      .settings-form .library-option:focus-within {
         outline: 3px solid var(--color-focus);
         outline-offset: 2px;
       }
@@ -2885,10 +2891,35 @@
           inset: auto var(--space-3) var(--space-3);
           width: auto;
           max-height: min(72dvh, 560px);
+          padding: var(--space-3);
         }
 
         .library-selector-options {
           max-height: 42dvh;
+        }
+      }
+
+      @media (max-width: 420px) {
+        .library-selector-dropdown-header {
+          gap: var(--space-2);
+        }
+
+        .library-selector-dropdown-header span {
+          display: none;
+        }
+
+        .settings-form .library-option {
+          grid-template-columns: auto minmax(0, 1fr);
+          min-height: 56px;
+          padding: var(--space-2);
+        }
+
+        .library-option-icon {
+          display: none;
+        }
+
+        .library-selector-actions > button {
+          flex: 1 1 auto;
         }
       }
 

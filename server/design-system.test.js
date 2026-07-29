@@ -98,7 +98,11 @@ test('Plex library picker uses the shared visual system and accessible controls'
   assert.match(adminHtml, /data-library-select-all/);
   assert.match(adminHtml, /data-library-summary[\s\S]*role="status"/);
 
-  assert.match(adminCss, /\.library-option\[data-selected='true'\]/);
+  assert.match(adminCss, /\.settings-form \.library-option\[data-selected='true'\]/);
+  assert.match(
+    adminCss,
+    /\.settings-form \.library-option\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*auto auto minmax\(0,\s*1fr\)/
+  );
   assert.match(adminCss, /\.library-selection-chip/);
   assert.match(adminCss, /\.library-selector-toggle-icon/);
   assert.match(adminCss, /max-height:\s*min\(72dvh,\s*560px\)/);
