@@ -5346,13 +5346,30 @@
 
         links.forEach((link) => {
           const clone = template.content.cloneNode(true);
-          const row = clone.querySelector('tr');
+          const row =
+            clone.querySelector('.setup-link-row') || clone.querySelector('tr');
+          if (!row) {
+            console.error('Setup link row template is missing its row element.');
+            return;
+          }
           row.dataset.id = link.id;
           const ownerCell = clone.querySelector('.col-owner');
           const purposeCell = clone.querySelector('.col-purpose');
           const createdCell = clone.querySelector('.col-created');
           const expiresCell = clone.querySelector('.col-expires');
-          const actionsCell = clone.querySelector('.setup-link-actions');
+          const actionsCell =
+            clone.querySelector('.setup-link-actions') ||
+            clone.querySelector('.actions');
+          if (
+            !ownerCell ||
+            !purposeCell ||
+            !createdCell ||
+            !expiresCell ||
+            !actionsCell
+          ) {
+            console.error('Setup link row template is incomplete.');
+            return;
+          }
 
           const shareUrl = buildShareUrl(link);
           if (shareUrl) {
@@ -6666,7 +6683,7 @@
           if (!button) {
             return;
           }
-          const row = event.target.closest('tr');
+          const row = event.target.closest('.setup-link-row, tr');
           const linkId = row && row.dataset.id;
           if (!linkId) {
             return;
