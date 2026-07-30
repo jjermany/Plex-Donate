@@ -16,6 +16,7 @@ config.dataDir = tempDataDir;
 
 const { createDonor, getDonorById } = require('./db');
 const paypalService = require('./services/paypal');
+const settingsStore = require('./state/settings');
 const app = require('./index');
 
 test('dashboard routes serve the customer dashboard HTML', async (t) => {
@@ -35,8 +36,46 @@ test('dashboard routes serve the customer dashboard HTML', async (t) => {
     const response = await fetch(`${origin}${route}`);
     assert.equal(response.status, 200, `${route} should respond with 200`);
     const body = await response.text();
-    assert.match(body, /<title>Plex Donate Dashboard<\/title>/);
+    assert.match(body, /<title>Member Hub Dashboard<\/title>/);
   }
+});
+
+test('public branding and manifest endpoints expose configured identity', async (t) => {
+  settingsStore.updateGroup('app', {
+    brandName: 'Family Media Hub',
+    emailSenderName: 'Family Media Team',
+    emailSignoff: 'The Family Media Team',
+  });
+  t.after(() => {
+    settingsStore.updateGroup('app', {
+      brandName: 'Member Hub',
+      emailSenderName: '',
+      emailSignoff: '',
+    });
+  });
+
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+  t.after(() => server.close());
+  const { port } = server.address();
+  const origin = `http://127.0.0.1:${port}`;
+
+  const brandingResponse = await fetch(`${origin}/api/branding`);
+  assert.equal(brandingResponse.status, 200);
+  assert.deepEqual(await brandingResponse.json(), {
+    brandName: 'Family Media Hub',
+    emailSenderName: 'Family Media Team',
+    emailSignoff: 'The Family Media Team',
+  });
+
+  const manifestResponse = await fetch(`${origin}/manifest.webmanifest`);
+  assert.equal(manifestResponse.status, 200);
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.name, 'Family Media Hub');
+  assert.equal(manifest.short_name, 'Family Media Hub');
+  assert.ok(
+    manifest.icons.every((icon) => icon.src.includes('/icons/member-hub-'))
+  );
 });
 
 test('scheduled subscription refresh updates donor payment timestamp', async (t) => {

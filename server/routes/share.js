@@ -29,6 +29,7 @@ const {
   deleteShareLinkById,
 } = require('../db');
 const settingsStore = require('../state/settings');
+const { getBranding } = require('../utils/branding');
 const logger = require('../utils/logger');
 const {
   hashPassword,
@@ -207,7 +208,7 @@ function getDonorRelayWarning(donor) {
     return relayWarning;
   }
 
-  return `${relayWarning} Your Plex account email and Plex Donate login email are different, which can increase mapping issues.`;
+  return `${relayWarning} Your Plex account email and ${getBranding().brandName} login email are different, which can increase mapping issues.`;
 }
 
 function getMostRecentInvite(activeInvite, latestInvite) {

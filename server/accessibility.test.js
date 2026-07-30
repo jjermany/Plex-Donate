@@ -137,7 +137,7 @@ test('dialogs and dynamic status regions have reusable keyboard and live-region 
   assert.match(adminJs, /classList\.remove\('donor-detail-modal-open'\)/);
   assert.match(adminCss, /html\.donor-detail-modal-open body/);
   assert.match(adminCss, /-webkit-overflow-scrolling:\s*touch/);
-  assert.match(adminHtml, /\/admin\.js\?v=ios-donor-modal-20260729/);
+  assert.match(adminHtml, /\/admin\.js\?v=member-hub-branding-20260730/);
   assert.match(dashboardJs, /PlexDonateA11y\.handleDialogKeydown/);
   assert.match(adminJs, /\['ArrowDown', 'ArrowUp', 'Home', 'End'\]/);
 });

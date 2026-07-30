@@ -1,29 +1,30 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui-shell="supporter">
+<html lang="en" data-theme="dark" data-ui-shell="supporter" data-brand-title-template="{brand} Invite">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050818" />
     <meta name="msapplication-TileColor" content="#f59e0b" />
-    <meta name="msapplication-TileImage" content="/icons/plex-donate-android-any-144.png" />
-    <meta name="application-name" content="Plex Donate" />
+    <meta name="msapplication-TileImage" content="/icons/member-hub-android-any-144.png" />
+    <meta name="application-name" content="Member Hub" data-brand-content="{brand}" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Plex Donate" />
+    <meta name="apple-mobile-web-app-title" content="Member Hub" data-brand-content="{brand}" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="144x144" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/plex-donate-android-any-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/plex-donate-android-any-512.png" />
-    <link rel="shortcut icon" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="apple-touch-icon" sizes="120x120" href="/icons/plex-donate-ios-120.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/plex-donate-ios-152.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="/icons/plex-donate-ios-167.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
+    <link rel="icon" type="image/png" sizes="144x144" href="/icons/member-hub-android-any-144.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/member-hub-android-any-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/member-hub-android-any-512.png" />
+    <link rel="shortcut icon" href="/icons/member-hub-android-any-144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/member-hub-ios-120.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/member-hub-ios-152.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/member-hub-ios-167.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/member-hub-ios-180.png" />
     <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
 
-    <title>Plex Donate Invite</title>
+    <title>Member Hub Invite</title>
     <script src="/accessibility.js?v=prevent-focus-scroll-20260729"></script>
+    <script src="/branding.js?v=member-hub-20260730" defer></script>
     <script>
       (() => {
         try {
@@ -863,7 +864,7 @@
           <span class="stage-kicker">Step 1 of 5</span>
           <h2>Create your supporter account</h2>
           <p id="account-description" class="muted">
-            Save the email and password you’ll use for Plex Donate. We’ll send
+            Save the email and password you’ll use for Member Hub. We’ll send
             one verification message before you connect Plex.
           </p>
           <form id="account-form" class="grid">
@@ -994,7 +995,7 @@
             <a class="cta-button" href="/dashboard">Continue to connect Plex</a>
           </div>
           <p class="muted small">
-            After sign-in, Plex Donate automatically opens the correct setup section.
+            After sign-in, Member Hub automatically opens the correct setup section.
           </p>
         </section>
 
@@ -1220,6 +1221,16 @@
       const themeMeta = document.querySelector('meta[name="theme-color"]');
       const rootElement = document.documentElement;
       const THEME_STORAGE_KEY = 'plexDonateTheme';
+
+      function formatBrandCopy(template) {
+        if (
+          window.MemberHubBranding &&
+          typeof window.MemberHubBranding.format === 'function'
+        ) {
+          return window.MemberHubBranding.format(template);
+        }
+        return String(template || '').replace(/\{brand\}/g, 'Member Hub');
+      }
 
       function storeThemePreference(theme) {
         try {
@@ -1818,7 +1829,9 @@
         account: {
           title: 'Create your supporter account.',
           lead:
-            'Save your Plex Donate login first. We’ll send one verification email before moving on.',
+            formatBrandCopy(
+              'Save your {brand} login first. We’ll send one verification email before moving on.'
+            ),
         },
         verify: {
           title: 'Check your inbox.',
@@ -2051,7 +2064,9 @@
         if (accountDescription) {
           if (!accountReady) {
             accountDescription.textContent =
-              'Save the email and password you’ll use for Plex Donate. We’ll send one verification message before you connect Plex.';
+              formatBrandCopy(
+                'Save the email and password you’ll use for {brand}. We’ll send one verification message before you connect Plex.'
+              );
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }

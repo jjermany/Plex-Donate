@@ -109,7 +109,7 @@ async function notifyDonorCreated({ donor, source, shareLinkId, prospectId }) {
     enabledKey: 'onDonorCreated',
     subject: `[Admin] New donor account: ${donorLabel}`,
     heading: 'New donor account created',
-    intro: `${donorLabel} just created a Plex Donate dashboard account.`,
+    intro: `${donorLabel} just created a {{BRAND_NAME}} dashboard account.`,
     facts: [
       { label: 'Donor', value: donorLabel },
       ...(includesEmail ? [] : [{ label: 'Email', value: donor && donor.email }]),

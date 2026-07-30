@@ -546,7 +546,7 @@ async function handlePaymentEvent(event) {
   }
 
   // Clear pre-existing access flag on first successful payment
-  // User is now managed by plex-donate subscription system
+  // User is now managed by the Member Hub subscription system
   if (donor.hadPreexistingAccess) {
     const transitionedDonor = setDonorPreexistingAccess(donor.id, false);
     if (transitionedDonor) {

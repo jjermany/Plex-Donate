@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const settingsState = require('../state/settings');
+const { formatEmailFrom, getBranding } = require('../utils/branding');
 
 function formatAccessEndDate(value) {
   if (!value) {
@@ -316,7 +317,7 @@ function buildEmailFrameHtml({
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:${palette.shell};padding:20px;">
         <div style="max-width:720px;margin:0 auto;background:#ffffff;border-radius:16px;border:1px solid ${palette.cardBorder};overflow:hidden;box-shadow:0 18px 50px -24px rgba(15,23,42,0.45);">
           <div style="background:${palette.headerBg};color:#f8fafc;padding:22px 24px;">
-            <p style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:${palette.kicker};">Plex Donate</p>
+            <p style="margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:0.08em;color:${palette.kicker};">{{BRAND_NAME}}</p>
             <h2 style="margin:0 0 12px;font-size:24px;line-height:1.25;color:#f8fafc;">${escapeHtml(
               subject
             )}</h2>
@@ -342,7 +343,7 @@ function buildEmailFrameHtml({
             ${bodyHtml}
             ${dashboardHtml}
             ${footerHtml}
-            <p style="margin:24px 0 0;color:#475569;font-size:14px;">&mdash; Plex Donate</p>
+            <p style="margin:24px 0 0;color:#475569;font-size:14px;">&mdash; {{EMAIL_SIGNOFF}}</p>
           </div>
         </div>
       </div>
@@ -362,8 +363,17 @@ function getSmtpConfig(overrideSettings) {
   return settings;
 }
 
+function applyEmailBranding(value, branding = getBranding()) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  return value
+    .replace(/\{\{EMAIL_SIGNOFF\}\}/g, branding.emailSignoff)
+    .replace(/\{\{BRAND_NAME\}\}/g, branding.brandName);
+}
+
 function createTransport(smtp) {
-  return nodemailer.createTransport({
+  const transport = nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
     secure: Boolean(smtp.secure),
@@ -375,6 +385,18 @@ function createTransport(smtp) {
           }
         : undefined,
   });
+  return {
+    sendMail(message) {
+      const branding = getBranding();
+      return transport.sendMail({
+        ...message,
+        from: formatEmailFrom(message.from, branding),
+        subject: applyEmailBranding(message.subject, branding),
+        text: applyEmailBranding(message.text, branding),
+        html: applyEmailBranding(message.html, branding),
+      });
+    },
+  };
 }
 
 function escapeHtml(value) {
@@ -472,7 +494,7 @@ function buildAnnouncementEmailHtml({
     subject,
     badge: 'Announcement',
     recipientName,
-    intro: 'We have an update for your Plex Donate account.',
+    intro: 'We have an update for your {{BRAND_NAME}} account.',
     bodyHtml: `${htmlParagraphs}${ctaHtml}`,
     dashboardHtml,
   });
@@ -505,7 +527,7 @@ function buildAnnouncementEmailText({
   }
 
   lines.push('');
-  lines.push('— Plex Donate');
+  lines.push('— {{EMAIL_SIGNOFF}}');
 
   return lines.join('\n');
 }
@@ -591,7 +613,7 @@ async function sendInviteEmail(
   textLines.push('');
   textLines.push('If you did not request this invite or need help, reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -641,7 +663,7 @@ async function sendImportedPlexUserSetupEmail(
   const textLines = [
     `Hi ${recipientName},`,
     '',
-    'You already have access to this Plex server. The server owner has added you as a courtesy member in Plex Donate, the private dashboard used to support this server.',
+    'You already have access to this Plex server. The server owner has added you as a courtesy member in {{BRAND_NAME}}, the private dashboard used to support this server.',
     '',
     'Courtesy access is free. No payment or donation is required, and your existing Plex access will not change.',
     '',
@@ -660,7 +682,7 @@ async function sendImportedPlexUserSetupEmail(
     '',
     'If you did not expect this email or need help, reply to this email.',
     '',
-    '-- Plex Donate'
+    '-- {{EMAIL_SIGNOFF}}'
   );
 
   const html = buildEmailFrameHtml({
@@ -669,7 +691,7 @@ async function sendImportedPlexUserSetupEmail(
     badge: 'Courtesy Access',
     recipientName,
     intro:
-      'You already have access to this Plex server. The server owner has added you as a courtesy member in Plex Donate, the private dashboard used to support this server.',
+      'You already have access to this Plex server. The server owner has added you as a courtesy member in {{BRAND_NAME}}, the private dashboard used to support this server.',
     bodyHtml:
       '<p style="margin:0 0 20px;color:#0f172a;"><strong>Courtesy access is free.</strong> No payment or donation is required, and your existing Plex access will not change.</p>' +
       buildEmailDetailPanelHtml(
@@ -713,7 +735,7 @@ async function sendSubscriptionThankYouEmail(
     : '';
   const formattedPaidAt = formatAccessEndDate(paidAt);
 
-  const subject = 'Thank you for supporting Plex Donate';
+  const subject = 'Thank you for supporting {{BRAND_NAME}}';
   const dashboardUrl = resolveDashboardUrl();
   const dashboardHtml = buildDashboardAccessHtml(dashboardUrl);
   const dashboardTextLine = buildDashboardAccessText(dashboardUrl);
@@ -743,7 +765,7 @@ async function sendSubscriptionThankYouEmail(
   textLines.push('');
   textLines.push('If you have any questions, just reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -845,7 +867,7 @@ async function sendAccountWelcomeEmail(
   const lines = [
     `Hi ${recipientName},`,
     '',
-    'Thanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access:',
+    'Thanks for setting up your {{BRAND_NAME}} dashboard account. Confirm your email address to finish activating your access:',
     '',
     verificationUrl,
     '',
@@ -858,7 +880,7 @@ async function sendAccountWelcomeEmail(
   }
 
   lines.push('');
-  lines.push('-- Plex Donate');
+  lines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = lines.join('\n');
 
@@ -868,7 +890,7 @@ async function sendAccountWelcomeEmail(
     badge: 'Verify Email',
     recipientName,
     intro:
-      'Thanks for setting up your Plex Donate dashboard account. Confirm your email address to finish activating your access.',
+      'Thanks for setting up your {{BRAND_NAME}} dashboard account. Confirm your email address to finish activating your access.',
     bodyHtml:
       buildEmailActionButtonHtml(
         'Verify Email',
@@ -907,7 +929,7 @@ async function sendPasswordResetEmail(
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
   const recipientName = name || 'there';
-  const subject = 'Reset your Plex Donate password';
+  const subject = 'Reset your {{BRAND_NAME}} password';
   const dashboardUrl = resolveDashboardUrl({
     loginUrl,
     fallbackUrls: [resetUrl],
@@ -918,7 +940,7 @@ async function sendPasswordResetEmail(
   const textLines = [
     `Hi ${recipientName},`,
     '',
-    'We received a request to reset your Plex Donate dashboard password.',
+    'We received a request to reset your {{BRAND_NAME}} dashboard password.',
     'Use the link below to set a new password:',
     '',
     resetUrl,
@@ -932,7 +954,7 @@ async function sendPasswordResetEmail(
   }
 
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -941,7 +963,7 @@ async function sendPasswordResetEmail(
     subject,
     badge: 'Password Reset',
     recipientName,
-    intro: 'We received a request to reset your Plex Donate dashboard password.',
+    intro: 'We received a request to reset your {{BRAND_NAME}} dashboard password.',
     bodyHtml:
       buildEmailActionButtonHtml(
         'Reset Password',
@@ -996,7 +1018,7 @@ async function sendCancellationEmail(
   textLines.push('');
   textLines.push('If you have any questions, just reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -1062,7 +1084,7 @@ async function sendTrialEndingReminderEmail(
   textLines.push('');
   textLines.push('If you have questions or need help subscribing, just reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -1128,7 +1150,7 @@ async function sendTrialExtendedEmail(
   textLines.push('');
   textLines.push('If you have questions or need help, just reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -1197,7 +1219,7 @@ async function sendTrialEndedEmail(
   textLines.push('');
   textLines.push('If you have questions or need help subscribing, just reply to this email.');
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const text = textLines.join('\n');
 
@@ -1323,7 +1345,7 @@ async function sendUpsStatusEmail(
       : 'Please expect Plex to go offline shortly until utility power returns.'
   );
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const htmlDetails = buildEmailDetailPanelHtml(
     'System details',
@@ -1427,7 +1449,7 @@ function formatSupportEmailText({
   }
 
   lines.push('');
-  lines.push('— Plex Donate');
+  lines.push('— {{EMAIL_SIGNOFF}}');
   return lines.join('\n');
 }
 
@@ -1496,9 +1518,9 @@ async function sendSupportResponseNotification(
   }
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
-  const heading = 'Support reply from the Plex Donate team';
+  const heading = 'Support reply from the {{BRAND_NAME}} team';
   const subject = `We replied: ${request.subject || 'Support request'} (#${request.id})`;
-  const actorName = 'Plex Donate';
+  const actorName = '{{BRAND_NAME}}';
   const fallbackDashboardUrls = [];
   if (request && request.dashboardUrl) {
     fallbackDashboardUrls.push(request.dashboardUrl);
@@ -1584,14 +1606,14 @@ function formatAdminNotificationEmail({
     textLines.push(dashboardText);
   }
   textLines.push('');
-  textLines.push('-- Plex Donate');
+  textLines.push('-- {{EMAIL_SIGNOFF}}');
 
   const html = buildEmailFrameHtml({
     tone: 'brand',
     subject: heading || 'Admin notification',
     badge: 'Admin',
     recipientName: 'Admin',
-    intro: intro || 'A new event occurred in Plex Donate.',
+    intro: intro || 'A new event occurred in {{BRAND_NAME}}.',
     bodyHtml: factsHtml,
     dashboardHtml,
   });

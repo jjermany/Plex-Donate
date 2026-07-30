@@ -143,7 +143,7 @@ test('cancelling a subscription sends a cancellation email', { concurrency: fals
     assert.equal(sentMessages.length, 1);
     const message = sentMessages[0];
     assert.equal(message.to, donor.email);
-    assert.equal(message.from, 'Plex Donate <support@example.com>');
+    assert.equal(message.from, 'Member Hub <support@example.com>');
     assert.equal(message.subject, 'Your Plex access is scheduled to end');
     assert.match(message.text, /Thank you for supporting our Plex server\./);
     assert.match(

@@ -66,12 +66,12 @@ const {
 } = require('../utils/plex');
 const { getInviteEmailDiagnostics } = require('../utils/validation');
 const { resolvePublicBaseUrl } = require('../utils/public-base-url');
+const { getBranding } = require('../utils/branding');
 const {
   hasAccessEntitlement,
 } = require('../utils/donor-entitlements');
 const {
   buildOtpAuthUrl,
-  DEFAULT_ISSUER,
   generateSecret,
   normalizeBase32,
   verifyTotp,
@@ -285,10 +285,11 @@ async function buildTwoFactorSetupPayload(username, secret) {
   const normalizedUsername =
     typeof username === 'string' && username.trim() ? username.trim() : 'admin';
   const normalizedSecret = normalizeBase32(secret);
+  const issuer = getBranding().brandName;
   const otpauthUrl = buildOtpAuthUrl({
     secret: normalizedSecret,
     accountName: normalizedUsername,
-    issuer: DEFAULT_ISSUER,
+    issuer,
   });
   const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
     errorCorrectionLevel: 'M',
@@ -297,7 +298,7 @@ async function buildTwoFactorSetupPayload(username, secret) {
   });
 
   return {
-    issuer: DEFAULT_ISSUER,
+    issuer,
     accountName: normalizedUsername,
     manualEntryKey: normalizedSecret,
     otpauthUrl,
@@ -1316,7 +1317,7 @@ function buildPlexImportCandidates(shares, donors) {
         unavailableReason: !normalizedEmail
           ? 'Plex did not provide an email address'
           : donorEmails.has(normalizedEmail) || (normalizedId && donorIds.has(normalizedId))
-          ? 'Already linked to a Plex Donate account'
+          ? `Already linked to a ${getBranding().brandName} account`
           : '',
       };
     })
@@ -2521,7 +2522,7 @@ router.post(
       if (existingByEmail) {
         return res.status(409).json({
           error:
-            'A Plex Donate account already uses this email. Grant courtesy access from that subscriber’s account details instead.',
+            `A ${getBranding().brandName} account already uses this email. Grant courtesy access from that subscriber’s account details instead.`,
           csrfToken: res.locals.csrfToken,
         });
       }

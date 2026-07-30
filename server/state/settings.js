@@ -2,6 +2,9 @@ const { getAllSettings, saveSettings } = require('../db');
 
 const DEFAULT_SETTINGS = {
   app: {
+    brandName: 'Member Hub',
+    emailSenderName: '',
+    emailSignoff: '',
     publicBaseUrl: '',
     overseerrBaseUrl: '',
   },
@@ -170,6 +173,17 @@ function normalizeGroup(name, values = {}, baseValues) {
       300,
       Math.max(0, Math.round(normalized.powerRestoreDelaySeconds))
     );
+  }
+
+  if (name === 'app') {
+    normalized.brandName =
+      String(normalized.brandName || '').trim().slice(0, 80) || 'Member Hub';
+    normalized.emailSenderName = String(
+      normalized.emailSenderName || ''
+    ).trim().slice(0, 80);
+    normalized.emailSignoff = String(
+      normalized.emailSignoff || ''
+    ).trim().slice(0, 80);
   }
 
   return normalized;

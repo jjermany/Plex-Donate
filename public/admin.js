@@ -1,4 +1,11 @@
 /* Styled confirmation modal (replaces native confirm()). */
+      function getBrandName() {
+        return window.MemberHubBranding &&
+          typeof window.MemberHubBranding.getName === 'function'
+          ? window.MemberHubBranding.getName()
+          : 'Member Hub';
+      }
+
       function showConfirmModal(title, message) {
         return new Promise((resolve) => {
           const backdrop = document.createElement('div');
@@ -1714,8 +1721,8 @@
         }
         if (loginHelp) {
           loginHelp.innerHTML = requiresSetup
-            ? 'Create the first admin account for this Plex Donate install. Your existing subscriber and application data will remain untouched.'
-            : 'Use your Plex Donate admin username and password to sign in.';
+            ? `Create the first admin account for this ${getBrandName()} install. Your existing subscriber and application data will remain untouched.`
+            : `Use your ${getBrandName()} admin username and password to sign in.`;
         }
         if (loginPasswordInput) {
           loginPasswordInput.value = '';
@@ -2916,6 +2923,13 @@
           settingsPanel.hidden = Boolean(state.authenticated && !state.settings);
         }
         if (state.settings) {
+          if (
+            state.settings.app &&
+            window.MemberHubBranding &&
+            typeof window.MemberHubBranding.update === 'function'
+          ) {
+            window.MemberHubBranding.update(state.settings.app);
+          }
           settingsForms.forEach((form) => {
             if (form.dataset && form.dataset.dirty === 'true') {
               return;
@@ -4217,7 +4231,7 @@
           case 'system':
             return {
               label: 'Created automatically',
-              description: 'Plex Donate created this invite as part of an automated access flow.',
+              description: `${getBrandName()} created this invite as part of an automated access flow.`,
             };
           default:
             return {
@@ -4350,7 +4364,7 @@
         courtesyBtn.dataset.donorId = donor.id;
         courtesyBtn.dataset.enabled = donor.courtesyAccess ? 'true' : 'false';
         courtesyBtn.title = donor.courtesyAccess
-          ? 'Remove Plex Donate courtesy privileges without revoking the Plex share'
+          ? `Remove ${getBrandName()} courtesy privileges without revoking the Plex share`
           : 'Grant admin-managed courtesy access and referral privileges';
         appendAction(
           'account',
@@ -4961,7 +4975,7 @@
         }
         return target
           ? `Related record: ${target}.`
-          : 'Event captured by Plex Donate.';
+          : `Event captured by ${getBrandName()}.`;
       }
 
       function getEventChips(eventType, payload) {

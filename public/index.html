@@ -1,30 +1,31 @@
 <!doctype html>
-<html lang="en" data-theme="light" data-theme-light-color="#f8fafc" data-theme-dark-color="#0f172a">
+<html lang="en" data-theme="light" data-theme-light-color="#f8fafc" data-theme-dark-color="#0f172a" data-brand-title-template="{brand} Admin">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f8fafc" />
     <meta name="msapplication-TileColor" content="#f59e0b" />
-    <meta name="msapplication-TileImage" content="/icons/plex-donate-android-any-144.png" />
-    <meta name="application-name" content="Plex Donate" />
+    <meta name="msapplication-TileImage" content="/icons/member-hub-android-any-144.png" />
+    <meta name="application-name" content="Member Hub" data-brand-content="{brand}" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Plex Donate" />
+    <meta name="apple-mobile-web-app-title" content="Member Hub" data-brand-content="{brand}" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="144x144" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/plex-donate-android-any-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/plex-donate-android-any-512.png" />
-    <link rel="shortcut icon" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="apple-touch-icon" sizes="120x120" href="/icons/plex-donate-ios-120.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/plex-donate-ios-152.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="/icons/plex-donate-ios-167.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
+    <link rel="icon" type="image/png" sizes="144x144" href="/icons/member-hub-android-any-144.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/member-hub-android-any-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/member-hub-android-any-512.png" />
+    <link rel="shortcut icon" href="/icons/member-hub-android-any-144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/member-hub-ios-120.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/member-hub-ios-152.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/member-hub-ios-167.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/member-hub-ios-180.png" />
 
-    <title>Plex Donate Admin</title>
+    <title>Member Hub Admin</title>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="/theme.js"></script>
+    <script src="/branding.js?v=member-hub-20260730" defer></script>
     <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
     <link rel="stylesheet" href="/admin.css?v=ios-donor-modal-20260729" />
   </head>
@@ -40,7 +41,7 @@
       <header>
         <div class="page-title-group">
           <span class="page-kicker">Admin Workspace</span>
-          <h1>Plex Donate Control Center</h1>
+          <h1 data-brand-template="{brand} Control Center">Member Hub Control Center</h1>
           <p class="page-subtitle">
             Manage subscribers, support, and service settings.
           </p>
@@ -276,7 +277,7 @@
               <span class="page-kicker">System Health</span>
               <h2 style="margin:10px 0 4px;">System health</h2>
               <p class="muted-text" style="margin:0;">
-                Verify the services Plex Donate relies on and return here whenever
+                Verify the services Member Hub relies on and return here whenever
                 something needs attention.
               </p>
             </div>
@@ -525,7 +526,7 @@
                   </label>
                 </div>
                 <p class="muted-text subtle-text" style="margin:8px 0 0;">
-                  Notifications use the Plex Donate email theme and include helpful context about the event.
+                  Notifications use the Member Hub email theme and include helpful context about the event.
                 </p>
                 <p class="form-status" data-status-for="notifications"></p>
                 <div class="form-actions">
@@ -560,7 +561,7 @@
                     <input
                       name="bannerTitle"
                       type="text"
-                      placeholder="Welcome back to Plex Donate"
+                      placeholder="Welcome back to Member Hub"
                     />
                   </label>
                   <label style="grid-column: 1 / -1;">
@@ -989,11 +990,49 @@
                 <h3>Application</h3>
                 <div class="field-grid">
                   <label>
+                    Application name
+                    <input
+                      name="brandName"
+                      type="text"
+                      maxlength="80"
+                      placeholder="Member Hub"
+                    />
+                    <span class="help"
+                      >Shown throughout the portal, browser titles, and email
+                      content.</span
+                    >
+                  </label>
+                  <label>
+                    Email sender name
+                    <input
+                      name="emailSenderName"
+                      type="text"
+                      maxlength="80"
+                      placeholder="Defaults to the application name"
+                    />
+                    <span class="help"
+                      >The display name recipients see. Your SMTP mailbox address
+                      remains unchanged.</span
+                    >
+                  </label>
+                  <label>
+                    Email sign-off
+                    <input
+                      name="emailSignoff"
+                      type="text"
+                      maxlength="80"
+                      placeholder="Defaults to the application name"
+                    />
+                    <span class="help"
+                      >Used in the signature at the bottom of every email.</span
+                    >
+                  </label>
+                  <label>
                     Public base URL
                     <input
                       name="publicBaseUrl"
                       type="url"
-                      placeholder="https://plexdonate.example.com"
+                      placeholder="https://member-hub.example.com"
                     />
                     <span class="help"
                       >Used to build setup links that work outside your
@@ -1114,7 +1153,7 @@
                   </label>
                   <label>
                     From address
-                    <input name="from" type="email" placeholder="Plex Donate &lt;donations@example.com&gt;" />
+                    <input name="from" type="email" placeholder="notifications@example.com" />
                   </label>
                   <label>
                     Support notification email
@@ -1137,7 +1176,7 @@
               <form class="settings-form" data-group="plex" id="integration-plex">
                 <h3>Plex invites</h3>
                 <p class="muted-text subtle-text" style="margin:0 0 12px;">
-                  Connect Plex Donate to your server so you can send invites without leaving the dashboard.
+                  Connect Member Hub to your server so you can send invites without leaving the dashboard.
                 </p>
                 <div class="field-grid">
                   <label>
@@ -1505,7 +1544,7 @@
           <div>
             <h3 id="plex-import-title">Import existing Plex users</h3>
             <p class="muted-text" style="margin:0;">
-              Select server members who are not yet connected to Plex Donate. Imported members receive courtesy access.
+              Select server members who are not yet connected to Member Hub. Imported members receive courtesy access.
             </p>
           </div>
           <button type="button" class="secondary" id="plex-import-close">Close</button>
@@ -1534,6 +1573,6 @@
       </div>
     </div>
     <script src="/accessibility.js?v=prevent-focus-scroll-20260729"></script>
-    <script src="/admin.js?v=setup-email-preserve-plex-20260730"></script>
+    <script src="/admin.js?v=member-hub-branding-20260730"></script>
   </body>
 </html>

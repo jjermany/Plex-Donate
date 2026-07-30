@@ -29,10 +29,10 @@ test('buildOtpAuthUrl includes issuer and account name', () => {
   const url = buildOtpAuthUrl({
     secret: 'JBSWY3DPEHPK3PXP',
     accountName: 'admin',
-    issuer: 'Plex Donate',
+    issuer: 'Member Hub',
   });
 
   assert.match(url, /^otpauth:\/\/totp\//);
   assert.match(url, /secret=JBSWY3DPEHPK3PXP/);
-  assert.match(url, /issuer=Plex\+Donate/);
+  assert.match(url, /issuer=Member\+Hub/);
 });

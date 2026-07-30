@@ -14,6 +14,12 @@ const state = {
           replyDrafts: {},
         },
       };
+      function getBrandName() {
+        return window.MemberHubBranding &&
+          typeof window.MemberHubBranding.getName === 'function'
+          ? window.MemberHubBranding.getName()
+          : 'Member Hub';
+      }
       const INVITE_MODAL_COPY =
         'Your Plex invite was just sent. Check your email (and spam folder) to accept it.';
       let inviteCooldownTimer = null;
@@ -2145,7 +2151,7 @@ const state = {
 
         if (stepAccountNote) {
           stepAccountNote.textContent = accountComplete
-            ? 'Your Plex Donate login is saved.'
+            ? `Your ${getBrandName()} login is saved.`
             : 'Finish creating your supporter account from the setup link.';
         }
 

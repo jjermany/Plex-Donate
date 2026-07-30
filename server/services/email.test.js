@@ -159,7 +159,7 @@ test('sendSubscriptionThankYouEmail includes payment and subscription details', 
   assert.equal(messages.length, 1);
   const message = messages[0];
   assert.ok(message);
-  assert.equal(message.subject, 'Thank you for supporting Plex Donate');
+  assert.equal(message.subject, 'Thank you for supporting Member Hub');
   assert.match(message.text, /Thank you for your subscription!/);
   assert.match(message.text, /Payment received: 12\.00 USD/);
   assert.match(message.text, /Paid at: Fri, 02 Feb 2024 10:00:00 GMT/);
@@ -167,6 +167,49 @@ test('sendSubscriptionThankYouEmail includes payment and subscription details', 
   assert.match(message.text, /Open Dashboard: https:\/\/plex\.example\.com\/dashboard/);
   assert.match(message.html, /Thank you for your subscription!/);
   assert.match(message.html, /Payment received:/);
+});
+
+test('email delivery applies configured branding to sender, subject, header, and sign-off', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => {
+      messages.push(payload);
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const originalGetAppSettings = settingsState.getAppSettings;
+  settingsState.getAppSettings = () => ({
+    brandName: 'Jalon Media Club',
+    emailSenderName: 'Jalon Media Team',
+    emailSignoff: 'The Jalon Media Team',
+    publicBaseUrl: 'https://media.example.com',
+  });
+  t.after(() => {
+    settingsState.getAppSettings = originalGetAppSettings;
+  });
+
+  await emailService.sendSubscriptionThankYouEmail(
+    {
+      to: 'supporter@example.com',
+      name: 'Community Member',
+      subscriptionId: 'SUB-BRANDING',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  const message = messages[0];
+  assert.equal(message.from, 'Jalon Media Team <support@example.com>');
+  assert.equal(message.subject, 'Thank you for supporting Jalon Media Club');
+  assert.match(message.html, />Jalon Media Club<\/p>/);
+  assert.match(message.html, /&mdash; The Jalon Media Team/);
+  assert.match(message.text, /-- The Jalon Media Team/);
+  assert.doesNotMatch(message.html, /\{\{BRAND_NAME\}\}|\{\{EMAIL_SIGNOFF\}\}/);
+  assert.doesNotMatch(message.text, /\{\{BRAND_NAME\}\}|\{\{EMAIL_SIGNOFF\}\}/);
 });
 
 test('sendTrialEndedEmail tells the donor how to restore access', async (t) => {

@@ -1,4 +1,4 @@
-# Plex-Donate
+# Member Hub
 
 Automated system to handle:
 - **PayPal subscriptions** (monthly donations) and payment webhooks.
@@ -53,7 +53,7 @@ npm install
 npm test
 ```
 
-After the server is running visit `http://localhost:3000`, sign in with the admin username and password (credentials must be entered in the form), and fill in the integration credentials directly from the dashboard. The default username is `admin`. On first start Plex Donate generates a secure temporary password and prints it to the server log so you can sign in and change it from the dashboard. When upgrading from a legacy release that stored the admin secret as a `password` value in `data/admin-credentials.json`, Plex Donate rehashes that existing password on startup instead of replacing it, so you can continue signing in with the same credential. If the legacy file also included an obsolete `passwordHash` entry, the plaintext `password` is trusted and the outdated hash is replaced automatically.
+After the server is running visit `http://localhost:3000`, sign in with the admin username and password (credentials must be entered in the form), and fill in the integration credentials directly from the dashboard. The default username is `admin`. On first start Member Hub generates a secure temporary password and prints it to the server log so you can sign in and change it from the dashboard. When upgrading from a legacy release that stored the admin secret as a `password` value in `data/admin-credentials.json`, Member Hub rehashes that existing password on startup instead of replacing it, so you can continue signing in with the same credential. If the legacy file also included an obsolete `passwordHash` entry, the plaintext `password` is trusted and the outdated hash is replaced automatically.
 
 If you need to reset the admin password after a crash/restart, run the helper script (it writes a new hash to `data/admin-credentials.json` and prints the new password directly to stdout):
 
@@ -83,7 +83,7 @@ Only the core application settings live in `.env` now:
 
 When running in production, you must set `SESSION_SECRET` or persist `data/.secrets` on a durable volume so the session key survives restarts and shared instances can validate the same login cookies. Without one of those options, admin logins will break after a restart or when multiple instances are deployed.
 
-When you serve Plex-Donate over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections. Secure cookies require HTTPS requests; if you terminate TLS at a proxy, it must forward `X-Forwarded-Proto=https` so the app can confirm the request is secure when `SESSION_COOKIE_SECURE=true`.
+When you serve Member Hub over HTTPS (for example, behind a reverse proxy that terminates TLS), set `SESSION_COOKIE_SECURE=true` so browsers only send the admin session cookie over secure connections. Secure cookies require HTTPS requests; if you terminate TLS at a proxy, it must forward `X-Forwarded-Proto=https` so the app can confirm the request is secure when `SESSION_COOKIE_SECURE=true`.
 
 After signing in you can manage the admin username and password directly from the dashboard using the **Admin account** panel. Password updates require at least 12 characters.
 
@@ -93,13 +93,36 @@ Use the **Integration settings** panel in the admin dashboard to store PayPal, P
 
 Set the Overseerr base URL under **Application settings** to expose a shortcut on the donor dashboard for media requests.
 
+### Branding
+
+Member Hub uses a neutral default identity and can be personalized from
+**Integration settings → Application**:
+
+- **Application name** controls browser titles, portal copy, installed-app
+  metadata, Plex OAuth labels, PayPal product defaults, and authenticator-app
+  issuer names.
+- **Email sender name** controls the visible display name while preserving the
+  SMTP mailbox address.
+- **Email sign-off** controls the signature used by every email template.
+
+Branding is resolved at delivery time for invites, imported-member setup,
+verification, password reset, subscription, trial, support, announcement,
+administrative, and UPS-status emails.
+
+For upgrade safety, existing installations retain legacy database filenames,
+session-cookie names, and Plex client identifiers internally. These identifiers
+are not shown to members and should not be renamed in place, because doing so
+could make an existing database appear missing, invalidate sessions, or disrupt
+linked Plex identities. Legacy icon URLs also remain available as aliases, but
+serve the new Member Hub artwork.
+
 ### Plex invite configuration
 
 Plex invites require the following values:
 
 - **Server URL**: the base URL used to reach your Plex server (e.g. `https://plex.example.com`).
 - **Plex token**: generate a long-lived token from Plex and paste it here.
-- **Server UUID**: the `machineIdentifier` for the Plex server that should share libraries. Plex Donate now resolves the numeric
+- **Server UUID**: the `machineIdentifier` for the Plex server that should share libraries. Member Hub resolves the numeric
   server id automatically, so you can continue pasting the machine identifier from Plex.
 - **Library section IDs**: a comma-separated list of section IDs to share with donors.
 - **Allow sync/camera uploads/channels**: toggle the permissions that should be applied when creating an invite.
@@ -122,7 +145,7 @@ npm start      # production mode
 
 Use the raw GitHub asset URL for the Unraid template icon:
 
-`https://raw.githubusercontent.com/jjermany/Plex-Donate/main/public/icons/plex-donate-unraid-icon.png`
+`https://raw.githubusercontent.com/jjermany/Plex-Donate/main/public/icons/member-hub-unraid-icon.png`
 
 ### Tests and diagnostics
 
@@ -147,7 +170,7 @@ The admin dashboard is served from `http://localhost:3000/` and exposes JSON API
 
 Run `npm run test:env` to start a loopback-only test instance with a temporary
 database, temporary admin credentials, and representative subscriber records.
-The command prints the URL and credentials as `PLEX_DONATE_TEST_ENV` JSON. The
+The command prints the URL and credentials as `MEMBER_HUB_TEST_ENV` JSON. The
 environment shuts down and deletes its temporary files on Ctrl+C or automatically
 after 15 minutes.
 
@@ -158,10 +181,10 @@ clean it up. This environment never uses the configured production database.
 
 ### UPS outage automation
 
-If you use NUT on Unraid, Plex Donate can send automatic outage, recovery, and shutdown-imminent emails to `active` and `trial` users when your UPS state changes.
+If you use NUT on Unraid, Member Hub can send automatic outage, recovery, and shutdown-imminent emails to `active` and `trial` users when your UPS state changes.
 
-1. Set `UPS_WEBHOOK_TOKEN` in the Plex Donate environment.
-2. Make sure SMTP is already configured in the Plex Donate admin dashboard.
+1. Set `UPS_WEBHOOK_TOKEN` in the Member Hub environment.
+2. Make sure SMTP is already configured in the Member Hub admin dashboard.
 3. Have NUT call the webhook with a bearer token when power fails, when power returns, and when shutdown is imminent.
 
 If you deploy with the included compose example, add the token to the container environment:
@@ -186,15 +209,15 @@ NOTIFYFLAG ONLINE SYSLOG+EXEC
 NOTIFYFLAG LOWBATT SYSLOG+EXEC
 ```
 
-Do not put the Plex Donate webhook URL or token in `ups.conf`. That file is only for UPS device configuration.
+Do not put the Member Hub webhook URL or token in `ups.conf`. That file is only for UPS device configuration.
 
-In `xnut-notify-hooks.sh`, update the `ONLINE()`, `ONBATT()`, and low-battery or shutdown function so they call Plex Donate. A working example is:
+In `xnut-notify-hooks.sh`, update the `ONLINE()`, `ONBATT()`, and low-battery or shutdown function so they call Member Hub. A working example is:
 
 ```bash
 #!/bin/bash
 
-PLEX_DONATE_WEBHOOK_URL="https://plex-donate.jalonshomelab.com/api/automation/ups"
-PLEX_DONATE_WEBHOOK_TOKEN="YOUR_UPS_WEBHOOK_TOKEN"
+MEMBER_HUB_WEBHOOK_URL="https://member-hub.example.com/api/automation/ups"
+MEMBER_HUB_WEBHOOK_TOKEN="YOUR_UPS_WEBHOOK_TOKEN"
 UPS_NAME="CyberPower"
 UPS_UPSC_TARGET="CyberPower@127.0.0.1"
 
@@ -231,8 +254,8 @@ post_ups_event () {
 
     (
       for (( attempt=1; attempt<=attempts; attempt++ )); do
-        if /usr/bin/curl -fsS -X POST "$PLEX_DONATE_WEBHOOK_URL" \
-          -H "Authorization: Bearer $PLEX_DONATE_WEBHOOK_TOKEN" \
+        if /usr/bin/curl -fsS -X POST "$MEMBER_HUB_WEBHOOK_URL" \
+          -H "Authorization: Bearer $MEMBER_HUB_WEBHOOK_TOKEN" \
           -H "Content-Type: application/json" \
           -d "$json" >/dev/null 2>&1; then
           exit 0
@@ -281,7 +304,7 @@ case "$NOTIFYTYPE" in
 esac
 ```
 
-After saving the NUT files, restart the NUT plugin/service. A manual webhook test is the fastest way to confirm Plex Donate is ready before testing a real UPS event.
+After saving the NUT files, restart the NUT plugin/service. A manual webhook test is the fastest way to confirm Member Hub is ready before testing a real UPS event.
 
 Example outage call:
 
@@ -340,13 +363,13 @@ Successful responses look like:
 
 ### Shareable donor pages & invite flow
 
-Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. Once the supporter signs in on that page they can generate a Plex invite directly from Plex Donate, send it to their recipient, and resend the same link later without leaving the app. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
+Open the **Subscribers** tab in the admin dashboard to copy invite links for supporters. Each donor row contains a **Copy share link** button that generates the unique `/share/<token>` URL you can send to donors. Once the supporter signs in on that page they can generate a Plex invite directly from Member Hub, send it to their recipient, and resend the same link later without leaving the app. The same action is available immediately after you add a new donor, so you always have a quick way to distribute the self-service invite page.
 
 Subscribers can also access the same invite controls from the `/dashboard` experience. When they create a referral invite, the dashboard and share page both surface the generated `inviteUrl` along with cooldown messaging so they know when the next referral is available.
 
 Paid members and admin-confirmed courtesy members can send referral invites. Member-generated referrals always use the normal trial/paid onboarding path; only an administrator can grant courtesy access. Courtesy members see a quieter dashboard that makes clear their access is already covered while leaving an unobtrusive, optional PayPal support action available.
 
-From the **Subscribers** tab, use **Import Plex users** to find accepted members who already have access to the configured server but are not connected to Plex Donate. Imported users receive courtesy access and a setup link without receiving a duplicate Plex share. You can optionally email each selected user their personal setup link as part of the import. To send an imported member the latest setup email later, create a fresh setup link from their subscriber actions and select **Send setup email**. To invite someone new with courtesy access, use **Invite supporter**, select **Grant courtesy access**, and share the generated setup link. Courtesy access can also be granted or removed from an existing subscriber’s detail actions; removing it does not automatically revoke the Plex share. Removing a subscriber deletes only their Plex Donate records and preserves their Plex server access; use the separate **Revoke Plex access** action when you also intend to remove their server share.
+From the **Subscribers** tab, use **Import Plex users** to find accepted members who already have access to the configured server but are not connected to Member Hub. Imported users receive courtesy access and a setup link without receiving a duplicate Plex share. You can optionally email each selected user their personal setup link as part of the import. To send an imported member the latest setup email later, create a fresh setup link from their subscriber actions and select **Send setup email**. To invite someone new with courtesy access, use **Invite supporter**, select **Grant courtesy access**, and share the generated setup link. Courtesy access can also be granted or removed from an existing subscriber’s detail actions; removing it does not automatically revoke the Plex share. Removing a subscriber deletes only their Member Hub records and preserves their Plex server access; use the separate **Revoke Plex access** action when you also intend to remove their server share.
 
 ### Customer dashboard
 
@@ -355,7 +378,7 @@ Set your PayPal return/landing URL to `https://<your-domain>/dashboard`. Subscri
 ## 📱 Progressive Web App
 
 - When Android 13+ "Themed icons" is enabled, the system intentionally displays
-  a monochrome version of the Plex Donate icon that matches your wallpaper.
+  a monochrome version of the Member Hub icon that matches your wallpaper.
   Disable themed icons in Android settings if you prefer the full-color
   artwork. The manifest continues to ship the full-color maskable icons for
   launchers that do not support theming.
@@ -370,4 +393,4 @@ Brave Shields may block authentication cookies for installed PWAs, which can
 result in an `Invalid CSRF token` error when you open the dashboard from the
 home screen. The frontend now retries once by requesting a fresh session token,
 but if Brave continues to block the cookie you will need to disable Shields for
-your Plex Donate domain.
+your Member Hub domain.

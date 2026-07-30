@@ -43,6 +43,7 @@ const {
   startDonorTrial,
 } = require('../db');
 const settingsStore = require('../state/settings');
+const { getBranding } = require('../utils/branding');
 const paypalService = require('../services/paypal');
 const emailService = require('../services/email');
 const adminNotifications = require('../services/admin-notifications');
@@ -55,7 +56,6 @@ const {
 } = require('../utils/passwords');
 const {
   buildOtpAuthUrl,
-  DEFAULT_ISSUER,
   generateSecret,
   normalizeBase32,
   verifyTotp,
@@ -177,10 +177,11 @@ async function buildTwoFactorSetupPayload(email, secret) {
   const normalizedEmail =
     typeof email === 'string' && email.trim() ? email.trim() : 'customer';
   const normalizedSecret = normalizeBase32(secret);
+  const issuer = getBranding().brandName;
   const otpauthUrl = buildOtpAuthUrl({
     secret: normalizedSecret,
     accountName: normalizedEmail,
-    issuer: DEFAULT_ISSUER,
+    issuer,
   });
   const QRCode = require('qrcode');
   const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl, {
@@ -190,7 +191,7 @@ async function buildTwoFactorSetupPayload(email, secret) {
   });
 
   return {
-    issuer: DEFAULT_ISSUER,
+    issuer,
     accountName: normalizedEmail,
     manualEntryKey: normalizedSecret,
     otpauthUrl,
@@ -432,7 +433,7 @@ function getDonorRelayWarning(donor) {
     return relayWarning;
   }
 
-  return `${relayWarning} Your Plex account email and Plex Donate login email are different, which can increase mapping issues.`;
+  return `${relayWarning} Your Plex account email and ${getBranding().brandName} login email are different, which can increase mapping issues.`;
 }
 
 function getActivePlexLinkSession(req, donor) {

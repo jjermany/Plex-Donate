@@ -1,5 +1,6 @@
 const fetch = require('node-fetch');
 const { getPaypalSettings } = require('../state/settings');
+const { getBranding } = require('../utils/branding');
 
 function getPaypalConfig(overrideSettings) {
   const settings = overrideSettings || getPaypalSettings();
@@ -150,7 +151,7 @@ async function createProduct({ name, description }, overrideSettings) {
   const paypal = getPaypalConfig(overrideSettings);
   const token = await getAccessToken(overrideSettings);
   const payload = {
-    name: truncate(name || 'Plex Donate Subscription', 127),
+    name: truncate(name || `${getBranding().brandName} Subscription`, 127),
     description: truncate(
       description || 'Recurring subscription for Plex server access support.',
       256
@@ -272,11 +273,12 @@ async function generateSubscriptionPlan(
   const currencyCode = normalizeCurrency(currency);
   const descriptor = `${priceValue} ${currencyCode}`;
   const uniqueSuffix = Date.now().toString(36).toUpperCase();
-  const defaultPlanName = planName || `Plex Donate Monthly (${descriptor})`;
+  const brandName = getBranding().brandName;
+  const defaultPlanName = planName || `${brandName} Monthly (${descriptor})`;
   const defaultPlanDescription =
     planDescription ||
     `Recurring Plex donation billed monthly at ${descriptor}.`;
-  const defaultProductName = productName || 'Plex Donate Subscription';
+  const defaultProductName = productName || `${brandName} Subscription`;
   const defaultProductDescription =
     productDescription ||
     'Recurring subscription for Plex server access support.';

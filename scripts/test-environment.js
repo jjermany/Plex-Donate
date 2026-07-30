@@ -165,9 +165,9 @@ async function main() {
       details.donorPassword = donorPassword;
     }
 
-    process.stdout.write(`PLEX_DONATE_TEST_ENV=${JSON.stringify(details)}\n`);
+    process.stdout.write(`MEMBER_HUB_TEST_ENV=${JSON.stringify(details)}\n`);
     process.stdout.write(
-      `Isolated Plex Donate test environment ready at ${origin} (expires in ${ttlSeconds}s).\n`
+      `Isolated Member Hub test environment ready at ${origin} (expires in ${ttlSeconds}s).\n`
     );
 
     const healthResponse = await fetch(`${origin}/api/health`);
@@ -193,7 +193,7 @@ async function main() {
     }
     fs.rmSync(tempRoot, { recursive: true, force: true });
     process.stdout.write(
-      `Isolated Plex Donate test environment stopped (${stopReason || 'cleanup'}).\n`
+      `Isolated Member Hub test environment stopped (${stopReason || 'cleanup'}).\n`
     );
   }
 }

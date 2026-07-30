@@ -2,7 +2,7 @@ version: "3.8"
 services:
   app:
     build: .
-    container_name: plex-donate
+    container_name: member-hub
     restart: unless-stopped
     environment:
       - NODE_ENV=production

@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const DEFAULT_PERIOD = 30;
 const DEFAULT_DIGITS = 6;
-const DEFAULT_ISSUER = 'Plex Donate';
+const DEFAULT_ISSUER = 'Member Hub';
 
 function normalizeBase32(value) {
   return String(value || '')

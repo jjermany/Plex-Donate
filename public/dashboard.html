@@ -1,28 +1,29 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" data-ui-shell="supporter" data-theme-light-color="#f8fafc" data-theme-dark-color="#050818">
+<html lang="en" data-theme="dark" data-ui-shell="supporter" data-theme-light-color="#f8fafc" data-theme-dark-color="#050818" data-brand-title-template="{brand} Dashboard">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#050818" />
     <meta name="msapplication-TileColor" content="#f59e0b" />
-    <meta name="msapplication-TileImage" content="/icons/plex-donate-android-any-144.png" />
-    <meta name="application-name" content="Plex Donate" />
+    <meta name="msapplication-TileImage" content="/icons/member-hub-android-any-144.png" />
+    <meta name="application-name" content="Member Hub" data-brand-content="{brand}" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Plex Donate" />
+    <meta name="apple-mobile-web-app-title" content="Member Hub" data-brand-content="{brand}" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="144x144" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/plex-donate-android-any-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/plex-donate-android-any-512.png" />
-    <link rel="shortcut icon" href="/icons/plex-donate-android-any-144.png" />
-    <link rel="apple-touch-icon" sizes="120x120" href="/icons/plex-donate-ios-120.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/icons/plex-donate-ios-152.png" />
-    <link rel="apple-touch-icon" sizes="167x167" href="/icons/plex-donate-ios-167.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/plex-donate-ios-180.png" />
+    <link rel="icon" type="image/png" sizes="144x144" href="/icons/member-hub-android-any-144.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/member-hub-android-any-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/member-hub-android-any-512.png" />
+    <link rel="shortcut icon" href="/icons/member-hub-android-any-144.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/icons/member-hub-ios-120.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/member-hub-ios-152.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/icons/member-hub-ios-167.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/member-hub-ios-180.png" />
 
-    <title>Plex Donate Dashboard</title>
+    <title>Member Hub Dashboard</title>
     <script src="/theme.js"></script>
+    <script src="/branding.js?v=member-hub-20260730" defer></script>
     <link rel="stylesheet" href="/shared.css?v=ui-components-20260728" />
     <link rel="stylesheet" href="/dashboard.css?v=ui-components-20260728" />
   </head>
@@ -176,7 +177,7 @@
               class="muted small hidden helper-text forgot-password-panel"
             >
               <p>
-                Enter the email you use for Plex Donate and we'll send a reset
+                Enter the email you use for Member Hub and we'll send a reset
                 link you can use right away.
               </p>
               <form id="forgot-password-form" class="stacked-form">
@@ -683,7 +684,7 @@
                       <div>
                         <h3 class="step-title">Create supporter account</h3>
                         <p id="step-account-note" class="muted small">
-                          Your Plex Donate login is saved.
+                          Your Member Hub login is saved.
                         </p>
                       </div>
                     </div>
@@ -822,7 +823,7 @@
               <article class="surface" id="support-panel">
                 <h2 class="section-title">Need help?</h2>
                 <p class="muted">
-                  Reach out to the Plex Donate team for account help or streaming
+                  Reach out to the Member Hub team for account help or streaming
                   questions. We’ll send updates to the email on your account.
                 </p>
                 <div id="support-container" class="support-container">
@@ -953,6 +954,6 @@
       </div>
     </div>
     <script src="/accessibility.js?v=prevent-focus-scroll-20260729"></script>
-    <script src="/dashboard.js?v=accessibility-20260728"></script>
+    <script src="/dashboard.js?v=member-hub-branding-20260730"></script>
   </body>
 </html>

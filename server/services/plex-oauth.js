@@ -1,10 +1,9 @@
 const fetch = require('node-fetch');
 const { nanoid } = require('../utils/nanoid-shim');
+const { getBranding } = require('../utils/branding');
 
 const PLEX_API_BASE = 'https://plex.tv/api/v2';
-const PLEX_APP_PRODUCT = 'Plex Donate';
 const PLEX_APP_VERSION = '1.0';
-const PLEX_APP_DEVICE = 'Plex Donate Server';
 const PLEX_APP_PLATFORM = 'Web';
 const PLEX_AUTH_BASE_URL = 'https://app.plex.tv/auth#';
 const DEFAULT_POLL_INTERVAL_MS = 3000;
@@ -14,13 +13,15 @@ function buildHeaders(clientIdentifier, extra = {}) {
     throw new Error('clientIdentifier is required for Plex OAuth requests');
   }
 
+  const brandName = getBranding().brandName;
+  const deviceName = `${brandName} Server`;
   return {
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    'X-Plex-Product': PLEX_APP_PRODUCT,
+    'X-Plex-Product': brandName,
     'X-Plex-Version': PLEX_APP_VERSION,
-    'X-Plex-Device': PLEX_APP_DEVICE,
-    'X-Plex-Device-Name': PLEX_APP_DEVICE,
+    'X-Plex-Device': deviceName,
+    'X-Plex-Device-Name': deviceName,
     'X-Plex-Platform': PLEX_APP_PLATFORM,
     'X-Plex-Client-Identifier': clientIdentifier,
     ...extra,

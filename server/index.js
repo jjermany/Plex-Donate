@@ -16,6 +16,7 @@ const SqliteSessionStore = require('./session-store');
 const { initializeAdminCredentials } = require('./state/admin-credentials');
 const { clearSessionToken } = require('./utils/session-tokens');
 const { apiLimiter } = require('./middleware/rate-limit');
+const { getBranding } = require('./utils/branding');
 const {
   db,
   listDonorsWithExpiredAccess,
@@ -148,6 +149,35 @@ app.get('/api/health', (req, res) => {
       time: new Date().toISOString(),
     });
   }
+});
+
+app.get('/api/branding', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.json(getBranding());
+});
+
+app.get('/manifest.webmanifest', (req, res) => {
+  const { brandName } = getBranding();
+  res.type('application/manifest+json').json({
+    name: brandName,
+    short_name: brandName,
+    start_url: '/dashboard',
+    display: 'standalone',
+    background_color: '#050818',
+    theme_color: '#f59e0b',
+    icons: [
+      { src: '/icons/member-hub-android-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: '/icons/member-hub-android-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      { src: '/icons/member-hub-android-any-144.png', sizes: '144x144', type: 'image/png', purpose: 'any' },
+      { src: '/icons/member-hub-android-any-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/member-hub-android-any-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/member-hub-ios-120.png', sizes: '120x120', type: 'image/png' },
+      { src: '/icons/member-hub-ios-152.png', sizes: '152x152', type: 'image/png' },
+      { src: '/icons/member-hub-ios-167.png', sizes: '167x167', type: 'image/png' },
+      { src: '/icons/member-hub-ios-180.png', sizes: '180x180', type: 'image/png' },
+      { src: '/icons/member-hub-ios-1024.png', sizes: '1024x1024', type: 'image/png' },
+    ],
+  });
 });
 
 app.use('/api/automation/ups', automationRouter);
@@ -550,7 +580,7 @@ if (config.env !== 'test') {
   scheduleTrialReminderJob();
 
   server = app.listen(config.port, () => {
-    logger.info(`Plex Donate server listening on port ${config.port}`);
+    logger.info(`${getBranding().brandName} server listening on port ${config.port}`);
     logger.info(`Environment: ${config.env}`);
     logger.info(`Admin username: ${config.adminUsername}`);
   });

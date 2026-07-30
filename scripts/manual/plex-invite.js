@@ -83,11 +83,11 @@ fetch(url, {
   headers: {
     'Accept': 'application/json',
     'Content-Type': 'application/x-www-form-urlencoded',
-    'X-Plex-Product': 'Plex-Donate',
+    'X-Plex-Product': 'Member Hub',
     'X-Plex-Version': '1.0',
     'X-Plex-Device': 'Server',
     'X-Plex-Platform': 'Web',
-    'X-Plex-Client-Identifier': 'plex-donate-test'
+    'X-Plex-Client-Identifier': 'member-hub-test'
   },
   body: formData.toString()
 })
