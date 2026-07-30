@@ -170,3 +170,10 @@ test('shared responsive and focus contracts protect keyboard and touch users', (
   assert.match(sharedCss, /min-height:\s*44px/);
   assert.match(sharedCss, /overflow-x:\s*(?:clip|hidden)/);
 });
+
+test('admin subscriber actions use the defined dashboard reload helper', () => {
+  const adminJs = readPublic('admin.js');
+
+  assert.doesNotMatch(adminJs, /\brefreshSubscribers\b/);
+  assert.match(adminJs, /if \(requiresReload\) \{\s*await loadDashboardData\(\);/);
+});

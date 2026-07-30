@@ -7167,7 +7167,7 @@
             }
 
             if (requiresReload) {
-              await refreshSubscribers();
+              await loadDashboardData();
             }
             renderSubscribers();
           } catch (err) {
