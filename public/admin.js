@@ -4392,6 +4392,27 @@
           !canInvite && !shareUrl ? 'primary' : 'secondary'
         );
 
+        const canSendSetupEmail = Boolean(
+          shareUrl &&
+            donor.email &&
+            donor.courtesyAccess &&
+            donor.hadPreexistingAccess
+        );
+        const setupEmailBtn = document.createElement('button');
+        setupEmailBtn.className = 'secondary';
+        setupEmailBtn.textContent = 'Send setup email';
+        setupEmailBtn.disabled = !canSendSetupEmail;
+        setupEmailBtn.dataset.action = 'setup-email';
+        setupEmailBtn.dataset.donorId = donor.id;
+        setupEmailBtn.title = canSendSetupEmail
+          ? 'Email this imported courtesy member their current setup link'
+          : !donor.hadPreexistingAccess
+          ? 'Setup emails use the imported courtesy member template'
+          : !shareUrl
+          ? 'Create a setup link first'
+          : 'An email address and courtesy access are required';
+        appendAction('access', setupEmailBtn, 'mail');
+
         // Resend email
         const canResend = Boolean(activeInvite && activeInvite.inviteUrl);
         const resendBtn = document.createElement('button');
@@ -4445,7 +4466,8 @@
         removeBtn.textContent = 'Remove subscriber';
         removeBtn.dataset.action = 'remove';
         removeBtn.dataset.donorId = donor.id;
-        removeBtn.title = 'Remove this subscriber and all related records';
+        removeBtn.title =
+          'Remove this subscriber and local records without changing Plex access';
         appendAction('danger', removeBtn, 'trash-2', 'danger');
       }
 
@@ -4667,6 +4689,9 @@
           const shareGenerateButton = clone.querySelector(
             'button[data-action="share-generate"]'
           );
+          const setupEmailButton = clone.querySelector(
+            'button[data-action="setup-email"]'
+          );
           const extendTrialButton = clone.querySelector(
             'button[data-action="extend-trial"]'
           );
@@ -4713,6 +4738,23 @@
             shareGenerateButton.title = 'Create a new setup link for account setup or recovery';
           }
 
+          if (setupEmailButton) {
+            const canSendSetupEmail = Boolean(
+              hasShareUrl &&
+                donor.email &&
+                donor.courtesyAccess &&
+                donor.hadPreexistingAccess
+            );
+            setupEmailButton.disabled = !canSendSetupEmail;
+            setupEmailButton.title = canSendSetupEmail
+              ? 'Email this imported courtesy member their current setup link'
+              : !donor.hadPreexistingAccess
+              ? 'Setup emails use the imported courtesy member template'
+              : !hasShareUrl
+              ? 'Create a setup link first'
+              : 'An email address and courtesy access are required';
+          }
+
           if (extendTrialButton) {
             const canExtend = canExtendTrialStatus(status);
             extendTrialButton.disabled = !canExtend;
@@ -4753,7 +4795,8 @@
           }
 
           if (removeButton) {
-            removeButton.title = 'Remove this subscriber and all related records';
+            removeButton.title =
+              'Remove this subscriber and local records without changing Plex access';
           }
 
           if (inviteParts.length > 0) {
@@ -6650,6 +6693,15 @@
               );
             } else if (action === 'resend') {
               await api(`/api/admin/subscribers/${donorId}/email`, { method: 'POST' });
+            } else if (action === 'setup-email') {
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/setup-email`,
+                { method: 'POST' }
+              );
+              showDashboardToast(
+                (response && response.message) || 'Setup email sent successfully.',
+                'success'
+              );
             } else if (action === 'revoke') {
               const creator = getInviteCreatorDetails(
                 button.dataset.inviteCreator || 'unknown'
@@ -6683,10 +6735,18 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              if (!(await showConfirmModal('Remove subscriber', 'This will permanently delete this subscriber and all related invites, payments, and setup links. This action cannot be undone.'))) {
+              if (!(await showConfirmModal('Remove subscriber', 'This permanently deletes the subscriber and related local invites, payments, and setup links. Their Plex access will remain active. Use “Revoke Plex access” separately if you also want to remove them from Plex.'))) {
                 return;
               }
-              await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
+              const response = await api(
+                `/api/admin/subscribers/${donorId}`,
+                { method: 'DELETE' }
+              );
+              showDashboardToast(
+                (response && response.message) ||
+                  'Subscriber removed. Plex access was preserved.',
+                'success'
+              );
             }
             if (requiresReload) {
               await loadDashboardData();
@@ -7015,6 +7075,14 @@
               });
               const successMessage = (response && response.message) || 'Email resent successfully.';
               showDashboardToast(successMessage, 'success');
+            } else if (action === 'setup-email') {
+              const response = await api(
+                `/api/admin/subscribers/${donorId}/setup-email`,
+                { method: 'POST' }
+              );
+              const successMessage =
+                (response && response.message) || 'Setup email sent successfully.';
+              showDashboardToast(successMessage, 'success');
             } else if (action === 'revoke') {
               const creator = getInviteCreatorDetails(
                 button.dataset.inviteCreator || 'unknown'
@@ -7064,15 +7132,22 @@
               const successMessage = (response && response.message) || 'Plex access revoked successfully.';
               showDashboardToast(successMessage, 'success');
             } else if (action === 'remove') {
-              if (!(await showConfirmModal('Remove subscriber', 'Remove this subscriber and all related records? This action cannot be undone.'))) {
+              if (!(await showConfirmModal('Remove subscriber', 'Remove this subscriber and related local records? Their Plex access will remain active. Use “Revoke Plex access” separately if needed. This action cannot be undone.'))) {
                 button.disabled = false;
                 return;
               }
-              await api(`/api/admin/subscribers/${donorId}`, { method: 'DELETE' });
+              const response = await api(
+                `/api/admin/subscribers/${donorId}`,
+                { method: 'DELETE' }
+              );
               const donors = Array.isArray(state.donors) ? [...state.donors] : [];
               state.donors = donors.filter(item => String(item.id) !== String(donorId));
               selectedDonorId = null;
-              showDashboardToast('User removed successfully.', 'success');
+              showDashboardToast(
+                (response && response.message) ||
+                  'Subscriber removed. Plex access was preserved.',
+                'success'
+              );
               renderSubscribers();
               return;
             }

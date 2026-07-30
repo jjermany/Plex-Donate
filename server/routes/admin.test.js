@@ -103,6 +103,7 @@ const {
   db,
   createDonor,
   createInvite,
+  createOrUpdateShareLink,
   getDonorById,
   listDonorsWithDetails,
   getRecentEvents,
@@ -995,6 +996,151 @@ test('admin can import an unlinked existing Plex user with courtesy access', asy
   const refreshedBody = await refreshedCandidates.json();
   assert.equal(refreshedBody.candidates.length, 0);
   assert.equal(refreshedBody.linkedCount, 1);
+});
+
+test('admin can send a fresh setup email to an imported courtesy member', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('app', {
+    publicBaseUrl: 'https://donate.example.test',
+  });
+
+  const donor = createDonor({
+    email: 'imported-setup@example.com',
+    name: 'Imported Setup',
+    status: 'pending',
+    plexAccountId: 'plex-imported-setup',
+    plexEmail: 'imported-setup@example.com',
+    courtesyAccess: true,
+    hadPreexistingAccess: true,
+  });
+  const shareLink = createOrUpdateShareLink({
+    donorId: donor.id,
+    token: 'fresh-imported-setup-token',
+    sessionToken: 'fresh-imported-setup-session',
+  });
+
+  const originalSendImportedPlexUserSetupEmail =
+    emailService.sendImportedPlexUserSetupEmail;
+  const setupEmails = [];
+  emailService.sendImportedPlexUserSetupEmail = async (payload) => {
+    setupEmails.push(payload);
+  };
+  t.after(() => {
+    emailService.sendImportedPlexUserSetupEmail =
+      originalSendImportedPlexUserSetupEmail;
+  });
+
+  const response = await agent.post(
+    `/api/admin/subscribers/${donor.id}/setup-email`,
+    {
+      headers: { 'x-csrf-token': csrfToken },
+    }
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.success, true);
+  assert.equal(
+    body.setupUrl,
+    `https://donate.example.test/share/${shareLink.token}`
+  );
+  assert.deepEqual(setupEmails, [
+    {
+      to: donor.email,
+      name: donor.name,
+      setupUrl: body.setupUrl,
+    },
+  ]);
+
+  const event = getRecentEvents(10).find(
+    (entry) =>
+      entry.eventType === 'donor.courtesy_access.setup_email.sent'
+  );
+  assert.ok(event);
+  assert.deepEqual(JSON.parse(event.payload), {
+    donorId: donor.id,
+    email: donor.email,
+    shareLinkId: shareLink.id,
+  });
+});
+
+test('removing an imported subscriber preserves Plex access and allows re-import', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('plex', {
+    baseUrl: 'https://plex.local',
+    token: 'token-preserve-import',
+    serverIdentifier: 'server-preserve-import',
+    librarySectionIds: '1',
+  });
+
+  const donor = createDonor({
+    email: 'preserved-import@example.com',
+    name: 'Preserved Import',
+    status: 'pending',
+    plexAccountId: 'plex-preserved-import',
+    plexEmail: 'preserved-import@example.com',
+    courtesyAccess: true,
+    hadPreexistingAccess: true,
+  });
+  createOrUpdateShareLink({
+    donorId: donor.id,
+    token: 'preserved-import-token',
+    sessionToken: 'preserved-import-session',
+  });
+
+  const originalRevokeUser = plexService.revokeUser;
+  const originalGetCurrentPlexShares = plexService.getCurrentPlexShares;
+  let revokeCalls = 0;
+  plexService.revokeUser = async () => {
+    revokeCalls += 1;
+    return { success: true };
+  };
+  plexService.getCurrentPlexShares = async () => ({
+    success: true,
+    shares: [
+      {
+        emails: [donor.email],
+        userIds: [donor.plexAccountId],
+        pending: false,
+        status: 'accepted',
+      },
+    ],
+  });
+  t.after(() => {
+    plexService.revokeUser = originalRevokeUser;
+    plexService.getCurrentPlexShares = originalGetCurrentPlexShares;
+  });
+
+  const deleteResponse = await agent.request(
+    `/api/admin/subscribers/${donor.id}`,
+    {
+      method: 'DELETE',
+      headers: { 'x-csrf-token': csrfToken },
+    }
+  );
+  assert.equal(deleteResponse.status, 200);
+  const deleteBody = await deleteResponse.json();
+  assert.equal(deleteBody.plexAccessPreserved, true);
+  assert.equal(revokeCalls, 0);
+  assert.equal(getDonorById(donor.id), null);
+
+  const candidatesResponse = await agent.get('/api/admin/plex/import-candidates');
+  assert.equal(candidatesResponse.status, 200);
+  const candidatesBody = await candidatesResponse.json();
+  assert.equal(candidatesBody.candidates.length, 1);
+  assert.equal(candidatesBody.candidates[0].email, donor.email);
+  assert.equal(candidatesBody.candidates[0].accountId, donor.plexAccountId);
+
+  const event = getRecentEvents(10).find(
+    (entry) => entry.eventType === 'subscriber.removed'
+  );
+  assert.ok(event);
+  assert.equal(JSON.parse(event.payload).plexAccessPreserved, true);
 });
 
 test('POST /api/admin/subscribers/:id/extend-trial extends active trial from current expiration', async (t) => {

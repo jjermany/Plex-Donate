@@ -2369,6 +2369,82 @@ router.post(
   })
 );
 
+router.post(
+  '/subscribers/:id/setup-email',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const donorId = Number.parseInt(req.params.id, 10);
+    const donor = getDonorById(donorId);
+    if (!donor) {
+      return res.status(404).json({ error: 'Subscriber not found' });
+    }
+    if (!donor.courtesyAccess || !donor.hadPreexistingAccess) {
+      return res.status(400).json({
+        error: 'Setup emails are available only for imported courtesy members.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+    if (!donor.email) {
+      return res.status(400).json({
+        error: 'Add an email address before sending the setup email.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const shareLink = getShareLinkByDonorId(donor.id);
+    if (!shareLink) {
+      return res.status(400).json({
+        error: 'Create a setup link before sending the setup email.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const origin = resolvePublicBaseUrl(req);
+    if (!origin) {
+      return res.status(503).json({
+        error: 'Public base URL is not configured. Configure it before sending setup emails.',
+        csrfToken: res.locals.csrfToken,
+      });
+    }
+
+    const setupUrl = `${origin}/share/${shareLink.token}`;
+    try {
+      await emailService.sendImportedPlexUserSetupEmail({
+        to: donor.email,
+        name: donor.name,
+        setupUrl,
+      });
+      logEvent('donor.courtesy_access.setup_email.sent', {
+        donorId: donor.id,
+        email: donor.email,
+        shareLinkId: shareLink.id,
+      });
+    } catch (err) {
+      const message =
+        err && err.message ? err.message : 'Failed to send setup email';
+      logger.warn('Failed to send imported member setup email', {
+        donorId: donor.id,
+        email: donor.email,
+        error: message,
+      });
+      logEvent('donor.courtesy_access.setup_email.failed', {
+        donorId: donor.id,
+        email: donor.email,
+        shareLinkId: shareLink.id,
+        error: message,
+      });
+      throw err;
+    }
+
+    return res.json({
+      success: true,
+      message: `Setup email sent to ${donor.email}.`,
+      setupUrl,
+      csrfToken: res.locals.csrfToken,
+    });
+  })
+);
+
 router.delete(
   '/share-links/:id',
   requireAdmin,
@@ -3004,50 +3080,6 @@ router.delete(
       return res.status(404).json({ error: 'Subscriber not found' });
     }
 
-    // Revoke Plex access before removing from database
-    if (plexService.isConfigured() && (donor.plexAccountId || donor.plexEmail || donor.email)) {
-      try {
-        const result = await plexService.revokeUser({
-          plexAccountId: donor.plexAccountId,
-          email: donor.plexEmail || donor.email,
-        });
-        if (result.success) {
-          logger.info('Revoked Plex access for removed user', {
-            donorId: donor.id,
-            email: donor.email,
-          });
-          logEvent('plex.access.revoked', {
-            donorId: donor.id,
-            email: donor.email,
-            plexAccountId: donor.plexAccountId,
-            reason: 'admin_removed_user',
-          });
-          adminNotifications
-            .notifyPlexRevoked({
-              donor,
-              reason: 'admin_removed_user',
-              context: 'admin-dashboard',
-            })
-            .catch((err) =>
-              logger.warn(
-                'Failed to send admin Plex revocation notification',
-                err && err.message
-              )
-            );
-        } else {
-          logger.warn('Failed to revoke Plex access for removed user', {
-            donorId: donor.id,
-            reason: result.reason,
-          });
-        }
-      } catch (err) {
-        logger.warn('Error revoking Plex access during user removal', {
-          donorId: donor.id,
-          error: err.message,
-        });
-      }
-    }
-
     const removed = deleteDonorById(donor.id);
     if (!removed) {
       return res.status(500).json({ error: 'Failed to remove subscriber' });
@@ -3056,9 +3088,15 @@ router.delete(
     logEvent('subscriber.removed', {
       donorId: donor.id,
       email: donor.email,
+      plexAccessPreserved: true,
     });
 
-    res.json({ success: true, csrfToken: res.locals.csrfToken });
+    res.json({
+      success: true,
+      message: 'Subscriber removed. Plex access was preserved.',
+      plexAccessPreserved: true,
+      csrfToken: res.locals.csrfToken,
+    });
   })
 );
 
