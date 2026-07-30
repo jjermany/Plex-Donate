@@ -12,6 +12,24 @@ const SMTP_SETTINGS = {
   from: 'Plex Donate <support@example.com>',
 };
 
+test('verifyConnection delegates to the underlying SMTP transport', async (t) => {
+  let verifyCalls = 0;
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    verify: async () => {
+      verifyCalls += 1;
+    },
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  const result = await emailService.verifyConnection(SMTP_SETTINGS);
+
+  assert.equal(verifyCalls, 1);
+  assert.equal(result.message, 'SMTP connection verified successfully.');
+});
+
 test('resolveDashboardUrl falls back to the origin of a reference URL when no login is provided', async (t) => {
   const originalGetAppSettings = settingsState.getAppSettings;
   settingsState.getAppSettings = () => ({ publicBaseUrl: '' });

@@ -386,6 +386,9 @@ function createTransport(smtp) {
         : undefined,
   });
   return {
+    verify(...args) {
+      return transport.verify(...args);
+    },
     sendMail(message) {
       const branding = getBranding();
       return transport.sendMail({
