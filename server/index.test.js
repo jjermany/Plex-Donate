@@ -71,11 +71,23 @@ test('public branding and manifest endpoints expose configured identity', async 
   const manifestResponse = await fetch(`${origin}/manifest.webmanifest`);
   assert.equal(manifestResponse.status, 200);
   const manifest = await manifestResponse.json();
-  assert.equal(manifest.name, 'Family Media Hub');
-  assert.equal(manifest.short_name, 'Family Media Hub');
+  assert.equal(manifest.name, 'Family Media Hub Admin');
+  assert.equal(manifest.short_name, 'Family Media Hub Admin');
+  assert.equal(manifest.id, '/');
+  assert.equal(manifest.start_url, '/');
+  assert.equal(manifest.scope, '/');
   assert.ok(
     manifest.icons.every((icon) => icon.src.includes('/icons/member-hub-'))
   );
+
+  const memberManifestResponse = await fetch(`${origin}/dashboard-manifest.webmanifest`);
+  assert.equal(memberManifestResponse.status, 200);
+  const memberManifest = await memberManifestResponse.json();
+  assert.equal(memberManifest.name, 'Family Media Hub Members');
+  assert.equal(memberManifest.short_name, 'Family Media Hub Members');
+  assert.equal(memberManifest.id, '/dashboard');
+  assert.equal(memberManifest.start_url, '/dashboard');
+  assert.equal(memberManifest.scope, '/');
 });
 
 test('scheduled subscription refresh updates donor payment timestamp', async (t) => {

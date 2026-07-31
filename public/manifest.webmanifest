@@ -1,6 +1,7 @@
 {
-  "name": "Member Hub",
-  "short_name": "Member Hub",
+  "name": "Member Hub Admin",
+  "short_name": "Member Hub Admin",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

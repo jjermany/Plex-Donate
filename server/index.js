@@ -156,28 +156,45 @@ app.get('/api/branding', (req, res) => {
   res.json(getBranding());
 });
 
+const createWebAppManifest = ({ id, name, startUrl }) => ({
+  id,
+  name,
+  short_name: name,
+  start_url: startUrl,
+  scope: '/',
+  display: 'standalone',
+  background_color: '#050818',
+  theme_color: '#f59e0b',
+  icons: [
+    { src: '/icons/member-hub-android-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+    { src: '/icons/member-hub-android-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    { src: '/icons/member-hub-android-any-144.png', sizes: '144x144', type: 'image/png', purpose: 'any' },
+    { src: '/icons/member-hub-android-any-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icons/member-hub-android-any-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    { src: '/icons/member-hub-ios-120.png', sizes: '120x120', type: 'image/png' },
+    { src: '/icons/member-hub-ios-152.png', sizes: '152x152', type: 'image/png' },
+    { src: '/icons/member-hub-ios-167.png', sizes: '167x167', type: 'image/png' },
+    { src: '/icons/member-hub-ios-180.png', sizes: '180x180', type: 'image/png' },
+    { src: '/icons/member-hub-ios-1024.png', sizes: '1024x1024', type: 'image/png' },
+  ],
+});
+
 app.get('/manifest.webmanifest', (req, res) => {
   const { brandName } = getBranding();
-  res.type('application/manifest+json').json({
-    name: brandName,
-    short_name: brandName,
-    start_url: '/dashboard',
-    display: 'standalone',
-    background_color: '#050818',
-    theme_color: '#f59e0b',
-    icons: [
-      { src: '/icons/member-hub-android-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
-      { src: '/icons/member-hub-android-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-      { src: '/icons/member-hub-android-any-144.png', sizes: '144x144', type: 'image/png', purpose: 'any' },
-      { src: '/icons/member-hub-android-any-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-      { src: '/icons/member-hub-android-any-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-      { src: '/icons/member-hub-ios-120.png', sizes: '120x120', type: 'image/png' },
-      { src: '/icons/member-hub-ios-152.png', sizes: '152x152', type: 'image/png' },
-      { src: '/icons/member-hub-ios-167.png', sizes: '167x167', type: 'image/png' },
-      { src: '/icons/member-hub-ios-180.png', sizes: '180x180', type: 'image/png' },
-      { src: '/icons/member-hub-ios-1024.png', sizes: '1024x1024', type: 'image/png' },
-    ],
-  });
+  res.type('application/manifest+json').json(createWebAppManifest({
+    id: '/',
+    name: `${brandName} Admin`,
+    startUrl: '/',
+  }));
+});
+
+app.get('/dashboard-manifest.webmanifest', (req, res) => {
+  const { brandName } = getBranding();
+  res.type('application/manifest+json').json(createWebAppManifest({
+    id: '/dashboard',
+    name: `${brandName} Members`,
+    startUrl: '/dashboard',
+  }));
 });
 
 app.use('/api/automation/ups', automationRouter);
@@ -198,7 +215,8 @@ app.use((req, res, next) => {
     req.path === '/index.html' ||
     req.path === '/share.html' ||
     req.path === '/dashboard.html' ||
-    req.path === '/manifest.webmanifest'
+    req.path === '/manifest.webmanifest' ||
+    req.path === '/dashboard-manifest.webmanifest'
   ) {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.set('Pragma', 'no-cache');
