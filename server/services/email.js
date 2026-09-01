@@ -660,28 +660,29 @@ async function sendImportedPlexUserSetupEmail(
 
   const smtp = getSmtpConfig(overrideSettings);
   const mailer = createTransport(smtp);
-  const subject = 'Your Plex server access and optional dashboard setup';
+  const subject = 'You’re in! Your complimentary {{BRAND_NAME}} is ready 🎉';
   const recipientName = name || 'there';
 
   const textLines = [
     `Hi ${recipientName},`,
     '',
-    'You already have access to this Plex server. The server owner has added you as a courtesy member in {{BRAND_NAME}}, the private dashboard used to support this server.',
+    'Good news—you now have complimentary membership in {{BRAND_NAME}}, your home base for this Plex server.',
     '',
-    'Courtesy access is free. No payment or donation is required, and your existing Plex access will not change.',
+    'Your access is already covered. No subscription, payment, or donation is required, and your existing Plex access will not change.',
     '',
-    'As a courtesy member, you can:',
-    '- Receive email alerts for server power outages, recoveries, and shutdowns.',
-    '- Send support requests and follow replies for playback, access, or other issues.',
-    '- Share referral invites that give friends a trial. They can subscribe afterward if they choose to keep access.',
-    '- Review your access status and keep your account details current.',
+    'Your Member Hub gives you a few handy superpowers:',
+    '- Explore server resources, guides, useful links, and announcements in one place.',
+    '- Send support requests when something is not working and follow every reply.',
+    '- Invite friends when you want to share the experience.',
+    '- Check your Plex access status and keep your account details current.',
+    '- Receive important server outage, recovery, and shutdown alerts.',
     '',
-    `Set up your dashboard with this personal link: ${setupUrl}`,
+    `Open your complimentary hub with this personal link: ${setupUrl}`,
   ];
 
   textLines.push(
     '',
-    'Dashboard setup is optional. It will not send another Plex library invitation or change your existing access.',
+    'Setup only takes a moment. It will not send another Plex library invitation or change your existing access.',
     '',
     'If you did not expect this email or need help, reply to this email.',
     '',
@@ -691,28 +692,29 @@ async function sendImportedPlexUserSetupEmail(
   const html = buildEmailFrameHtml({
     tone: 'brand',
     subject,
-    badge: 'Courtesy Access',
+    badge: 'Complimentary Member',
     recipientName,
     intro:
-      'You already have access to this Plex server. The server owner has added you as a courtesy member in {{BRAND_NAME}}, the private dashboard used to support this server.',
+      'Good news—you now have complimentary membership in {{BRAND_NAME}}, your home base for this Plex server.',
     bodyHtml:
-      '<p style="margin:0 0 20px;color:#0f172a;"><strong>Courtesy access is free.</strong> No payment or donation is required, and your existing Plex access will not change.</p>' +
+      '<p style="margin:0 0 20px;color:#0f172a;"><strong>Your access is already covered.</strong> No subscription, payment, or donation is required, and your existing Plex access will not change.</p>' +
       buildEmailDetailPanelHtml(
-        'Your courtesy benefits',
+        'Inside your Member Hub',
         [
-          'Receive email alerts for server power outages, recoveries, and shutdowns.',
-          'Send support requests and follow replies for playback, access, or other issues.',
-          'Share referral invites that give friends a trial. They can subscribe afterward if they choose to keep access.',
-          'Review your access status and keep your account details current.',
+          'Explore server resources, guides, useful links, and announcements in one place.',
+          'Send support requests when something is not working and follow every reply.',
+          'Invite friends when you want to share the experience.',
+          'Check your Plex access status and keep your account details current.',
+          'Receive important server outage, recovery, and shutdown alerts.',
         ],
         getEmailTonePalette('brand')
       ) +
       buildEmailActionButtonHtml(
-        'Set Up My Dashboard',
+        'Open My Member Hub',
         setupUrl,
         getEmailTonePalette('brand')
       ) +
-      '<p style="margin:0 0 16px;color:#0f172a;">Dashboard setup is optional. It will not send another Plex library invitation or change your existing access.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">Setup only takes a moment. It will not send another Plex library invitation or change your existing access.</p>' +
       '<p style="margin:0 0 16px;color:#0f172a;">If you need help, just reply to this email.</p>',
     dashboardHtml: '',
   });
@@ -738,41 +740,64 @@ async function sendSetupLinkEmail(
   const mailer = createTransport(smtp);
   const recipientName = name || 'there';
   const subject = courtesyAccess
-    ? 'Your complimentary Member Hub access'
+    ? 'Welcome! Your complimentary Member Hub is ready 🎉'
     : 'You have been invited to Member Hub';
   const accessCopy = courtesyAccess
-    ? 'The server administrator has provided complimentary access for you. No payment or donation is required.'
+    ? 'Great news—the server administrator has provided complimentary access for you. No subscription, payment, or donation is required.'
     : 'The server administrator created a personal invitation for you.';
   const nextStepCopy = courtesyAccess
-    ? 'Use the link below to finish your account and Plex setup. Your complimentary access does not depend on a subscription.'
+    ? 'Use the link below to set up your account and connect Plex. Then Member Hub becomes your home base for resources, referrals, support, and access tools.'
     : 'Use the link below to create your account and continue your access setup.';
+  const complimentaryBenefits = [
+    'Explore server resources, guides, useful links, and announcements.',
+    'Send support requests and follow replies when you need help.',
+    'Invite friends when you want to share the experience.',
+    'Check your Plex access status and manage your account.',
+  ];
 
-  const text = [
+  const textLines = [
     `Hi ${recipientName},`,
     '',
     accessCopy,
     '',
     nextStepCopy,
+  ];
+  if (courtesyAccess) {
+    textLines.push(
+      '',
+      'Once you’re inside, you can:',
+      ...complimentaryBenefits.map((benefit) => `- ${benefit}`)
+    );
+  }
+  textLines.push(
     '',
-    `Set up your account: ${setupUrl}`,
+    `${courtesyAccess ? 'Open your complimentary hub' : 'Set up your account'}: ${setupUrl}`,
     '',
     'This is a private link intended only for you.',
     '',
     'If you did not expect this email or need help, reply to this email.',
     '',
-    '-- {{EMAIL_SIGNOFF}}',
-  ].join('\n');
+    '-- {{EMAIL_SIGNOFF}}'
+  );
+  const text = textLines.join('\n');
 
   const html = buildEmailFrameHtml({
     tone: 'brand',
     subject,
-    badge: courtesyAccess ? 'Complimentary Access' : 'Invitation',
+    badge: courtesyAccess ? 'Complimentary Member' : 'Invitation',
     recipientName,
     intro: accessCopy,
     bodyHtml:
       `<p style="margin:0 0 20px;color:#0f172a;">${escapeHtml(nextStepCopy)}</p>` +
+      (courtesyAccess
+        ? buildEmailDetailPanelHtml(
+            'Your Member Hub superpowers',
+            complimentaryBenefits,
+            getEmailTonePalette('brand')
+          )
+        : '') +
       buildEmailActionButtonHtml(
-        'Set Up My Account',
+        courtesyAccess ? 'Open My Member Hub' : 'Set Up My Account',
         setupUrl,
         getEmailTonePalette('brand')
       ) +

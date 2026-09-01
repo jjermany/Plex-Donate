@@ -128,19 +128,17 @@ test('sendImportedPlexUserSetupEmail clearly explains free courtesy access and d
   const message = messages[0];
   assert.equal(
     message.subject,
-    'Your Plex server access and optional dashboard setup'
+    'You’re in! Your complimentary Member Hub is ready 🎉'
   );
-  assert.match(message.html, /Courtesy Access/);
-  assert.match(message.html, /Set Up My Dashboard/);
-  assert.match(message.text, /No payment or donation is required/);
-  assert.match(message.text, /server power outages, recoveries, and shutdowns/);
-  assert.match(message.text, /Send support requests and follow replies/);
-  assert.match(
-    message.text,
-    /referral invites that give friends a trial.*subscribe afterward/
-  );
+  assert.match(message.html, /Complimentary Member/);
+  assert.match(message.html, /Open My Member Hub/);
+  assert.match(message.text, /No subscription, payment, or donation is required/);
+  assert.match(message.text, /server resources, guides, useful links, and announcements/);
+  assert.match(message.text, /Send support requests.*follow every reply/);
+  assert.match(message.text, /Invite friends when you want to share the experience/);
+  assert.match(message.text, /server outage, recovery, and shutdown alerts/);
   assert.match(message.text, /https:\/\/plex\.example\.com\/share\/setup-token/);
-  assert.match(message.text, /Dashboard setup is optional/);
+  assert.match(message.text, /Setup only takes a moment/);
   assert.doesNotMatch(message.html, /Open Dashboard/);
 });
 
@@ -191,9 +189,14 @@ test('sendSetupLinkEmail presents courtesy accounts as complimentary and payment
 
   assert.equal(messages.length, 1);
   assert.match(messages[0].subject, /complimentary/i);
-  assert.match(messages[0].text, /No payment or donation is required/);
-  assert.match(messages[0].text, /does not depend on a subscription/);
-  assert.match(messages[0].html, /Complimentary Access/);
+  assert.match(messages[0].subject, /🎉/);
+  assert.match(messages[0].text, /No subscription, payment, or donation is required/);
+  assert.match(messages[0].text, /server resources, guides, useful links, and announcements/);
+  assert.match(messages[0].text, /Send support requests and follow replies/);
+  assert.match(messages[0].text, /Invite friends when you want to share the experience/);
+  assert.match(messages[0].html, /Complimentary Member/);
+  assert.match(messages[0].html, /Your Member Hub superpowers/);
+  assert.match(messages[0].html, /Open My Member Hub/);
 });
 
 test('sendSubscriptionThankYouEmail includes payment and subscription details', async (t) => {
