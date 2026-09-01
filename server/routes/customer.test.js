@@ -984,6 +984,32 @@ test('dashboard continues the five-step supporter onboarding journey', () => {
   );
 });
 
+test('complimentary member setup keeps billing prompts out of the onboarding foreground', () => {
+  const dashboardHtmlPath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'public',
+    'dashboard.html'
+  );
+  const dashboardJsPath = path.join(
+    __dirname,
+    '..',
+    '..',
+    'public',
+    'dashboard.js'
+  );
+  const html = fs.readFileSync(dashboardHtmlPath, 'utf8');
+  const js = fs.readFileSync(dashboardJsPath, 'utf8');
+
+  assert.match(html, /id="profile-subscription-field"/);
+  assert.match(html, /id="access-options-panel"/);
+  assert.match(js, /!courtesyAccess \|\| courtesySetupComplete/);
+  assert.match(js, /setElementVisibility\(profileSubscriptionField, !courtesyAccess\)/);
+  assert.match(js, /Complimentary access is active\. No subscription or payment is required\./);
+  assert.match(js, /\? 'Access & support'\s*:\s*'Access setup'/);
+});
+
 test('customer session payload includes non-blocking relay warning', async () => {
   resetDatabase();
   const donor = createDonor({

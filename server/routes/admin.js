@@ -2558,12 +2558,46 @@ router.post(
         shareLinkId: shareLink.id,
         regenerated: Boolean(regenerate),
       });
+      const setupUrl = `${origin}/share/${shareLink.token}`;
+      let emailSent = false;
+      let emailError = '';
+      if (email) {
+        try {
+          await emailService.sendSetupLinkEmail({
+            to: email,
+            setupUrl,
+            name: donor.name || name,
+            courtesyAccess: true,
+          });
+          emailSent = true;
+          logEvent('donor.courtesy_access.invite_email.sent', {
+            donorId: donor.id,
+            email,
+            shareLinkId: shareLink.id,
+          });
+        } catch (err) {
+          emailError = err && err.message ? err.message : 'Unable to send setup email.';
+          logger.warn('Failed to email courtesy setup link', {
+            donorId: donor.id,
+            shareLinkId: shareLink.id,
+            error: emailError,
+          });
+          logEvent('donor.courtesy_access.invite_email.failed', {
+            donorId: donor.id,
+            email,
+            shareLinkId: shareLink.id,
+            error: emailError,
+          });
+        }
+      }
       return res.json({
         donor,
         prospect: null,
+        emailSent,
+        emailError,
         shareLink: {
           ...shareLink,
-          url: `${origin}/share/${shareLink.token}`,
+          url: setupUrl,
         },
         csrfToken: res.locals.csrfToken,
       });
@@ -2616,8 +2650,41 @@ router.post(
     }
     const url = `${origin}/share/${shareLink.token}`;
 
+    let emailSent = false;
+    let emailError = '';
+    if (email) {
+      try {
+        await emailService.sendSetupLinkEmail({
+          to: email,
+          setupUrl: url,
+          name: prospect.name || name,
+        });
+        emailSent = true;
+        logEvent('share_link.email.sent', {
+          prospectId: prospect.id,
+          shareLinkId: shareLink.id,
+          email,
+        });
+      } catch (err) {
+        emailError = err && err.message ? err.message : 'Unable to send setup email.';
+        logger.warn('Failed to email prospect setup link', {
+          prospectId: prospect.id,
+          shareLinkId: shareLink.id,
+          error: emailError,
+        });
+        logEvent('share_link.email.failed', {
+          prospectId: prospect.id,
+          shareLinkId: shareLink.id,
+          email,
+          error: emailError,
+        });
+      }
+    }
+
     return res.json({
       prospect,
+      emailSent,
+      emailError,
       shareLink: { ...shareLink, url },
       csrfToken: res.locals.csrfToken,
     });

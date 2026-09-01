@@ -304,7 +304,7 @@
               data-dashboard-tab="plex"
               tabindex="-1"
             >
-              Setup & billing
+              Access setup
             </button>
             <button
               id="dashboard-tab-support"
@@ -445,7 +445,7 @@
                       autocomplete="name"
                     />
                   </label>
-                  <label>
+                  <label id="profile-subscription-field">
                     <span>Already subscribed? PayPal subscription ID (optional)</span>
                     <input
                       id="profile-subscription"
@@ -751,7 +751,7 @@
                     <div class="step-header">
                       <span class="step-number" data-step-number="4">4</span>
                       <div>
-                        <h3 class="step-title">Activate access</h3>
+                        <h3 id="step-subscription-title" class="step-title">Activate access</h3>
                         <p id="step-subscription-note" class="muted small">
                           Once Plex is linked, start 7 days of access with no payment info required. Subscribe later if you want to keep streaming.
                         </p>
@@ -772,7 +772,7 @@
                   </div>
                 </div>
               </article>
-              <article class="surface">
+              <article id="access-options-panel" class="surface">
                 <h2 id="access-options-title" class="section-title">7-day risk-free trial</h2>
                 <p id="access-options-description" class="muted">
                   Start watching for 7 days with no payment information required. PayPal checkout is only needed if you decide to keep access after the trial.

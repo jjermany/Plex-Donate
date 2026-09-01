@@ -54,6 +54,7 @@ const state = {
       const dashboardTabPanels = Array.from(
         document.querySelectorAll('[data-dashboard-panel]')
       );
+      const dashboardPlexTab = document.getElementById('dashboard-tab-plex');
       const DASHBOARD_TAB_DEFAULT = dashboardTabButtons.length > 0
         ? dashboardTabButtons[0].getAttribute('data-dashboard-tab') || 'account'
         : 'account';
@@ -117,6 +118,7 @@ const state = {
       const subscriptionButton = document.getElementById('subscription-button');
       const subscriptionNote = document.getElementById('subscription-note');
       const accessOptionsTitle = document.getElementById('access-options-title');
+      const accessOptionsPanel = document.getElementById('access-options-panel');
       const accessOptionsDescription = document.getElementById(
         'access-options-description'
       );
@@ -143,6 +145,7 @@ const state = {
       const stepAccount = document.getElementById('step-account');
       const stepEmail = document.getElementById('step-email');
       const stepSubscription = document.getElementById('step-subscription');
+      const stepSubscriptionTitle = document.getElementById('step-subscription-title');
       const stepPlex = document.getElementById('step-plex');
       const stepComplete = document.getElementById('step-complete');
       const stepAccountNote = document.getElementById('step-account-note');
@@ -1086,6 +1089,9 @@ const state = {
       const profileEmail = document.getElementById('profile-email');
       const profileName = document.getElementById('profile-name');
       const profileSubscription = document.getElementById('profile-subscription');
+      const profileSubscriptionField = document.getElementById(
+        'profile-subscription-field'
+      );
       const profileStatus = document.getElementById('profile-status');
       const profileSave = document.getElementById('profile-save');
       const passwordForm = document.getElementById('password-form');
@@ -1720,11 +1726,14 @@ const state = {
             setPlexLinkStatus('Plex account linked successfully.', 'success', {
               force: true,
             });
-            // Keep the user on Setup & billing so the next available action,
-            // trial or checkout, stays directly in view.
+            // Keep the user on access setup so the next required action stays
+            // directly in view.
           } else {
+            const donor = getCurrentDonor();
             setPlexLinkStatus(
-              'Link your Plex account so we can enable PayPal checkout and invites.',
+              donor && donor.courtesyAccess
+                ? 'Link your Plex account to finish your complimentary access setup.'
+                : 'Link your Plex account so we can enable access and invites.',
               'info'
             );
           }
@@ -1771,8 +1780,8 @@ const state = {
               String(donor.status || '').toLowerCase() === 'active'
           );
           let message = supporting
-            ? 'Your courtesy access is active, and thank you for choosing to help with server costs. Your access does not depend on your PayPal support.'
-            : 'Your courtesy access is active and provided by the server administrator. No payment is required.';
+            ? 'Your complimentary access is active, and thank you for choosing to help with server costs. Your access does not depend on your support.'
+            : 'Your complimentary access is active and provided by the server administrator. No payment is required.';
           if (nextInviteMessage && cooldownActive) {
             message += ` ${nextInviteMessage}`;
           } else {
@@ -2119,6 +2128,12 @@ const state = {
         const allComplete =
           accountComplete && emailComplete && plexLinked && accessActive;
 
+        if (stepSubscriptionTitle) {
+          stepSubscriptionTitle.textContent = courtesyAccess
+            ? 'Complimentary access'
+            : 'Activate access';
+        }
+
         if (allComplete) {
           setElementVisibility(onboardingPanel, false);
           return;
@@ -2192,10 +2207,12 @@ const state = {
               'Verify your email, then connect Plex to unlock access activation.';
           } else if (!plexLinked) {
             stepSubscriptionNote.textContent =
-              'Connect Plex first. Trial and subscription actions unlock immediately afterward.';
+              courtesyAccess
+                ? 'Connect Plex first to finish enabling your complimentary access.'
+                : 'Connect Plex first. Trial and subscription actions unlock immediately afterward.';
           } else if (courtesyAccess) {
             stepSubscriptionNote.textContent =
-              'Courtesy access is active. PayPal support is optional and never required for your access.';
+              'Complimentary access is active. No subscription or payment is required.';
           } else if (isTrial) {
             if (trialCountdown) {
               stepSubscriptionNote.textContent =
@@ -2224,7 +2241,9 @@ const state = {
 
         if (stepCompleteNote) {
           stepCompleteNote.textContent =
-            'Once access is active, use the dashboard for Plex status, billing, referrals, and recovery.';
+            courtesyAccess
+              ? 'Once setup is complete, use the dashboard for Plex status, referrals, support, and recovery.'
+              : 'Once access is active, use the dashboard for Plex status, billing, referrals, and recovery.';
         }
       }
 
@@ -2370,12 +2389,22 @@ const state = {
         const normalizedStatus = (donor.status || 'pending').toLowerCase();
         const courtesyAccess = Boolean(donor.courtesyAccess);
         const plexLinked = Boolean(donor.plexLinked);
+        const courtesySetupComplete = Boolean(
+          courtesyAccess && donor.hasPassword && emailVerified && plexLinked
+        );
+        if (dashboardPlexTab) {
+          dashboardPlexTab.textContent = courtesyAccess
+            ? courtesySetupComplete
+              ? 'Access & support'
+              : 'Access setup'
+            : 'Setup & billing';
+        }
         if (memberStatusEl) {
           memberStatusEl.dataset.status = normalizedStatus;
           memberStatusEl.textContent = courtesyAccess
             ? donor.subscriptionId && normalizedStatus === 'active'
-              ? 'Courtesy + supporting'
-              : 'Courtesy access'
+              ? 'Complimentary + supporting'
+              : 'Complimentary access'
             : normalizedStatus || 'pending';
         }
 
@@ -2399,7 +2428,7 @@ const state = {
           Number(data.paypal && data.paypal.subscriptionPrice),
           data.paypal && data.paypal.currency
         );
-        if (price) {
+        if (price && (!courtesyAccess || Boolean(donor.subscriptionId))) {
           memberPlanEl.classList.remove('hidden');
           memberPlanEl.innerHTML = `<span class="label">Monthly support</span><span>${price}</span>`;
         } else {
@@ -2665,9 +2694,15 @@ const state = {
             ? 'Optional server support'
             : '7-day risk-free trial';
         }
+        if (accessOptionsPanel) {
+          setElementVisibility(
+            accessOptionsPanel,
+            !courtesyAccess || courtesySetupComplete
+          );
+        }
         if (accessOptionsDescription) {
           accessOptionsDescription.textContent = courtesyAccess
-            ? 'Your courtesy access does not depend on donating. If you ever want to help with monthly server costs, you can choose to support through PayPal below—there is no obligation.'
+            ? 'Your complimentary access is fully active. If you would like to help with monthly server costs, optional PayPal support is available below—there is no obligation.'
             : 'Start watching for 7 days with no payment information required. PayPal checkout is only needed if you decide to keep access after the trial.';
         }
 
@@ -2675,6 +2710,9 @@ const state = {
         profileName.value = donor.name || '';
         if (profileSubscription) {
           profileSubscription.value = donor.subscriptionId || '';
+        }
+        if (profileSubscriptionField) {
+          setElementVisibility(profileSubscriptionField, !courtesyAccess);
         }
         if (profileEmail) {
           profileEmail.disabled = !emailVerified;

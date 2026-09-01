@@ -144,6 +144,58 @@ test('sendImportedPlexUserSetupEmail clearly explains free courtesy access and d
   assert.doesNotMatch(message.html, /Open Dashboard/);
 });
 
+test('sendSetupLinkEmail sends a personal setup invitation without subscription framing', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => messages.push(payload),
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendSetupLinkEmail(
+    {
+      to: 'invitee@example.com',
+      setupUrl: 'https://plex.example.com/share/personal-token',
+      name: 'Invited User',
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].to, 'invitee@example.com');
+  assert.match(messages[0].subject, /invited/i);
+  assert.match(messages[0].text, /Set up your account: https:\/\/plex\.example\.com\/share\/personal-token/);
+  assert.doesNotMatch(messages[0].text, /subscription ID/i);
+});
+
+test('sendSetupLinkEmail presents courtesy accounts as complimentary and payment-free', async (t) => {
+  const messages = [];
+  const originalCreateTransport = nodemailer.createTransport;
+  nodemailer.createTransport = () => ({
+    sendMail: async (payload) => messages.push(payload),
+  });
+  t.after(() => {
+    nodemailer.createTransport = originalCreateTransport;
+  });
+
+  await emailService.sendSetupLinkEmail(
+    {
+      to: 'complimentary@example.com',
+      setupUrl: 'https://plex.example.com/share/courtesy-token',
+      courtesyAccess: true,
+    },
+    SMTP_SETTINGS
+  );
+
+  assert.equal(messages.length, 1);
+  assert.match(messages[0].subject, /complimentary/i);
+  assert.match(messages[0].text, /No payment or donation is required/);
+  assert.match(messages[0].text, /does not depend on a subscription/);
+  assert.match(messages[0].html, /Complimentary Access/);
+});
+
 test('sendSubscriptionThankYouEmail includes payment and subscription details', async (t) => {
   const messages = [];
   const originalCreateTransport = nodemailer.createTransport;

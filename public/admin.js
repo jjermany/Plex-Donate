@@ -3245,10 +3245,16 @@
 
           setFormStatus(
             prospectShareForm,
-            copied
-              ? 'Setup link copied to clipboard!'
-              : 'Setup link ready! Use the buttons below to share.',
-            'success'
+            response.emailSent
+              ? copied
+                ? 'Setup email sent and link copied to clipboard!'
+                : 'Setup email sent successfully.'
+              : response.emailError
+              ? `Setup link created, but email failed: ${response.emailError}`
+              : copied
+              ? 'Setup link copied to clipboard! No email address was provided.'
+              : 'Setup link ready. No email address was provided.',
+            response.emailError ? 'error' : 'success'
           );
           openProspectShareModal();
           scheduleStatusClear(prospectShareForm, 4000);

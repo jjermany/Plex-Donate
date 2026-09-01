@@ -901,6 +901,87 @@ test('admin can grant and remove courtesy access without changing billing status
   assert.equal(removedBody.donor.status, 'pending');
 });
 
+test('creating a setup invite emails the link by default when an address is provided', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('app', {
+    publicBaseUrl: 'https://donate.example.test',
+  });
+
+  const originalSendSetupLinkEmail = emailService.sendSetupLinkEmail;
+  const setupEmails = [];
+  emailService.sendSetupLinkEmail = async (payload) => {
+    setupEmails.push(payload);
+  };
+  t.after(() => {
+    emailService.sendSetupLinkEmail = originalSendSetupLinkEmail;
+  });
+
+  const response = await agent.post('/api/admin/share-links/prospect', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: {
+      email: 'new-invitee@example.com',
+      name: 'New Invitee',
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.emailSent, true);
+  assert.equal(body.emailError, '');
+  assert.match(body.shareLink.url, /^https:\/\/donate\.example\.test\/share\//);
+  assert.deepEqual(setupEmails, [
+    {
+      to: 'new-invitee@example.com',
+      name: 'New Invitee',
+      setupUrl: body.shareLink.url,
+    },
+  ]);
+});
+
+test('complimentary setup invites use the complimentary email by default', async (t) => {
+  resetDatabase();
+  const agent = await startServer(t);
+  const csrfToken = await loginAgent(agent);
+
+  settingsStore.updateGroup('app', {
+    publicBaseUrl: 'https://donate.example.test',
+  });
+
+  const originalSendSetupLinkEmail = emailService.sendSetupLinkEmail;
+  const setupEmails = [];
+  emailService.sendSetupLinkEmail = async (payload) => {
+    setupEmails.push(payload);
+  };
+  t.after(() => {
+    emailService.sendSetupLinkEmail = originalSendSetupLinkEmail;
+  });
+
+  const response = await agent.post('/api/admin/share-links/prospect', {
+    headers: { 'x-csrf-token': csrfToken },
+    body: {
+      email: 'complimentary-invitee@example.com',
+      name: 'Complimentary Invitee',
+      courtesyAccess: true,
+    },
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.emailSent, true);
+  assert.equal(body.donor.courtesyAccess, true);
+  assert.deepEqual(setupEmails, [
+    {
+      to: 'complimentary-invitee@example.com',
+      name: 'Complimentary Invitee',
+      setupUrl: body.shareLink.url,
+      courtesyAccess: true,
+    },
+  ]);
+});
+
 test('admin can import an unlinked existing Plex user with courtesy access', async (t) => {
   resetDatabase();
   const agent = await startServer(t);

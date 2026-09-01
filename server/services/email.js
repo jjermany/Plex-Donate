@@ -726,6 +726,70 @@ async function sendImportedPlexUserSetupEmail(
   });
 }
 
+async function sendSetupLinkEmail(
+  { to, setupUrl, name, courtesyAccess = false },
+  overrideSettings
+) {
+  if (!setupUrl) {
+    throw new Error('setupUrl is required to send setup link email');
+  }
+
+  const smtp = getSmtpConfig(overrideSettings);
+  const mailer = createTransport(smtp);
+  const recipientName = name || 'there';
+  const subject = courtesyAccess
+    ? 'Your complimentary Member Hub access'
+    : 'You have been invited to Member Hub';
+  const accessCopy = courtesyAccess
+    ? 'The server administrator has provided complimentary access for you. No payment or donation is required.'
+    : 'The server administrator created a personal invitation for you.';
+  const nextStepCopy = courtesyAccess
+    ? 'Use the link below to finish your account and Plex setup. Your complimentary access does not depend on a subscription.'
+    : 'Use the link below to create your account and continue your access setup.';
+
+  const text = [
+    `Hi ${recipientName},`,
+    '',
+    accessCopy,
+    '',
+    nextStepCopy,
+    '',
+    `Set up your account: ${setupUrl}`,
+    '',
+    'This is a private link intended only for you.',
+    '',
+    'If you did not expect this email or need help, reply to this email.',
+    '',
+    '-- {{EMAIL_SIGNOFF}}',
+  ].join('\n');
+
+  const html = buildEmailFrameHtml({
+    tone: 'brand',
+    subject,
+    badge: courtesyAccess ? 'Complimentary Access' : 'Invitation',
+    recipientName,
+    intro: accessCopy,
+    bodyHtml:
+      `<p style="margin:0 0 20px;color:#0f172a;">${escapeHtml(nextStepCopy)}</p>` +
+      buildEmailActionButtonHtml(
+        'Set Up My Account',
+        setupUrl,
+        getEmailTonePalette('brand')
+      ) +
+      '<p style="margin:0 0 16px;color:#0f172a;">This is a private link intended only for you.</p>' +
+      '<p style="margin:0 0 16px;color:#0f172a;">If you did not expect this email or need help, just reply to this email.</p>',
+    dashboardHtml: '',
+  });
+
+  await mailer.sendMail({
+    from: smtp.from,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
 async function sendSubscriptionThankYouEmail(
   { to, name, subscriptionId, amount, currency, paidAt },
   overrideSettings
@@ -1662,6 +1726,7 @@ async function verifyConnection(overrideSettings) {
 
 module.exports = {
   sendInviteEmail,
+  sendSetupLinkEmail,
   sendImportedPlexUserSetupEmail,
   sendSubscriptionThankYouEmail,
   sendAccountWelcomeEmail,
