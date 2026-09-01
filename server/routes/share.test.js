@@ -493,6 +493,24 @@ test('share signup page presents one five-step onboarding journey', () => {
   );
 });
 
+test('complimentary setup links suppress subscription prompts and use complimentary copy', () => {
+  const shareHtmlPath = path.join(__dirname, '..', '..', 'public', 'share.html');
+  const html = fs.readFileSync(shareHtmlPath, 'utf8');
+
+  assert.match(html, /id="complimentary-access-note" class="journey-callout hidden"/);
+  assert.match(html, /Complimentary access is already included\./);
+  assert.match(
+    html,
+    /!courtesyAccess && \(isProspect \|\| \(donor && !donor\.subscriptionId\)\)/
+  );
+  assert.match(html, /\? 'Access included'\s*:\s*'Activate'/);
+  assert.match(html, /Set up your complimentary account\./);
+  assert.match(
+    html,
+    /No subscription or payment is required for your complimentary access\./
+  );
+});
+
 test('share onboarding resolves the next required supporter step', () => {
   const renderer = loadShareRendererForTest();
   const base = {
@@ -518,6 +536,14 @@ test('share onboarding resolves the next required supporter step', () => {
   assert.equal(
     renderer.resolveJourneyStep({ ...base, normalizedStatus: 'pending' }),
     'activate'
+  );
+  assert.equal(
+    renderer.resolveJourneyStep({
+      ...base,
+      donor: { id: 1, courtesyAccess: true },
+      normalizedStatus: 'pending',
+    }),
+    'complete'
   );
   assert.equal(renderer.resolveJourneyStep(base), 'complete');
 });

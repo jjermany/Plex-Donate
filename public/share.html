@@ -846,7 +846,7 @@
             </li>
             <li data-journey-step="activate" data-state="upcoming">
               <span class="journey-progress-marker" data-step-number="4">4</span>
-              <span class="journey-progress-label">Activate</span>
+              <span id="activate-progress-label" class="journey-progress-label">Activate</span>
             </li>
             <li data-journey-step="complete" data-state="upcoming">
               <span class="journey-progress-marker" data-step-number="5">5</span>
@@ -862,11 +862,18 @@
           tabindex="-1"
         >
           <span class="stage-kicker">Step 1 of 5</span>
-          <h2>Create your supporter account</h2>
+          <h2 id="account-title">Create your supporter account</h2>
           <p id="account-description" class="muted">
             Save the email and password you’ll use for Member Hub. We’ll send
             one verification message before you connect Plex.
           </p>
+          <div id="complimentary-access-note" class="journey-callout hidden">
+            <strong>Complimentary access is already included.</strong>
+            <span>
+              The server administrator has approved your access. No subscription,
+              trial, or payment is required to finish setup.
+            </span>
+          </div>
           <form id="account-form" class="grid">
             <label>
               <span>Email for your account</span>
@@ -1166,12 +1173,19 @@
       const journeyProgressItems = Array.from(
         document.querySelectorAll('[data-journey-step]')
       );
+      const activateProgressLabel = document.getElementById(
+        'activate-progress-label'
+      );
       const journeyPanels = new Map(
         Array.from(document.querySelectorAll('[data-journey-panel]')).map(
           (panel) => [panel.dataset.journeyPanel, panel]
         )
       );
       const accountDescription = document.getElementById('account-description');
+      const accountTitle = document.getElementById('account-title');
+      const complimentaryAccessNote = document.getElementById(
+        'complimentary-access-note'
+      );
       const accountForm = document.getElementById('account-form');
       const accountEmailInput = document.getElementById('account-email');
       const accountRelayWarning = document.getElementById('account-relay-warning');
@@ -1855,6 +1869,30 @@
         },
       };
 
+      const COMPLIMENTARY_JOURNEY_COPY = {
+        account: {
+          title: 'Set up your complimentary account.',
+          lead: formatBrandCopy(
+            'Your access has already been approved. Save your {brand} login, verify your email, and connect Plex—no payment is required.'
+          ),
+        },
+        verify: {
+          title: 'Verify your email.',
+          lead:
+            'Confirm your email to secure your complimentary account and continue to Plex connection.',
+        },
+        plex: {
+          title: 'Connect the Plex account you stream with.',
+          lead:
+            'Connect your Plex identity to finish complimentary access setup. No subscription is required.',
+        },
+        complete: {
+          title: 'Your complimentary access is ready.',
+          lead:
+            'Setup is complete. Your dashboard is now the home for Plex status, referrals, support, and recovery.',
+        },
+      };
+
       function showJourneyStep(nextStep, { focus = false } = {}) {
         const normalized = JOURNEY_STEPS.includes(nextStep)
           ? nextStep
@@ -1894,7 +1932,13 @@
           }
         });
 
-        const copy = JOURNEY_COPY[normalized] || JOURNEY_COPY.account;
+        const courtesyAccess = Boolean(
+          state.data && state.data.donor && state.data.donor.courtesyAccess
+        );
+        const copy = courtesyAccess
+          ? COMPLIMENTARY_JOURNEY_COPY[normalized] ||
+            COMPLIMENTARY_JOURNEY_COPY.account
+          : JOURNEY_COPY[normalized] || JOURNEY_COPY.account;
         if (journeyTitle) {
           journeyTitle.textContent = copy.title;
         }
@@ -1976,11 +2020,11 @@
 
         if (completionTitle && completionDescription && completionStatus) {
           if (donor && donor.courtesyAccess) {
-            completionTitle.textContent = 'Your courtesy access is ready';
+            completionTitle.textContent = 'Your complimentary access is ready';
             completionDescription.textContent =
-              'Your access is provided by the server administrator. Open the supporter dashboard for Plex status, referrals, and optional server support.';
+              'Your access is provided by the server administrator. Open the dashboard for Plex status, referrals, support, and recovery.';
             completionStatus.textContent =
-              'No payment is required for your courtesy access.';
+              'No subscription or payment is required for your complimentary access.';
           } else if (normalizedStatus === 'trial') {
             completionTitle.textContent = 'Your 7-day trial is active';
             completionDescription.textContent =
@@ -2061,12 +2105,30 @@
         state.nextInviteAvailableAt = nextInviteAvailableAt;
         clearInviteCooldownTimer();
 
+        if (activateProgressLabel) {
+          activateProgressLabel.textContent = courtesyAccess
+            ? 'Access included'
+            : 'Activate';
+        }
+        if (complimentaryAccessNote) {
+          complimentaryAccessNote.classList.toggle('hidden', !courtesyAccess);
+        }
+        if (accountTitle) {
+          accountTitle.textContent = courtesyAccess
+            ? 'Create your complimentary account'
+            : 'Create your supporter account';
+        }
+
         if (accountDescription) {
           if (!accountReady) {
             accountDescription.textContent =
-              formatBrandCopy(
-                'Save the email and password you’ll use for {brand}. We’ll send one verification message before you connect Plex.'
-              );
+              courtesyAccess
+                ? formatBrandCopy(
+                    'Create your {brand} login to use the complimentary access already provided by the server administrator.'
+                  )
+                : formatBrandCopy(
+                    'Save the email and password you’ll use for {brand}. We’ll send one verification message before you connect Plex.'
+                  );
             if (accountSubmit) {
               accountSubmit.textContent = 'Create account';
             }
@@ -2078,7 +2140,9 @@
             }
           } else {
             accountDescription.textContent =
-              'Your account is ready. Continue through the guided setup to connect Plex and activate access.';
+              courtesyAccess
+                ? 'Your complimentary account is ready. Continue to connect Plex and finish setup.'
+                : 'Your account is ready. Continue through the guided setup to connect Plex and activate access.';
             if (accountSubmit) {
               accountSubmit.textContent = 'Save changes';
             }
@@ -2183,7 +2247,7 @@
 
         if (accountSubscriptionRow) {
           const showSubscriptionInput =
-            isProspect || (donor && !donor.subscriptionId);
+            !courtesyAccess && (isProspect || (donor && !donor.subscriptionId));
           accountSubscriptionRow.classList.toggle('hidden', !showSubscriptionInput);
         }
 
@@ -2242,7 +2306,9 @@
             'Plex access is already active. Follow the link below if you ever need to restore it.';
         } else if (!plexLinked && !limitReached) {
           inviteDescription.textContent =
-            'Link your Plex account to unlock checkout and referral invites.';
+            courtesyAccess
+              ? 'Link your Plex account to finish complimentary setup and unlock referral tools.'
+              : 'Link your Plex account to unlock checkout and referral invites.';
         } else if (!canRefer && !limitReached) {
           inviteDescription.textContent =
             'Referral invites unlock with an active subscription or admin-confirmed courtesy access.';
